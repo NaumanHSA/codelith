@@ -1,0 +1,14 @@
+from fastapi import APIRouter
+from app.api.v1.auth import router as auth_router
+from app.api.v1.organizations import router as org_router
+from app.api.v1.projects import router as project_router
+from app.api.v1.jobs import router as job_router
+from app.api.v1.documents import router as document_router
+
+v1_router = APIRouter()
+
+v1_router.include_router(auth_router)
+v1_router.include_router(org_router)
+v1_router.include_router(project_router)
+v1_router.include_router(job_router)
+v1_router.include_router(document_router)
