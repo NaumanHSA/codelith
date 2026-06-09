@@ -58,10 +58,30 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_SECRET: str = ""
 
     # Observability
+    OTEL_ENABLED: bool = False
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
 
-    # Ingestion scratch dir
+    # Ingestion scratch dir (legacy — new jobs use sandbox)
     REPO_SCRATCH_DIR: str = "/tmp/repos"
+
+    # Per-job sandbox
+    JOB_SANDBOX_BASE_DIR: str = "/tmp/jobs"
+
+    # Tracing
+    TRACING_ENABLED: bool = True
+    TRACING_LOG_STEPS: bool = True
+    TRACING_SAVE_JSON: bool = True
+    TRACING_SAVE_MARKDOWN: bool = True
+    TRACING_MAX_OUTPUT_PREVIEW_CHARS: int = 4000
+    TRACING_INDENT_SPACES: int = 4
+    TRACING_SHOW_INPUTS: bool = False
+    TRACING_SHOW_OUTPUTS: bool = True
+    TRACING_MAX_PREVIEW_CHARS: int = 300
+
+    # ReAct agents
+    REACT_MAX_ITERATIONS: int = 20
+    REACT_CONTEXT_WINDOW_LIMIT: int = 6000
+    REACT_CONTEXT_WINDOW_MAX: int = 8000
 
     @field_validator("APP_ENV")
     @classmethod

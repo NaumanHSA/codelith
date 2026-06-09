@@ -4,6 +4,8 @@ from app.models.project import Project, ProjectSource
 from app.models.job import Job, JobStep, AgentLog
 from app.models.document import Document, DocumentExport
 from app.models.chunk import CodeChunk
+from app.models.audit import AuditLog
+from app.models.setting import SystemSetting
 
 __all__ = [
     "Organization",
@@ -18,4 +20,6 @@ __all__ = [
     "Document",
     "DocumentExport",
     "CodeChunk",
+    "AuditLog",
+    "SystemSetting",
 ]

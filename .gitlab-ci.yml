@@ -1,0 +1,121 @@
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+
+variables:
+  PYTHON_VERSION: "3.12"
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  IMAGE_TAG: $CI_COMMIT_SHA
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip/
+
+# ── Lint ─────────────────────────────────────────────────────────────────────
+
+ruff:
+  stage: lint
+  image: python:3.12-slim
+  script:
+    - pip install ruff
+    - ruff check app/ tests/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
+unit-tests:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install -e ".[dev]"
+    - pytest tests/unit/ -v --tb=short --junitxml=report.xml
+  artifacts:
+    reports:
+      junit: report.xml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+integration-tests:
+  stage: test
+  image: python:3.12-slim
+  services:
+    - name: pgvector/pgvector:pg16
+      alias: postgres
+      variables:
+        POSTGRES_USER: docuser
+        POSTGRES_PASSWORD: docpassword
+        POSTGRES_DB: documentanything
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    DATABASE_URL: "postgresql+asyncpg://docuser:docpassword@postgres:5432/documentanything"
+    REDIS_URL: "redis://redis:6379/0"
+    CELERY_BROKER_URL: "redis://redis:6379/1"
+    CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+    APP_SECRET_KEY: "ci-test-secret"
+    JWT_SECRET_KEY: "ci-test-jwt-secret"
+  script:
+    - pip install -e ".[dev]"
+    - alembic upgrade head
+    - pytest tests/integration/ -v --tb=short --junitxml=integration-report.xml
+  artifacts:
+    reports:
+      junit: integration-report.xml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ── Docker build ──────────────────────────────────────────────────────────────
+
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+    - docker push $IMAGE_NAME:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ── Deploy (example — adapt to your cluster setup) ───────────────────────────
+
+deploy-staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  environment:
+    name: staging
+    url: https://staging.docany.example.com
+  script:
+    - kubectl config use-context $KUBE_CONTEXT_STAGING
+    - kubectl set image deployment/docany-api api=$IMAGE_NAME:$IMAGE_TAG -n document-anything
+    - kubectl set image deployment/docany-worker worker=$IMAGE_NAME:$IMAGE_TAG -n document-anything
+    - kubectl rollout status deployment/docany-api -n document-anything --timeout=120s
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  needs: [build]
+
+deploy-production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  environment:
+    name: production
+    url: https://docany.example.com
+  script:
+    - kubectl config use-context $KUBE_CONTEXT_PROD
+    - kubectl set image deployment/docany-api api=$IMAGE_NAME:$IMAGE_TAG -n document-anything
+    - kubectl set image deployment/docany-worker worker=$IMAGE_NAME:$IMAGE_TAG -n document-anything
+    - kubectl rollout status deployment/docany-api -n document-anything --timeout=180s
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual
+  needs: [deploy-staging]

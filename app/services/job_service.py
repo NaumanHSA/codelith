@@ -78,6 +78,15 @@ class JobService:
         await self.db.commit()
         return job  # type: ignore[return-value]
 
+    async def update_config(self, job_id: int, extra: dict) -> None:
+        """Merge extra key/value pairs into the job's config_json."""
+        job = await self.repo.get_by_id(job_id)
+        if job:
+            existing = dict(job.config_json or {})
+            existing.update(extra)
+            await self.repo.update(job_id, config_json=existing)
+            await self.db.commit()
+
     async def write_log(self, job_id: int, agent_name: str, level: str, message: str, extra: dict | None = None) -> None:
         await self.log_repo.create(
             job_id=job_id,

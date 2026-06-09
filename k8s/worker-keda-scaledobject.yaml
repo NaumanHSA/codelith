@@ -1,0 +1,25 @@
+# Requires KEDA (https://keda.sh) installed in the cluster.
+# Scales Celery workers based on the combined depth of all three queues.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: docany-worker-scaler
+  namespace: document-anything
+spec:
+  scaleTargetRef:
+    name: docany-worker
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  cooldownPeriod: 60
+  pollingInterval: 15
+  triggers:
+    - type: redis
+      metadata:
+        address: redis:6379
+        listName: celery:generation
+        listLength: "5"  # scale up when queue > 5 tasks
+    - type: redis
+      metadata:
+        address: redis:6379
+        listName: celery:ingestion
+        listLength: "5"

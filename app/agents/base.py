@@ -1,9 +1,20 @@
+from __future__ import annotations
+
+import json
+import re
 from abc import ABC, abstractmethod
 from typing import Any
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+from app.config import get_settings
 from app.llm.client import chat_completion
+from app.llm.context_manager import count_tokens, trim_to_limit
 from app.llm.router import select_model
+from app.tracing.runtime import get_tracer
+from app.observability.metrics import llm_calls_total, llm_call_duration, record_llm_tokens
 
 logger = structlog.get_logger(__name__)
 
@@ -17,8 +28,14 @@ class BaseAgent(ABC):
         self.log = logger.bind(agent=self.name, job_id=job_id)
 
     @abstractmethod
-    async def run(self, state: dict[str, Any]) -> dict[str, Any]:
-        ...
+    async def run(self, state: dict[str, Any]) -> dict[str, Any]: ...
+
+    # ── Tracing ───────────────────────────────────────────────────────────────
+
+    def _tracer(self):
+        return get_tracer()
+
+    # ── LLM calls ─────────────────────────────────────────────────────────────
 
     async def _call_llm(
         self,
@@ -26,9 +43,76 @@ class BaseAgent(ABC):
         task_type: str = "write",
         model: str | None = None,
     ) -> str:
+        import time
+        settings = get_settings()
+        messages = trim_to_limit(messages, settings.REACT_CONTEXT_WINDOW_LIMIT)
+
         selected_model = model or select_model(task_type)
-        self.log.debug("llm_call", model=selected_model, task_type=task_type)
-        return await chat_completion(messages, model=selected_model)
+        token_count = count_tokens(messages)
+        self.log.debug("llm_call", model=selected_model, task_type=task_type, tokens=token_count)
+        record_llm_tokens(selected_model, prompt_tokens=token_count)
+
+        tracer = self._tracer()
+        t0 = time.perf_counter()
+        with tracer(
+            kind="llm",
+            agent_id=self.name,
+            label=f"llm.{task_type}",
+            start_message=f"LLM [{task_type}] ~{token_count} tokens",
+            inputs={"task_type": task_type, "tokens": token_count},
+        ) as t:
+            try:
+                result = await self._chat_with_retry(messages, selected_model)
+                llm_calls_total.labels(model=selected_model, task_type=task_type, status="success").inc()
+                t.outputs(response_len=len(result))
+                return result
+            except Exception:
+                llm_calls_total.labels(model=selected_model, task_type=task_type, status="error").inc()
+                raise
+            finally:
+                llm_call_duration.labels(model=selected_model, task_type=task_type).observe(
+                    time.perf_counter() - t0
+                )
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+    )
+    async def _chat_with_retry(self, messages: list[dict], model: str) -> str:
+        return await chat_completion(messages, model=model)
+
+    async def _call_llm_json(
+        self,
+        messages: list[dict],
+        task_type: str = "plan",
+        retries: int = 3,
+    ) -> dict | None:
+        """Call LLM expecting JSON, retry up to `retries` times with a repair prompt."""
+        current_messages = list(messages)
+        for attempt in range(retries):
+            raw = await self._call_llm(current_messages, task_type)
+            try:
+                return json.loads(self._extract_json(raw))
+            except (json.JSONDecodeError, ValueError):
+                if attempt < retries - 1:
+                    current_messages = current_messages + [
+                        {"role": "assistant", "content": raw},
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your previous response was not valid JSON. "
+                                "Return ONLY the JSON object — no markdown fences, "
+                                "no explanation, no prose before or after."
+                            ),
+                        },
+                    ]
+
+        await self._emit_log("warning", "JSON parse failed after retries — using fallback")
+        return None
+
+    # ── Logging & step tracking ────────────────────────────────────────────────
 
     async def _emit_log(self, level: str, message: str, **extra: Any) -> None:
         from app.services.job_service import JobService
@@ -50,3 +134,25 @@ class BaseAgent(ABC):
                 output_json=output or {},
             )
         await self.db.commit()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_json(raw: str) -> str:
+        """Strip markdown fences and prose around a JSON object."""
+        raw = raw.strip()
+        # Remove ```json ... ``` fences
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        if "```" in raw:
+            raw = raw.split("```")[0]
+        # Find first { or [ and last } or ]
+        match = re.search(r'[{\[]', raw)
+        if match:
+            start = match.start()
+            end = max(raw.rfind("}"), raw.rfind("]")) + 1
+            if end > start:
+                raw = raw[start:end]
+        return raw.strip()

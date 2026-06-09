@@ -1,0 +1,63 @@
+image:
+  repository: document-anything
+  tag: latest
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 2
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    cpuThreshold: 70
+
+worker:
+  replicas: 2
+  concurrency: 2
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+  keda:
+    enabled: false  # set true if KEDA is installed
+    minReplicas: 1
+    maxReplicas: 10
+
+ingress:
+  enabled: true
+  className: nginx
+  host: docany.example.com
+  tls: true
+  tlsSecretName: docany-tls
+
+config:
+  appEnv: production
+  databaseUrl: "postgresql+asyncpg://docuser:docpassword@postgres:5432/documentanything"
+  redisUrl: "redis://redis:6379/0"
+  celeryBrokerUrl: "redis://redis:6379/1"
+  celeryResultBackend: "redis://redis:6379/2"
+  neo4jUri: "bolt://neo4j:7687"
+  s3EndpointUrl: "http://minio:9000"
+  s3BucketName: "documentanything"
+  otelEnabled: "true"
+  otelEndpoint: "http://otel-collector:4317"
+
+secrets:
+  # Override these via --set or a sealed-secrets file in production
+  appSecretKey: "CHANGE_ME"
+  jwtSecretKey: "CHANGE_ME"
+  llmBaseUrl: "http://lm-studio:1234/v1"
+  llmApiKey: "lm-studio"
+  neo4jPassword: "neo4jpassword"
+  s3AccessKey: "minioadmin"
+  s3SecretKey: "minioadmin"

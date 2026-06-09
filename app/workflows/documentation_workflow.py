@@ -23,11 +23,12 @@ logger = structlog.get_logger(__name__)
 
 
 class DocumentationWorkflow:
-    def __init__(self, project, job, db: AsyncSession) -> None:
+    def __init__(self, project, job, db: AsyncSession, sandbox=None) -> None:
         self.project = project
         self.job = job
         self.db = db
         self.job_id = job.id
+        self.sandbox = sandbox
 
     async def run(self) -> dict[str, Any]:
         graph = self._build_graph()
@@ -36,6 +37,7 @@ class DocumentationWorkflow:
             "job": self.job,
             "job_config": self.job.config_json,
             "generated_docs": [],  # initialise accumulator
+            "sandbox": self.sandbox,
         }
         final_state = await graph.ainvoke(initial_state)
         return {
@@ -50,7 +52,11 @@ class DocumentationWorkflow:
 
         def make_node(agent_cls):
             async def node(state: DocumentationState) -> DocumentationState:
-                return await agent_cls(db=db, job_id=job_id).run(state)
+                agent = agent_cls(db=db, job_id=job_id)
+                from app.observability.metrics import time_agent
+                from app.observability.tracing import agent_span
+                with time_agent(agent.name), agent_span(agent.name, job_id):
+                    return await agent.run(state)
             return node
 
         graph = StateGraph(DocumentationState)

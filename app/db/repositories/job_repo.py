@@ -39,3 +39,12 @@ class AgentLogRepository(BaseRepository[AgentLog]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def list_since(self, job_id: int, after_id: int, limit: int = 50) -> list[AgentLog]:
+        result = await self.session.execute(
+            select(AgentLog)
+            .where(AgentLog.job_id == job_id, AgentLog.id > after_id)
+            .order_by(AgentLog.id.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())

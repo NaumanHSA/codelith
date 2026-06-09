@@ -28,10 +28,17 @@ dependencies = [
 
     # LLM
     "openai>=1.57.0",
+    "tiktoken>=0.7.0",
+    "langchain-openai>=0.2.0",
 
     # Agent Workflows
     "langgraph>=0.2.60",
     "langchain-core>=0.3.25",
+    "langchain-mcp-adapters>=0.1.0",
+    "mcp>=1.0.0",
+
+    # UI / tracing output
+    "rich>=13.0.0",
 
     # Task Queue
     "celery[redis]>=5.4.0",

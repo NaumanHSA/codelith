@@ -46,3 +46,11 @@ class DocumentationState(TypedDict, total=False):
     # ── Control ───────────────────────────────────────────────────────────────
     requires_review: bool
     error: str | None
+
+    # ── Phase 2.5: per-job sandbox (JobSandbox instance) ──────────────────────
+    sandbox: Any
+    repo_path: str        # actual path of the cloned/local repo on disk
+
+    # ── Phase 3: enriched ingestion context ───────────────────────────────────
+    api_specs: list       # list[ParsedApiSpec] from OpenAPI parser
+    infra_context: list   # list[ParsedInfra] from infra parser

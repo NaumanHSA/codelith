@@ -5,10 +5,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingestion.repo.local import LocalRepoIngester
 from app.ingestion.repo.github import GitHubRepoIngester
+from app.ingestion.repo.gitlab import GitLabRepoIngester
+from app.ingestion.repo.bitbucket import BitbucketRepoIngester
 from app.ingestion.parsers.code_parser import CodeParser, ParsedCodebase
 from app.ingestion.parsers.markdown_parser import MarkdownParser
+from app.ingestion.parsers.openapi_parser import OpenApiParser, ParsedApiSpec
+from app.ingestion.parsers.infra_parser import InfraParser, ParsedInfra
 
 logger = structlog.get_logger(__name__)
+
+_INGESTER_MAP = {
+    "local": LocalRepoIngester,
+    "github": GitHubRepoIngester,
+    "gitlab": GitLabRepoIngester,
+    "bitbucket": BitbucketRepoIngester,
+}
 
 
 @dataclass
@@ -17,6 +28,9 @@ class IngestionResult:
     total_files: int
     languages: dict[str, int]
     markdown_files: int
+    api_specs: int
+    infra_files: int
+    commit_sha: str | None
     errors: list[str]
 
 
@@ -27,15 +41,19 @@ class IngestionPipeline:
         self.db = db
         self.code_parser = CodeParser()
         self.md_parser = MarkdownParser()
+        self.openapi_parser = OpenApiParser()
+        self.infra_parser = InfraParser()
         self._last_codebase: ParsedCodebase | None = None
+        self._last_clone_path: Path | None = None
+        self._api_specs: list[ParsedApiSpec] = []
+        self._infra_context: list[ParsedInfra] = []
+        self._commit_sha: str | None = None
 
     async def run(self) -> dict:
         result = IngestionResult(
-            sources_processed=0,
-            total_files=0,
-            languages={},
-            markdown_files=0,
-            errors=[],
+            sources_processed=0, total_files=0, languages={},
+            markdown_files=0, api_specs=0, infra_files=0,
+            commit_sha=None, errors=[],
         )
 
         for source in self.project.sources:
@@ -52,35 +70,50 @@ class IngestionPipeline:
             "total_files": result.total_files,
             "languages": result.languages,
             "markdown_files": result.markdown_files,
+            "api_specs": result.api_specs,
+            "infra_files": result.infra_files,
+            "commit_sha": result.commit_sha,
             "errors": result.errors,
         }
 
     async def _process_source(self, source, result: IngestionResult) -> None:
-        if source.source_type == "local":
-            ingester = LocalRepoIngester()
-        elif source.source_type in ("github", "gitlab", "bitbucket"):
-            ingester = GitHubRepoIngester()
-        else:
+        ingester_cls = _INGESTER_MAP.get(source.source_type)
+        if ingester_cls is None:
             logger.warning("unsupported_source_type", source_type=source.source_type)
             return
 
-        clone_result = await ingester.clone(source.url_or_path, branch=source.branch)
+        clone_result = await ingester_cls().clone(source.url_or_path, branch=source.branch)
         root_path: Path = clone_result.local_path
+        self._last_clone_path = root_path
+        self._commit_sha = clone_result.commit_sha
+        result.commit_sha = clone_result.commit_sha
 
-        # Parse code
+        # ── Code ──────────────────────────────────────────────────────────────
         codebase: ParsedCodebase = self.code_parser.parse_directory(root_path)
         self._last_codebase = codebase
         result.total_files += codebase.total_files
         for lang, count in codebase.languages.items():
             result.languages[lang] = result.languages.get(lang, 0) + count
 
-        # Parse markdown docs
+        # ── Markdown docs ──────────────────────────────────────────────────────
         md_docs = self.md_parser.parse_directory(root_path)
         result.markdown_files += len(md_docs)
+
+        # ── OpenAPI specs ──────────────────────────────────────────────────────
+        api_specs = self.openapi_parser.parse_directory(root_path)
+        self._api_specs.extend(api_specs)
+        result.api_specs += len(api_specs)
+
+        # ── Infrastructure files ───────────────────────────────────────────────
+        infra = self.infra_parser.parse_directory(root_path)
+        self._infra_context.extend(infra)
+        result.infra_files += len(infra)
 
         logger.info(
             "source_parsed",
             files=codebase.total_files,
             languages=list(codebase.languages.keys()),
             md_files=len(md_docs),
+            api_specs=len(api_specs),
+            infra_files=len(infra),
         )

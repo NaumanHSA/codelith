@@ -50,6 +50,22 @@ async def get_current_admin(
     return current_user
 
 
+def _role_checker(*roles: str):
+    """Factory: returns a FastAPI dependency that enforces any of the given roles."""
+    async def _check(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Required role: {' or '.join(roles)}",
+            )
+        return current_user
+    return _check
+
+
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminUser = Annotated[User, Depends(get_current_admin)]
+
+# Scoped role aliases — add "admin" first so admin can always do everything
+ManagerUser = Annotated[User, Depends(_role_checker("admin", "manager"))]
+ReviewerUser = Annotated[User, Depends(_role_checker("admin", "manager", "reviewer"))]
