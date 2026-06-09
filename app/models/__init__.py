@@ -3,6 +3,7 @@ from app.models.user import User, OAuthAccount
 from app.models.project import Project, ProjectSource
 from app.models.job import Job, JobStep, AgentLog
 from app.models.document import Document, DocumentExport
+from app.models.chunk import CodeChunk
 
 __all__ = [
     "Organization",
@@ -16,4 +17,5 @@ __all__ = [
     "AgentLog",
     "Document",
     "DocumentExport",
+    "CodeChunk",
 ]

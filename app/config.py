@@ -36,10 +36,8 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.2
 
-    # Qdrant
-    QDRANT_HOST: str = "localhost"
-    QDRANT_PORT: int = 6333
-    QDRANT_COLLECTION_PREFIX: str = "docany"
+    # pgvector — embedding dimensions (must match your LM Studio embedding model output)
+    VECTOR_DIMENSIONS: int = 1536
 
     # Neo4j
     NEO4J_URI: str = "bolt://localhost:7687"

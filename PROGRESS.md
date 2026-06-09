@@ -144,7 +144,7 @@ Tracks what is built, what is in progress, and what is planned across all phases
 
 ## Phase 3 — Memory & RAG 🔲 TODO
 
-- [ ] `app/memory/vector_store.py` — Qdrant: upsert, search, delete collections
+- [x] `app/memory/vector_store.py` — pgvector via SQLAlchemy: upsert, cosine search, delete (replaces Qdrant)
 - [ ] `app/memory/graph_store.py` — Neo4j: entity + relationship nodes for code graph
 - [ ] `app/memory/short_term.py` — Redis-backed session memory
 - [ ] `app/memory/long_term.py` — PostgreSQL-backed project knowledge store
@@ -197,3 +197,5 @@ Tracks what is built, what is in progress, and what is planned across all phases
 - **All LLM calls** go through `app.llm.client.chat_completion()` — never instantiate `AsyncOpenAI` directly.
 - **All DB access** goes through `app/db/repositories/` — never query SQLAlchemy from routes or services directly.
 - **New agents** must inherit `app.agents.base.BaseAgent` and implement `async def run(state) -> state`.
+- **Vector search** uses pgvector inside PostgreSQL — `code_chunks` table, HNSW index on cosine distance. Qdrant was removed; `VectorStore` in `app/memory/vector_store.py` handles all embedding operations via SQLAlchemy.
+- **`VECTOR_DIMENSIONS`** in `.env` must match the output size of your embedding model (default 1536 for most OpenAI-compatible models).

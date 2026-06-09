@@ -9,7 +9,7 @@ AI Documentation Generation Platform. Ingests repos/files, runs a multi-agent La
 - **API**: FastAPI + Python 3.12 (async throughout)
 - **DB**: PostgreSQL via SQLAlchemy 2.0 async + Alembic migrations
 - **Cache / Queue broker**: Redis
-- **Vector DB**: Qdrant (code + doc embeddings)
+- **Vector search**: pgvector extension inside PostgreSQL — `code_chunks` table with HNSW index (no extra service)
 - **Graph DB**: Neo4j (code entity relationships)
 - **Task queue**: Celery (background ingestion + generation jobs)
 - **Agent workflow**: LangGraph StateGraph

@@ -14,7 +14,7 @@ AI-Powered Documentation Generation Platform — automatically generates technic
 | Task queue | Celery |
 | Agent workflow | LangGraph |
 | LLM | `openai` package → LM Studio (offline, OpenAI-compatible) |
-| Vector DB | Qdrant |
+| Vector search | pgvector (PostgreSQL extension — no extra service) |
 | Graph DB | Neo4j |
 | Object storage | MinIO (S3-compatible) |
 | Observability | Prometheus + Grafana + OpenTelemetry |
@@ -217,7 +217,6 @@ make test         # full pytest suite
 | Swagger UI | http://localhost:8000/docs |
 | MinIO Console | http://localhost:9001 (minioadmin / minioadmin) |
 | Neo4j Browser | http://localhost:7474 (neo4j / neo4jpassword) |
-| Qdrant Dashboard | http://localhost:6333/dashboard |
 | Grafana | http://localhost:3000 (admin / admin) |
 | Prometheus | http://localhost:9090 |
 
@@ -235,6 +234,7 @@ See `.env.example` for the full list. Key variables:
 | `DATABASE_URL` | postgres://... | PostgreSQL async connection string |
 | `REDIS_URL` | redis://localhost:6379/0 | Redis connection |
 | `S3_ENDPOINT_URL` | http://localhost:9000 | MinIO endpoint |
+| `VECTOR_DIMENSIONS` | `1536` | Must match your embedding model's output dimensions |
 
 ---
 
