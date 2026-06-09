@@ -29,3 +29,13 @@ async def chat_completion(
         max_tokens=max_tokens or settings.LLM_MAX_TOKENS,
     )
     return response.choices[0].message.content or ""
+
+
+async def create_embedding(text: str, model: str = "text-embedding-ada-002") -> list[float] | None:
+    """Create a vector embedding. Returns None if the endpoint doesn't support it."""
+    try:
+        client = get_llm_client()
+        response = await client.embeddings.create(input=text, model=model)
+        return response.data[0].embedding
+    except Exception:
+        return None

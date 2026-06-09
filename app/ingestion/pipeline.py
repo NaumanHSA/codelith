@@ -27,6 +27,7 @@ class IngestionPipeline:
         self.db = db
         self.code_parser = CodeParser()
         self.md_parser = MarkdownParser()
+        self._last_codebase: ParsedCodebase | None = None
 
     async def run(self) -> dict:
         result = IngestionResult(
@@ -68,6 +69,7 @@ class IngestionPipeline:
 
         # Parse code
         codebase: ParsedCodebase = self.code_parser.parse_directory(root_path)
+        self._last_codebase = codebase
         result.total_files += codebase.total_files
         for lang, count in codebase.languages.items():
             result.languages[lang] = result.languages.get(lang, 0) + count
