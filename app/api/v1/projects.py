@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Query, Request
+import shutil
+import zipfile
+from pathlib import Path
+
+from fastapi import APIRouter, Query, Request, UploadFile, File, HTTPException
 from app.dependencies import DbSession, CurrentUser, ManagerUser
 from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectSourceCreate, ProjectSourceOut
 from app.services.project_service import ProjectService
 from app.services.audit_service import AuditService
+from app.config import get_settings
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -59,3 +64,69 @@ async def add_source(project_id: int, req: ProjectSourceCreate, db: DbSession, u
         branch=req.branch,
         config_json=req.config_json,
     )
+
+
+_ALLOWED_EXTENSIONS = {
+    # archives (treated as repo zips)
+    ".zip",
+    # code
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs", ".java", ".kt", ".swift",
+    ".c", ".cpp", ".h", ".cs", ".rb", ".php", ".scala", ".sh", ".bash",
+    # config / markup
+    ".toml", ".yaml", ".yml", ".json", ".xml", ".env", ".ini", ".cfg",
+    # docs / text
+    ".md", ".mdx", ".txt", ".rst", ".pdf",
+    # web
+    ".html", ".css",
+}
+
+
+@router.post("/{project_id}/upload", response_model=ProjectSourceOut, status_code=201)
+async def upload_source(
+    project_id: int,
+    db: DbSession,
+    user: ManagerUser,
+    file: UploadFile = File(...),
+):
+    """
+    Upload a file or zip archive as a project source.
+    - ZIP files are extracted to a per-project scratch directory.
+    - Single files are saved and referenced directly.
+    The resulting path is registered as a 'local' source on the project.
+    """
+    settings = get_settings()
+    suffix = Path(file.filename or "upload").suffix.lower()
+    if suffix not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{suffix}' is not allowed. Supported: {', '.join(sorted(_ALLOWED_EXTENSIONS))}",
+        )
+
+    upload_root = Path(settings.REPO_SCRATCH_DIR) / "uploads" / str(project_id)
+    upload_root.mkdir(parents=True, exist_ok=True)
+
+    save_path = upload_root / (file.filename or "upload")
+    # Avoid path traversal
+    save_path = upload_root / Path(file.filename or "upload").name
+
+    with save_path.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    if suffix == ".zip":
+        extract_dir = upload_root / save_path.stem
+        extract_dir.mkdir(exist_ok=True)
+        with zipfile.ZipFile(save_path, "r") as zf:
+            zf.extractall(extract_dir)
+        source_path = str(extract_dir)
+    else:
+        source_path = str(save_path)
+
+    source = await ProjectService(db).add_source(
+        project_id,
+        source_type="local",
+        url_or_path=source_path,
+        user=user,
+        branch=None,
+        config_json={"original_filename": file.filename},
+    )
+    return source
