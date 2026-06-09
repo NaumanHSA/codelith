@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
@@ -20,8 +20,8 @@ class OrgMember(Base, TimestampMixin):
     __tablename__ = "org_members"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    org_id: Mapped[int] = mapped_column(nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), default="user", nullable=False)
 
     organization: Mapped["Organization"] = relationship(back_populates="members")

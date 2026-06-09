@@ -1,7 +1,7 @@
 .PHONY: help infra infra-stop prod prod-stop build migrate migrate-create seed test test-unit test-integration worker lint format typecheck
 
-PYTHON     := python
-ALEMBIC    := alembic
+PYTHON     := PYTHONPATH=. python
+ALEMBIC    := PYTHONPATH=. alembic
 INFRA      := docker compose -f docker-compose.infra.yml
 PROD       := docker compose -f docker-compose.prod.yml
 
