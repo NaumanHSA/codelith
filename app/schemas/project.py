@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -15,6 +16,7 @@ class ProjectSourceOut(BaseModel):
     url_or_path: str
     branch: str | None
     config_json: dict
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -31,6 +33,19 @@ class ProjectUpdate(BaseModel):
     status: str | None = None
 
 
+class ProjectStats(BaseModel):
+    source_count: int = 0
+    job_count: int = 0
+    doc_count: int = 0
+
+
+class LatestJobOut(BaseModel):
+    id: int
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
 class ProjectOut(BaseModel):
     id: int
     org_id: int
@@ -38,6 +53,10 @@ class ProjectOut(BaseModel):
     slug: str
     description: str | None
     status: str
+    created_at: datetime
+    updated_at: datetime
     sources: list[ProjectSourceOut] = []
+    stats: ProjectStats | None = None
+    latest_job: LatestJobOut | None = None
 
     model_config = {"from_attributes": True}

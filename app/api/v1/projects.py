@@ -5,7 +5,9 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request, UploadFile, File, HTTPException
 from app.dependencies import DbSession, CurrentUser, ManagerUser
 from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectSourceCreate, ProjectSourceOut
+from app.schemas.job import JobCreate, JobOut
 from app.services.project_service import ProjectService
+from app.services.job_service import JobService
 from app.services.audit_service import AuditService
 from app.config import get_settings
 
@@ -54,6 +56,39 @@ async def delete_project(project_id: int, db: DbSession, user: ManagerUser, requ
     )
 
 
+# ── Job routes (project-scoped) ───────────────────────────────────────────────
+
+@router.post("/{project_id}/jobs", response_model=JobOut, status_code=201)
+async def create_job(project_id: int, req: JobCreate, db: DbSession, user: ManagerUser, request: Request):
+    from app.workers.tasks.generation_tasks import run_documentation_workflow
+
+    svc = JobService(db)
+    job = await svc.create(project_id, req, user)
+    task = run_documentation_workflow.delay(job.id)
+    await svc.start(job.id, task.id)
+
+    await AuditService(db).log(
+        "job.create", "job",
+        user_id=user.id, resource_id=job.id,
+        details={"project_id": project_id, "config": req.config.model_dump()},
+        ip_address=request.client.host if request.client else None,
+    )
+    return await svc.get(job.id)
+
+
+@router.get("/{project_id}/jobs", response_model=list[JobOut])
+async def list_project_jobs(
+    project_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return await JobService(db).list_by_project(project_id, limit=limit, offset=offset)
+
+
+# ── Source routes ─────────────────────────────────────────────────────────────
+
 @router.post("/{project_id}/sources", response_model=ProjectSourceOut, status_code=201)
 async def add_source(project_id: int, req: ProjectSourceCreate, db: DbSession, user: ManagerUser):
     return await ProjectService(db).add_source(
@@ -66,17 +101,17 @@ async def add_source(project_id: int, req: ProjectSourceCreate, db: DbSession, u
     )
 
 
+@router.delete("/{project_id}/sources/{source_id}", status_code=204)
+async def delete_source(project_id: int, source_id: int, db: DbSession, user: ManagerUser):
+    await ProjectService(db).delete_source(project_id, source_id, user)
+
+
 _ALLOWED_EXTENSIONS = {
-    # archives (treated as repo zips)
     ".zip",
-    # code
     ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs", ".java", ".kt", ".swift",
     ".c", ".cpp", ".h", ".cs", ".rb", ".php", ".scala", ".sh", ".bash",
-    # config / markup
     ".toml", ".yaml", ".yml", ".json", ".xml", ".env", ".ini", ".cfg",
-    # docs / text
     ".md", ".mdx", ".txt", ".rst", ".pdf",
-    # web
     ".html", ".css",
 }
 
@@ -88,12 +123,6 @@ async def upload_source(
     user: ManagerUser,
     file: UploadFile = File(...),
 ):
-    """
-    Upload a file or zip archive as a project source.
-    - ZIP files are extracted to a per-project scratch directory.
-    - Single files are saved and referenced directly.
-    The resulting path is registered as a 'local' source on the project.
-    """
     settings = get_settings()
     suffix = Path(file.filename or "upload").suffix.lower()
     if suffix not in _ALLOWED_EXTENSIONS:
@@ -105,8 +134,6 @@ async def upload_source(
     upload_root = Path(settings.REPO_SCRATCH_DIR) / "uploads" / str(project_id)
     upload_root.mkdir(parents=True, exist_ok=True)
 
-    save_path = upload_root / (file.filename or "upload")
-    # Avoid path traversal
     save_path = upload_root / Path(file.filename or "upload").name
 
     with save_path.open("wb") as f:

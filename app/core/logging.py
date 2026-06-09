@@ -32,8 +32,8 @@ def setup_logging() -> None:
 
     logging.basicConfig(level=log_level, stream=sys.stdout, format="%(message)s")
     # Quiet noisy libs
-    for name in ("uvicorn.access", "sqlalchemy.engine"):
-        logging.getLogger(name).setLevel(logging.WARNING)
+    for name in ("uvicorn.access", "sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"):
+        logging.getLogger(name).setLevel(logging.ERROR)
 
 
 def get_logger(name: str) -> structlog.BoundLogger:

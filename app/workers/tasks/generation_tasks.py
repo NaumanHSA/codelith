@@ -70,6 +70,8 @@ async def _run_workflow(job_id: int) -> dict:
                 except Exception as exc:
                     logger.warning("trace_save_failed", job_id=job_id, error=str(exc))
 
+                logger.info("job_complete", job_id=job_id, runs_dir=str(sandbox.root))
+
                 if result.get("requires_review"):
                     await job_svc.request_review(job_id)
                     job_total.labels(status="awaiting_review").inc()

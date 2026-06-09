@@ -16,6 +16,12 @@ class DocumentRepository(BaseRepository[Document]):
         )
         return list(result.scalars().all())
 
+    async def list_all(self, limit: int = 100, offset: int = 0) -> list[Document]:
+        result = await self.session.execute(
+            select(Document).order_by(Document.created_at.desc()).limit(limit).offset(offset)
+        )
+        return list(result.scalars().all())
+
     async def list_by_job(self, job_id: int) -> list[Document]:
         result = await self.session.execute(
             select(Document).where(Document.job_id == job_id)

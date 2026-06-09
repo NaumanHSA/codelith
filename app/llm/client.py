@@ -31,11 +31,15 @@ async def chat_completion(
     return response.choices[0].message.content or ""
 
 
-async def create_embedding(text: str, model: str = "text-embedding-ada-002") -> list[float] | None:
+async def create_embedding(text: str, model: str | None = None) -> list[float] | None:
     """Create a vector embedding. Returns None if the endpoint doesn't support it."""
     try:
+        settings = get_settings()
         client = get_llm_client()
-        response = await client.embeddings.create(input=text, model=model)
+        response = await client.embeddings.create(
+            input=text,
+            model=model or settings.EMBEDDING_MODEL,
+        )
         return response.data[0].embedding
     except Exception:
         return None

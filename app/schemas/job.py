@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobConfig(BaseModel):
@@ -16,20 +16,29 @@ class JobCreate(BaseModel):
 
 class JobStepOut(BaseModel):
     id: int
-    agent_name: str
+    agent_name: str = Field(serialization_alias="name")
     status: str
     started_at: datetime | None
     completed_at: datetime | None
+    duration_seconds: float | None = None
+    output_json: dict = {}
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def compute_duration(self) -> "JobStepOut":
+        if self.started_at and self.completed_at:
+            self.duration_seconds = (self.completed_at - self.started_at).total_seconds()
+        return self
 
 
 class AgentLogOut(BaseModel):
     id: int
-    agent_name: str
+    agent_name: str = Field(serialization_alias="agent")
     level: str
     message: str
-    created_at: datetime
+    created_at: datetime = Field(serialization_alias="timestamp")
+    extra_json: dict = Field(default_factory=dict, serialization_alias="extra")
 
     model_config = {"from_attributes": True}
 
@@ -39,6 +48,9 @@ class JobOut(BaseModel):
     project_id: int
     status: str
     config_json: dict
+    doc_types: list[str] = []
+    output_formats: list[str] = []
+    requires_human_review: bool = False
     error_message: str | None
     started_at: datetime | None
     completed_at: datetime | None
@@ -46,6 +58,14 @@ class JobOut(BaseModel):
     steps: list[JobStepOut] = []
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def extract_config_fields(self) -> "JobOut":
+        cfg = self.config_json or {}
+        self.doc_types = cfg.get("doc_types", [])
+        self.output_formats = cfg.get("output_formats", ["markdown"])
+        self.requires_human_review = cfg.get("human_review", False)
+        return self
 
 
 class JobApproveRequest(BaseModel):

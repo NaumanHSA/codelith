@@ -14,6 +14,15 @@ celery_app = Celery(
     ],
 )
 
+from celery.signals import worker_process_init
+
+
+@worker_process_init.connect
+def init_worker_logging(**kwargs):
+    from app.core.logging import setup_logging
+    setup_logging()
+
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",

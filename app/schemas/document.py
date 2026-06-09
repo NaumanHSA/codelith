@@ -27,5 +27,14 @@ class DocumentExportOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DocumentUpdate(BaseModel):
+    title: str | None = None
+    content_markdown: str | None = None
+
+
 class ExportRequest(BaseModel):
     format: str  # pdf | docx | html | mkdocs | docusaurus
+
+
+class ExportUrlOut(BaseModel):
+    url: str

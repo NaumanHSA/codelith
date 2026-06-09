@@ -2,30 +2,12 @@ import asyncio
 import json
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-from app.dependencies import DbSession, CurrentUser, ManagerUser, ReviewerUser
-from app.schemas.job import JobCreate, JobOut, AgentLogOut, JobApproveRequest
+from app.dependencies import DbSession, CurrentUser, CurrentUserOrToken, ManagerUser, ReviewerUser
+from app.schemas.job import JobOut, AgentLogOut, JobApproveRequest
 from app.services.job_service import JobService
 from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
-
-
-@router.post("/projects/{project_id}/jobs", response_model=JobOut, status_code=201)
-async def create_job(project_id: int, req: JobCreate, db: DbSession, user: ManagerUser, request: Request):
-    from app.workers.tasks.generation_tasks import run_documentation_workflow
-
-    svc = JobService(db)
-    job = await svc.create(project_id, req, user)
-    task = run_documentation_workflow.delay(job.id)
-    await svc.start(job.id, task.id)
-
-    await AuditService(db).log(
-        "job.create", "job",
-        user_id=user.id, resource_id=job.id,
-        details={"project_id": project_id, "config": req.config.model_dump()},
-        ip_address=request.client.host if request.client else None,
-    )
-    return await svc.get(job.id)
 
 
 @router.get("/{job_id}", response_model=JobOut)
@@ -65,21 +47,17 @@ _TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 
 @router.get("/{job_id}/stream")
-async def stream_job_logs(job_id: int, db: DbSession, user: CurrentUser):
+async def stream_job_logs(job_id: int, db: DbSession, user: CurrentUserOrToken):
     """
-    Server-Sent Events stream of agent log lines for a running job.
-    Emits `data: <json>\\n\\n` for each new log entry.
-    Closes with `event: done\\ndata: {}\\n\\n` when the job reaches a terminal state.
+    Server-Sent Events stream. Accepts JWT via Authorization header or ?token= query param
+    (needed because EventSource cannot set custom headers).
     """
     from app.db.repositories.job_repo import JobRepository, AgentLogRepository
     from app.db.session import AsyncSessionLocal
 
     async def event_generator():
         last_id = 0
-        poll_interval = 1.0  # seconds between DB polls
-        max_idle_iters = 600  # 10 minutes max before giving up
-
-        for _ in range(max_idle_iters):
+        for _ in range(600):  # 10 min max
             async with AsyncSessionLocal() as session:
                 job = await JobRepository(session).get_by_id(job_id)
                 if job is None:
@@ -93,6 +71,7 @@ async def stream_job_logs(job_id: int, db: DbSession, user: CurrentUser):
                         "agent": log.agent_name,
                         "level": log.level,
                         "message": log.message,
+                        "timestamp": log.created_at.isoformat(),
                         "extra": log.extra_json,
                     })
                     yield f"data: {payload}\n\n"
@@ -102,7 +81,7 @@ async def stream_job_logs(job_id: int, db: DbSession, user: CurrentUser):
                     yield f"event: done\ndata: {{\"status\": \"{job.status}\"}}\n\n"
                     return
 
-            await asyncio.sleep(poll_interval)
+            await asyncio.sleep(1.0)
 
         yield "event: timeout\ndata: {}\n\n"
 

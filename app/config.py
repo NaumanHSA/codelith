@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "insecure-dev-secret"
     APP_DEBUG: bool = True
+    SQLALCHEMY_ECHO: bool = False
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
 
@@ -36,7 +37,11 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.2
 
-    # pgvector — embedding dimensions (must match your LM Studio embedding model output)
+    # Embeddings — uses the same LM Studio base URL as the LLM
+    # Set EMBEDDING_MODEL to the identifier shown in LM Studio for your embedding model
+    EMBEDDING_MODEL: str = "text-embedding-ada-002"
+
+    # pgvector — must match your embedding model's output size (common: 1536, 1024, 768, 384)
     VECTOR_DIMENSIONS: int = 1536
 
     # Neo4j

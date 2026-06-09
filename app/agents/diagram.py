@@ -8,50 +8,56 @@ class DiagramAgent(BaseAgent):
     name = "diagram_agent"
 
     async def run(self, state: dict[str, Any]) -> dict[str, Any]:
-        await self._emit_log("info", "DiagramAgent: generating Mermaid diagrams")
-        await self._update_step(self.name, "running")
+        tracer = self._tracer()
+        with tracer(
+            kind="agent",
+            agent_id=self.name,
+            start_message="DiagramAgent: generating Mermaid diagrams",
+            end_message="DiagramAgent: complete",
+        ) as t:
+            await self._emit_log("info", "DiagramAgent: generating Mermaid diagrams")
+            await self._update_step(self.name, "running")
 
-        project = state["project"]
-        architecture_map: dict = state.get("architecture_map", {})
+            project = state["project"]
+            architecture_map: dict = state.get("architecture_map", {})
 
-        services_list = self._services_list(architecture_map)
-        tech_stack = self._tech_stack_str(architecture_map)
-        entry_points = ", ".join(architecture_map.get("entry_points", [])) or "main"
+            services_list = self._services_list(architecture_map)
+            tech_stack = self._tech_stack_str(architecture_map)
+            entry_points = ", ".join(architecture_map.get("entry_points", [])) or "main"
 
-        diagrams: list[dict] = []
+            diagrams: list[dict] = []
 
-        # Architecture overview diagram
-        arch_diagram = await self._generate_diagram(
-            ARCHITECTURE_DIAGRAM,
-            project_name=project.name,
-            services_list=services_list,
-            tech_stack=tech_stack,
-        )
-        if arch_diagram:
-            diagrams.append({
-                "name": "Architecture Overview",
-                "diagram_type": "graph",
-                "content": arch_diagram,
-            })
+            arch_diagram = await self._generate_diagram(
+                ARCHITECTURE_DIAGRAM,
+                project_name=project.name,
+                services_list=services_list,
+                tech_stack=tech_stack,
+            )
+            if arch_diagram:
+                diagrams.append({
+                    "name": "Architecture Overview",
+                    "diagram_type": "graph",
+                    "content": arch_diagram,
+                })
 
-        # Sequence diagram
-        seq_diagram = await self._generate_diagram(
-            SEQUENCE_DIAGRAM,
-            project_name=project.name,
-            services_list=services_list,
-            entry_points=entry_points,
-        )
-        if seq_diagram:
-            diagrams.append({
-                "name": "Request Flow",
-                "diagram_type": "sequence",
-                "content": seq_diagram,
-            })
+            seq_diagram = await self._generate_diagram(
+                SEQUENCE_DIAGRAM,
+                project_name=project.name,
+                services_list=services_list,
+                entry_points=entry_points,
+            )
+            if seq_diagram:
+                diagrams.append({
+                    "name": "Request Flow",
+                    "diagram_type": "sequence",
+                    "content": seq_diagram,
+                })
 
-        await self._update_step(self.name, "completed", {"diagrams": len(diagrams)})
-        await self._emit_log("info", "Diagrams generated", count=len(diagrams))
+            t.outputs(diagrams=len(diagrams))
+            await self._update_step(self.name, "completed", {"diagrams": len(diagrams)})
+            await self._emit_log("info", "Diagrams generated", count=len(diagrams))
 
-        return {**state, "diagrams": diagrams}
+            return {**state, "diagrams": diagrams}
 
     async def _generate_diagram(self, prompt_template, **kwargs) -> str | None:
         try:

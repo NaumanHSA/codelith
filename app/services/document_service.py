@@ -39,6 +39,17 @@ class DocumentService:
     async def list_by_project(self, project_id: int, limit: int = 100, offset: int = 0) -> list[Document]:
         return await self.repo.list_by_project(project_id, limit=limit, offset=offset)
 
+    async def list_all(self, limit: int = 100, offset: int = 0) -> list[Document]:
+        return await self.repo.list_all(limit=limit, offset=offset)
+
+    async def update(self, document_id: int, title: str | None = None, content_markdown: str | None = None) -> Document:
+        updates = {k: v for k, v in {"title": title, "content_markdown": content_markdown}.items() if v is not None}
+        doc = await self.repo.update(document_id, **updates)
+        await self.db.commit()
+        if not doc:
+            raise NotFoundError("Document", document_id)
+        return doc
+
     async def list_by_job(self, job_id: int) -> list[Document]:
         return await self.repo.list_by_job(job_id)
 

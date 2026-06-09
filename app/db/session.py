@@ -8,7 +8,7 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
-    echo=settings.APP_DEBUG,
+    echo=settings.SQLALCHEMY_ECHO,
 )
 
 AsyncSessionLocal = async_sessionmaker(
