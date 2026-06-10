@@ -35,8 +35,9 @@ class DiagramAgent(BaseAgent):
             entry_points = ", ".join(architecture_map.get("entry_points", [])) or "main"
             patterns = ", ".join(architecture_map.get("patterns", [])) or "none identified"
             external_deps = ", ".join(architecture_map.get("external_dependencies", [])) or "none"
-            architecture_json = json.dumps(architecture_map, indent=2)[:2500]
-            doc_context = self._extract_doc_context(generated_docs, preferred_type="architecture")
+            # Keep prompts lean — the local model slows badly on long diagram prompts
+            architecture_json = json.dumps(architecture_map, indent=2)[:1200]
+            doc_context = self._extract_doc_context(generated_docs, preferred_type="architecture")[:1000]
 
             diagrams: list[dict] = []
 

@@ -14,8 +14,7 @@ from app.agents.architecture import ArchitectureAgent
 from app.agents.strategy import StrategyAgent
 from app.agents.writer import WriterAgent
 from app.agents.diagram import DiagramAgent
-from app.agents.validator import ValidatorAgent
-from app.agents.reviewer import ReviewerAgent
+from app.agents.qa import QAAgent
 from app.agents.formatter import FormatterAgent
 from app.agents.publisher import PublisherAgent
 
@@ -75,10 +74,10 @@ class DocumentationWorkflow:
         # ── Parallel writer fan-out (one Send per doc_type) ──────────────────
         graph.add_node("writer", make_node(WriterAgent))
 
-        # ── Post-writing pipeline ─────────────────────────────────────────────
+        # ── Post-writing pipeline (diagram and qa run in PARALLEL) ────────────
         graph.add_node("diagram", make_node(DiagramAgent))
-        graph.add_node("validator", make_node(ValidatorAgent))
-        graph.add_node("reviewer", make_node(ReviewerAgent))
+        graph.add_node("qa", make_node(QAAgent))
+        graph.add_node("gate", self._gate_node)  # no-op join point
         graph.add_node("formatter", make_node(FormatterAgent))
         graph.add_node("publisher", make_node(PublisherAgent))
 
@@ -93,13 +92,17 @@ class DocumentationWorkflow:
         # Fan-out: strategy → one writer node per doc_type via Send()
         graph.add_conditional_edges("strategy", self._fan_out_writers, ["writer"])
 
-        # Fan-in: all writers → diagram (LangGraph waits for all Send()s)
+        # Fan-in: all writers complete (LangGraph waits for all Send()s), then
+        # diagram and qa run as PARALLEL branches — they are independent
+        # (diagram needs architecture_map + docs; qa needs only docs).
         graph.add_edge("writer", "diagram")
-        graph.add_edge("diagram", "validator")
-        graph.add_edge("validator", "reviewer")
+        graph.add_edge("writer", "qa")
+
+        # Join: gate fires only after BOTH diagram and qa have completed
+        graph.add_edge(["diagram", "qa"], "gate")
 
         graph.add_conditional_edges(
-            "reviewer",
+            "gate",
             self._route_after_review,
             {"format": "formatter", "await_review": END},
         )
@@ -108,6 +111,11 @@ class DocumentationWorkflow:
         graph.add_edge("publisher", END)
 
         return graph.compile()
+
+    @staticmethod
+    async def _gate_node(state: DocumentationState) -> dict:
+        # No-op join point for the parallel diagram/qa branches.
+        return {}
 
     def _fan_out_writers(self, state: DocumentationState) -> list[Send]:
         doc_types: list[str] = state.get("doc_types", ["architecture"])

@@ -42,9 +42,12 @@ Thumbs.db
 *.log
 /tmp/
 /scratch/
-/repos/           # cloned repos during ingestion
-/exports/         # local export staging
-/runs/            # per-job sandbox: traces, outputs, copied source repos
+# cloned repos during ingestion
+/repos/
+# local export staging
+/exports/
+# per-job sandbox: traces, outputs, copied source repos
+/runs/
 
 # Docker
 .docker/

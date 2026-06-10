@@ -85,6 +85,7 @@ class Settings(BaseSettings):
 
     # ReAct agents
     REACT_MAX_ITERATIONS: int = 20
+    REACT_SECTION_MAX_ITERATIONS: int = 8  # tool rounds for one writer section
     REACT_CONTEXT_WINDOW_LIMIT: int = 14000   # single-shot _call_llm trim target
     REACT_CONTEXT_WINDOW_MAX: int = 8000
 

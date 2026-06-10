@@ -180,37 +180,58 @@ class ReActMixin:
                     "tools": len(all_tools),
                 },
             ) as t:
+                # Stream full state after every super-step so that when the recursion
+                # limit (or anything else) raises mid-loop, last_state still holds the
+                # complete partial history for the trace.
+                last_state: dict | None = None
                 try:
-                    result = await agent.ainvoke(
+                    async for chunk in agent.astream(
                         {"messages": [HumanMessage(content=user_message)]},
                         config=config,
+                        stream_mode="values",
+                    ):
+                        last_state = chunk
+                    messages = (last_state or {}).get("messages", [])
+                    answer = messages[-1].content if messages else ""
+                    tool_calls = self._extract_tool_calls(messages)
+                    turns = sum(
+                        1 for m in messages
+                        if type(m).__name__ == "AIMessage" and getattr(m, "tool_calls", None)
                     )
-                    answer = result["messages"][-1].content
-                    tool_calls = self._extract_tool_calls(result.get("messages", []))
+                    # langgraph v1 ends gracefully with this sentinel instead of raising
+                    # when the step budget runs out — treat it as a limit hit so callers
+                    # fall back instead of using the sentinel as real content.
+                    if isinstance(answer, str) and answer.strip().startswith("Sorry, need more steps"):
+                        t.set_error(f"ReAct ran out of steps ({iterations} rounds budget)")
+                        t.outputs(answer="", iterations="limit_hit", turns=turns, tool_calls=tool_calls)
+                        return ""
                     t.outputs(
                         answer=answer,
                         iterations="completed",
-                        turns=sum(
-                            1 for m in result["messages"]
-                            if type(m).__name__ == "AIMessage" and getattr(m, "tool_calls", None)
-                        ),
+                        turns=turns,
                         tool_calls=tool_calls,
                     )
                     return answer
 
                 except GraphRecursionError:
                     t.set_error(f"ReAct hit recursion limit ({iterations} rounds / {iterations * 2} steps)")
-                    msgs = result.get("messages", []) if "result" in dir() else []  # type: ignore
+                    msgs = (last_state or {}).get("messages", [])
                     tool_calls = self._extract_tool_calls(msgs)
                     for m in reversed(msgs):
+                        if type(m).__name__ != "AIMessage":
+                            continue
                         content = getattr(m, "content", "") or ""
-                        if content and len(content) > 50:
+                        if content and len(str(content)) > 50:
                             t.outputs(answer=str(content), iterations="limit_hit", tool_calls=tool_calls)
                             return str(content)
+                    t.outputs(answer="", iterations="limit_hit", tool_calls=tool_calls)
                     return ""
 
                 except Exception as exc:
                     t.set_error(str(exc))
+                    msgs = (last_state or {}).get("messages", [])
+                    if msgs:
+                        t.outputs(answer="", iterations="error", tool_calls=self._extract_tool_calls(msgs))
                     logger.error("react_loop_error", agent=getattr(self, "name", "?"), error=str(exc))
                     return ""
 

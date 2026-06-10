@@ -6,8 +6,7 @@ from app.agents.architecture import ArchitectureAgent
 from app.agents.strategy import StrategyAgent
 from app.agents.writer import WriterAgent
 from app.agents.diagram import DiagramAgent
-from app.agents.validator import ValidatorAgent
-from app.agents.reviewer import ReviewerAgent
+from app.agents.qa import QAAgent
 from app.agents.formatter import FormatterAgent
 from app.agents.publisher import PublisherAgent
 
@@ -20,8 +19,7 @@ __all__ = [
     "StrategyAgent",
     "WriterAgent",
     "DiagramAgent",
-    "ValidatorAgent",
-    "ReviewerAgent",
+    "QAAgent",
     "FormatterAgent",
     "PublisherAgent",
 ]
