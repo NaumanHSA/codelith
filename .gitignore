@@ -44,6 +44,7 @@ Thumbs.db
 /scratch/
 /repos/           # cloned repos during ingestion
 /exports/         # local export staging
+/runs/            # per-job sandbox: traces, outputs, copied source repos
 
 # Docker
 .docker/

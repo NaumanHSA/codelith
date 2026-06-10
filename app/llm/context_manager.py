@@ -18,6 +18,33 @@ def count_tokens(messages: list[dict]) -> int:
     return total
 
 
+def count_tokens_lc(messages: list) -> int:
+    """count_tokens adapter for LangChain message objects (have a .content attr)."""
+    adapted = []
+    for m in messages:
+        content = getattr(m, "content", "")
+        adapted.append({"content": content if isinstance(content, (str, list)) else str(content)})
+    return count_tokens(adapted)
+
+
+def split_for_compaction(messages: list, keep_last: int) -> tuple[list, list]:
+    """
+    Split a LangChain message history into (older, recent) for compaction.
+
+    `recent` is guaranteed never to begin with an orphan ToolMessage — a
+    ToolMessage must stay attached to the AIMessage(tool_calls) that produced it,
+    otherwise the chat API rejects the request. The cut index is walked forward
+    past any leading ToolMessage so the orphaned tool results land in `older`
+    (which is summarised to plain text anyway).
+    """
+    if len(messages) <= keep_last + 1:
+        return [], messages
+    cut = len(messages) - keep_last
+    while cut < len(messages) and type(messages[cut]).__name__ == "ToolMessage":
+        cut += 1
+    return messages[:cut], messages[cut:]
+
+
 def trim_to_limit(messages: list[dict], max_tokens: int) -> list[dict]:
     """
     Trim message list to fit within max_tokens.

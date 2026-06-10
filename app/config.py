@@ -85,8 +85,14 @@ class Settings(BaseSettings):
 
     # ReAct agents
     REACT_MAX_ITERATIONS: int = 20
-    REACT_CONTEXT_WINDOW_LIMIT: int = 6000
+    REACT_CONTEXT_WINDOW_LIMIT: int = 14000   # single-shot _call_llm trim target
     REACT_CONTEXT_WINDOW_MAX: int = 8000
+
+    # ReAct context compaction (intelligent LLM summarisation)
+    LLM_CONTEXT_WINDOW: int = 21000            # actual model context window
+    REACT_TOOL_RESULT_MAX_CHARS: int = 4000    # cap one tool result (~1k tokens)
+    REACT_COMPACT_THRESHOLD_TOKENS: int = 9000 # compact conversation when it grows past this
+    REACT_COMPACT_KEEP_LAST: int = 8           # verbatim recent messages kept after a summary
 
     @field_validator("APP_ENV")
     @classmethod

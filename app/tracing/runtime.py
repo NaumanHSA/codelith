@@ -35,7 +35,7 @@ def create_tracer(
 
     span_tracer = RichTracer() if cfg.log_steps else NullSpanTracer()
 
-    return Tracer(
+    tracer = Tracer(
         config=cfg,
         span_tracer=span_tracer,
         meta={
@@ -46,6 +46,13 @@ def create_tracer(
         },
         logger_=logging.getLogger("docany.tracing"),
     )
+    # Write each step's JSON the moment it completes so the steps/ folder
+    # fills up incrementally during the run, not only after it finishes.
+    if settings.TRACING_SAVE_JSON:
+        steps_dir = Path(run_dir) / "steps"
+        steps_dir.mkdir(parents=True, exist_ok=True)
+        tracer._live_steps_dir = steps_dir
+    return tracer
 
 
 def set_tracer(tracer: Tracer | None) -> Any:
@@ -78,6 +85,15 @@ def save_trace_artifacts(tracer: Tracer, run_dir: str | Path) -> dict[str, str]:
         json_path = trace_dir / "trace.json"
         json_path.write_text(tracer.results.model_dump_json(indent=2), encoding="utf-8")
         paths["trace_json"] = str(json_path)
+
+        # Per-step files: 001_agent_coordinator_agent.json, 002_llm_planner_agent.json, …
+        steps_dir = trace_dir / "steps"
+        steps_dir.mkdir(exist_ok=True)
+        for step in tracer.results.steps:
+            agent_slug = (step.agent_id or "unknown").replace(" ", "_").replace("/", "-")
+            filename = f"{step.step_id:03d}_{step.kind}_{agent_slug}.json"
+            (steps_dir / filename).write_text(step.model_dump_json(indent=2), encoding="utf-8")
+        paths["steps_dir"] = str(steps_dir)
 
     if settings.TRACING_SAVE_MARKDOWN:
         md_path = trace_dir / "trace.md"

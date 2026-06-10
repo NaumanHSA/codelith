@@ -16,6 +16,7 @@ class JobRepository(BaseRepository[Job]):
     async def list_by_project(self, project_id: int, limit: int = 50, offset: int = 0) -> list[Job]:
         result = await self.session.execute(
             select(Job)
+            .options(selectinload(Job.steps))
             .where(Job.project_id == project_id)
             .order_by(Job.created_at.desc())
             .limit(limit)

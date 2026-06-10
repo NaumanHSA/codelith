@@ -1,6 +1,7 @@
 # neurosurfer/tracing/workflow.py
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, Optional, List, Literal
 import time
 import logging
@@ -122,6 +123,7 @@ class Tracer:
         self._counter: int = 0
         self._depth: int = depth
         self._stream_started: set[int] = set()
+        self._live_steps_dir: Path | None = None
 
 
     # ------------------------------------------------------------------
@@ -213,10 +215,20 @@ class Tracer:
     def _record_step(self, raw: Dict[str, Any]) -> None:
         """
         Convert raw dict from TraceStepContext into a TraceStep and store it.
+        When _live_steps_dir is set, also flush the step to disk immediately.
         """
         try:
             step = TraceStep(**raw)
             self._result.steps.append(step)
+            if self._live_steps_dir is not None:
+                try:
+                    agent_slug = (step.agent_id or "unknown").replace(" ", "_").replace("/", "-")
+                    filename = f"{step.step_id:03d}_{step.kind}_{agent_slug}.json"
+                    (self._live_steps_dir / filename).write_text(
+                        step.model_dump_json(indent=2), encoding="utf-8"
+                    )
+                except Exception:
+                    pass
         except Exception as e:  # pragma: no cover - defensive
             self.logger.warning("Failed to record trace step: %s", e)
     

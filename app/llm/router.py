@@ -6,7 +6,7 @@ def select_model(task_type: str) -> str:
     settings = get_settings()
 
     quality_tasks = {"write", "review", "validate", "architecture"}
-    fast_tasks = {"plan", "classify", "extract", "diagram"}
+    fast_tasks = {"plan", "classify", "extract", "diagram", "summarize"}
 
     if task_type in quality_tasks:
         return settings.LLM_QUALITY_MODEL

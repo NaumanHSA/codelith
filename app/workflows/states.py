@@ -36,11 +36,16 @@ class DocumentationState(TypedDict, total=False):
     diagrams: list[dict]  # [{name, diagram_type, content}]
 
     # ── Review ────────────────────────────────────────────────────────────────
+    validation_results: list[dict]
     review_results: list[dict]
     all_approved: bool
     human_approved: bool
 
     # ── Publishing ────────────────────────────────────────────────────────────
+    # formatted_docs: diagram-enriched copy used by publisher (separate from the
+    # Annotated generated_docs so formatter doesn't double the list via operator.add)
+    formatted_docs: list[dict]
+    export_keys: dict
     saved_doc_ids: list[int]
 
     # ── Control ───────────────────────────────────────────────────────────────

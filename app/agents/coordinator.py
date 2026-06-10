@@ -25,7 +25,6 @@ class CoordinatorAgent(BaseAgent):
             await self._update_step(self.name, "completed", {"doc_types": doc_types})
 
             return {
-                **state,
                 "doc_types": doc_types,
                 "output_formats": output_formats,
                 "requires_human_review": requires_human_review,

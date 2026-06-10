@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from app.agents.base import BaseAgent
@@ -21,39 +22,36 @@ class StrategyAgent(BaseAgent):
             project = state["project"]
             doc_types: list[str] = state.get("doc_types", ["architecture"])
             architecture_map: dict = state.get("architecture_map", {})
+            codebase = state.get("codebase")
 
             messages = DOCUMENTATION_STRATEGY.render(
                 project_name=project.name,
                 doc_types=", ".join(doc_types),
-                architecture_summary=self._summarize_architecture(architecture_map),
+                architecture_json=json.dumps(architecture_map, indent=2)[:3000],
+                file_listing=self._file_listing(codebase),
+                entry_points=", ".join(architecture_map.get("entry_points", [])) or "unknown",
+                patterns=", ".join(architecture_map.get("patterns", [])) or "none identified",
             )
 
             strategy = await self._call_llm_json(messages, task_type="plan") or self._default_strategy(doc_types)
 
             t.outputs(doc_types=doc_types)
             await self._update_step(self.name, "completed", {"doc_types": doc_types})
-            return {**state, "strategy": strategy}
+            return {"strategy": strategy}
 
-    def _summarize_architecture(self, arch: dict) -> str:
-        if not arch:
-            return "No architecture data available."
-        services = arch.get("services", [])
-        tech = arch.get("tech_stack", {})
-        parts = []
-        if services:
-            parts.append("Services: " + ", ".join(s["name"] for s in services[:8]))
-        if tech.get("language"):
-            parts.append(f"Language: {tech['language']}")
-        if tech.get("frameworks"):
-            parts.append("Frameworks: " + ", ".join(tech["frameworks"][:5]))
-        if arch.get("patterns"):
-            parts.append("Patterns: " + ", ".join(arch["patterns"][:5]))
-        return "\n".join(parts) or "Generic project."
+    def _file_listing(self, codebase) -> str:
+        if not codebase:
+            return "(no files)"
+        lines = [f"  {f.path}" for f in codebase.files[:30]]
+        if codebase.total_files > 30:
+            lines.append(f"  ... and {codebase.total_files - 30} more")
+        return "\n".join(lines)
 
     def _default_strategy(self, doc_types: list[str]) -> dict:
         return {
             "audiences": [{"doc_type": dt, "audience": "developers", "tone": "technical"} for dt in doc_types],
             "priorities": doc_types,
+            "generate_diagrams": True,
             "template_hints": [
                 {"doc_type": dt, "sections": ["Overview", "Usage", "API"]} for dt in doc_types
             ],

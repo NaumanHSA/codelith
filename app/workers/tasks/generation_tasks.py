@@ -84,7 +84,13 @@ async def _run_workflow(job_id: int) -> dict:
 
             except Exception as exc:
                 logger.error("workflow_failed", job_id=job_id, error=str(exc))
-                await job_svc.fail(job_id, str(exc))
+                # Use a fresh session — the current one may be in a rolled-back state
+                # from a failed flush inside an agent (e.g. concurrent writer sessions).
+                try:
+                    async with AsyncSessionLocal() as err_db:
+                        await JobService(err_db).fail(job_id, str(exc))
+                except Exception as fail_exc:
+                    logger.error("job_fail_update_failed", job_id=job_id, error=str(fail_exc))
                 job_total.labels(status="failed").inc()
                 raise
             finally:

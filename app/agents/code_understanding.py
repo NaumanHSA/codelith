@@ -30,7 +30,7 @@ class CodeUnderstandingAgent(BaseAgent):
 
             if not codebase or not codebase.files:
                 await self._update_step(self.name, "completed", {"chunks_stored": 0})
-                return state
+                return {}
 
             # ── Long-term memory: skip re-embedding if same commit ─────────────
             ltm = LongTermMemory(self.db)
@@ -90,7 +90,7 @@ class CodeUnderstandingAgent(BaseAgent):
                 "embed_failures": embed_failures,
                 "graph": graph_stats,
             })
-            return state
+            return {}
 
     def _split_into_chunks(self, content: str, path: str) -> list[tuple[str, int, int]]:
         lines = content.splitlines()

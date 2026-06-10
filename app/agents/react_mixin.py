@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
@@ -11,6 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool as lc_tool
 
 from app.config import get_settings
+from app.llm.context_manager import count_tokens_lc, split_for_compaction
 from app.llm.langchain_client import get_langchain_llm
 
 logger = structlog.get_logger(__name__)
@@ -40,7 +42,7 @@ class ReActMixin:
                 args=["-y", "@modelcontextprotocol/server-filesystem", allowed_path],
                 env=None,
             )
-            async with stdio_client(server_params) as (read, write):
+            async with stdio_client(server_params, errlog=open(os.devnull, "w")) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     tools = await load_mcp_tools(session)
@@ -80,7 +82,6 @@ class ReActMixin:
         user_message: str,
         extra_tools: list,
         sandbox_path: str,
-        repo_path: str | None = None,
         max_iterations: int | None = None,
     ) -> str:
         """
@@ -95,43 +96,89 @@ class ReActMixin:
         tracer = self._tracer()  # type: ignore[attr-defined]
 
         async with self._mcp_session(sandbox_path) as fs_tools:
-            git_tools: list = []
-            if repo_path:
-                # nested context managers don't compose cleanly here,
-                # so we run git session manually with a try/except fallback
+            # Extra helper: lets the LLM verify exact directory names before guessing paths
+            @lc_tool
+            def list_project_root() -> str:
+                """List the repository root directory to verify exact file and folder names."""
                 try:
-                    from mcp import ClientSession, StdioServerParameters
-                    from mcp.client.stdio import stdio_client
-                    from langchain_mcp_adapters.tools import load_mcp_tools
-
-                    server_params = StdioServerParameters(
-                        command="npx",
-                        args=["-y", "@modelcontextprotocol/server-git", "--repository", repo_path],
-                        env=None,
-                    )
-                    async with stdio_client(server_params) as (read, write):
-                        async with ClientSession(read, write) as session:
-                            await session.initialize()
-                            git_tools = await load_mcp_tools(session)
+                    items = sorted(os.listdir(sandbox_path))
+                    lines = [f"Repository root: {sandbox_path}", "Contents:"]
+                    lines.extend(f"  {item}" for item in items[:60])
+                    return "\n".join(lines)
                 except Exception as exc:
-                    logger.warning("mcp_git_inline_failed", error=str(exc))
+                    return f"Cannot list repository root: {exc}"
 
-            all_tools = fs_tools + git_tools + extra_tools
+            capped_fs_tools = [
+                self._cap_tool_output(t, settings.REACT_TOOL_RESULT_MAX_CHARS) for t in fs_tools
+            ]
+            all_tools = capped_fs_tools + extra_tools + [list_project_root]
             llm = get_langchain_llm()
+
+            # Intelligent context compaction: when the conversation nears the model
+            # window, summarise the older turns via the LLM and feed the summary back so
+            # the agent retains awareness of what it already did. Returns llm_input_messages
+            # so graph state (and therefore the saved trace) keeps the full raw history.
+            compaction_cache = {"summary": "", "covered": 0}
+
+            async def _compact_hook(state: Any) -> dict:
+                msgs = state.get("messages", []) if isinstance(state, dict) else getattr(state, "messages", [])
+                if count_tokens_lc(msgs) <= settings.REACT_COMPACT_THRESHOLD_TOKENS:
+                    return {"llm_input_messages": msgs}  # under budget → full view
+
+                older, recent = split_for_compaction(msgs, settings.REACT_COMPACT_KEEP_LAST)
+                if not older:
+                    return {"llm_input_messages": msgs}
+
+                cut = len(older)
+                # Only summarise the newly-droppable slice; fold into the running summary.
+                if cut > compaction_cache["covered"]:
+                    new_slice = older[compaction_cache["covered"]:cut]
+                    compaction_cache["summary"] = await self._summarise_react_slice(
+                        compaction_cache["summary"], new_slice
+                    )
+                    compaction_cache["covered"] = cut
+                    try:
+                        await self._emit_log(  # type: ignore[attr-defined]
+                            "info", "Compacted ReAct context",
+                            summarised_msgs=cut, kept=len(recent),
+                        )
+                    except Exception:
+                        pass
+
+                summary_msg = HumanMessage(
+                    content="[Summary of earlier work this session]\n" + compaction_cache["summary"]
+                )
+                compacted = [summary_msg, *recent]
+                # Last-resort guard: drop oldest recent groups if still over the window,
+                # always skipping orphaned ToolMessages to keep tool_calls/results paired.
+                while count_tokens_lc(compacted) > settings.LLM_CONTEXT_WINDOW and len(recent) > 1:
+                    recent = recent[1:]
+                    while recent and type(recent[0]).__name__ == "ToolMessage":
+                        recent = recent[1:]
+                    compacted = [summary_msg, *recent]
+                return {"llm_input_messages": compacted}
 
             agent = create_react_agent(
                 llm,
                 all_tools,
                 prompt=SystemMessage(content=system_prompt),
+                pre_model_hook=_compact_hook,
             )
 
-            config: dict[str, Any] = {"recursion_limit": iterations}
+            # LangGraph counts every message (AIMessage + ToolMessage) as one recursion
+            # step, so a tool-call round costs 2. Double the budget to get ~`iterations`
+            # actual tool-call rounds.
+            config: dict[str, Any] = {"recursion_limit": iterations * 2}
 
             with tracer(  # type: ignore[attr-defined]
                 kind="react_loop",
                 agent_id=getattr(self, "name", "unknown"),
                 start_message=f"ReAct loop — {len(all_tools)} tools available",
-                inputs={"user_message": user_message[:300], "tools": len(all_tools)},
+                inputs={
+                    "system_prompt": system_prompt,
+                    "user_message": user_message,
+                    "tools": len(all_tools),
+                },
             ) as t:
                 try:
                     result = await agent.ainvoke(
@@ -139,17 +186,26 @@ class ReActMixin:
                         config=config,
                     )
                     answer = result["messages"][-1].content
-                    t.outputs(answer_preview=str(answer)[:400], iterations="completed")
+                    tool_calls = self._extract_tool_calls(result.get("messages", []))
+                    t.outputs(
+                        answer=answer,
+                        iterations="completed",
+                        turns=sum(
+                            1 for m in result["messages"]
+                            if type(m).__name__ == "AIMessage" and getattr(m, "tool_calls", None)
+                        ),
+                        tool_calls=tool_calls,
+                    )
                     return answer
 
                 except GraphRecursionError:
-                    t.set_error(f"ReAct hit recursion limit ({iterations})")
-                    # Return best partial answer from message history
+                    t.set_error(f"ReAct hit recursion limit ({iterations} rounds / {iterations * 2} steps)")
                     msgs = result.get("messages", []) if "result" in dir() else []  # type: ignore
+                    tool_calls = self._extract_tool_calls(msgs)
                     for m in reversed(msgs):
                         content = getattr(m, "content", "") or ""
                         if content and len(content) > 50:
-                            t.outputs(answer_preview=str(content)[:400], iterations="limit_hit")
+                            t.outputs(answer=str(content), iterations="limit_hit", tool_calls=tool_calls)
                             return str(content)
                     return ""
 
@@ -157,6 +213,106 @@ class ReActMixin:
                     t.set_error(str(exc))
                     logger.error("react_loop_error", agent=getattr(self, "name", "?"), error=str(exc))
                     return ""
+
+    def _extract_tool_calls(self, messages: list) -> list[dict]:
+        """Walk LangGraph message history and return a flat list of tool invocations with results."""
+        calls: list[dict] = []
+        id_to_call: dict[str, dict] = {}
+        for msg in messages:
+            cls = type(msg).__name__
+            if cls == "AIMessage" and getattr(msg, "tool_calls", None):
+                for tc in msg.tool_calls:
+                    entry: dict[str, Any] = {
+                        "tool": tc.get("name", ""),
+                        "args": tc.get("args", {}),
+                    }
+                    tc_id = tc.get("id", "")
+                    if tc_id:
+                        id_to_call[tc_id] = entry
+                    calls.append(entry)
+            elif cls == "ToolMessage":
+                tc_id = getattr(msg, "tool_call_id", "")
+                result_text = str(msg.content)[:600]
+                # result_text = str(msg.content)
+                if tc_id and tc_id in id_to_call:
+                    id_to_call[tc_id]["result"] = result_text
+                elif calls and "result" not in calls[-1]:
+                    calls[-1]["result"] = result_text
+        return calls
+
+    def _cap_tool_output(self, tool, max_chars: int):
+        """Wrap a tool's async coroutine so oversized string results are truncated.
+
+        Keeps any single file read from blowing the context window. The tool's
+        args_schema (what the LLM sees) is untouched — only the runtime result is capped.
+        """
+        original = getattr(tool, "coroutine", None)
+        if original is None:
+            return tool  # sync-only or no coroutine — leave as-is
+
+        async def _capped(*args, **kwargs):
+            result = await original(*args, **kwargs)
+            if isinstance(result, str) and len(result) > max_chars:
+                return (
+                    result[:max_chars]
+                    + f"\n...[truncated — {len(result)} chars total; read a specific line range to see more]"
+                )
+            return result
+
+        try:
+            tool.coroutine = _capped
+        except Exception:
+            return tool
+        return tool
+
+    async def _summarise_react_slice(self, prior_summary: str, messages: list) -> str:
+        """LLM-summarise a slice of ReAct history into a dense, cumulative recap.
+
+        Folds `prior_summary` with the new slice so the running summary stays complete.
+        Runs only when a loop crosses the compaction threshold.
+        """
+        tool_calls = self._extract_tool_calls(messages)
+        lines: list[str] = []
+        for tc in tool_calls:
+            name = tc.get("tool", "?")
+            args = tc.get("args", {})
+            if isinstance(args, dict):
+                arg_str = ", ".join(f"{k}={str(v)[:80]}" for k, v in args.items())
+            else:
+                arg_str = str(args)[:120]
+            result = str(tc.get("result", ""))[:300]
+            lines.append(f"- {name}({arg_str}) -> {result}")
+        for m in messages:
+            if type(m).__name__ == "AIMessage":
+                content = getattr(m, "content", "") or ""
+                if isinstance(content, str) and len(content.strip()) > 30:
+                    lines.append(f"- (agent reasoning) {content.strip()[:300]}")
+        transcript = "\n".join(lines) if lines else "(no notable tool activity)"
+
+        prior_block = f"Summary so far:\n{prior_summary}\n\n" if prior_summary else ""
+        summary_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You compress an AI agent's work log into a dense, factual running summary. "
+                    "Capture concretely: files read and their key contents, exact paths confirmed, "
+                    "sections or claims already written or verified, decisions made, and what still "
+                    "remains to do. Preserve specific names and paths. No preamble, no fluff."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"{prior_block}New activity to fold into the summary:\n{transcript}\n\n"
+                    "Return the updated running summary only."
+                ),
+            },
+        ]
+        try:
+            return await self._call_llm(summary_messages, task_type="summarize")  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("react_summary_failed", error=str(exc))
+            return (prior_summary + "\n" + transcript).strip()[:4000]
 
     def _make_graph_tool(self, project_id: int):
         """Return a Neo4j code-graph query tool as a LangChain tool."""

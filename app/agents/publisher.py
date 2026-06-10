@@ -20,7 +20,8 @@ class PublisherAgent(BaseAgent):
 
             project = state["project"]
             job = state["job"]
-            generated_docs: list[dict] = state.get("generated_docs", [])
+            # Use formatter's diagram-enriched copy when available
+            generated_docs: list[dict] = state.get("formatted_docs") or state.get("generated_docs", [])
             export_keys: dict[str, list[str]] = state.get("export_keys", {})
 
             doc_svc = DocumentService(self.db)
@@ -61,4 +62,4 @@ class PublisherAgent(BaseAgent):
             t.outputs(saved_doc_ids=saved_doc_ids)
             await self._update_step(self.name, "completed", {"saved_doc_ids": saved_doc_ids})
             await self.db.commit()
-            return {**state, "saved_doc_ids": saved_doc_ids}
+            return {"saved_doc_ids": saved_doc_ids}

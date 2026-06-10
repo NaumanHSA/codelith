@@ -57,7 +57,7 @@ class ArchitectureAgent(ReActMixin, BaseAgent):
             await self._emit_log("info", "Architecture map built",
                                  services=len(architecture_map.get("services", [])))
 
-            return {**state, "architecture_map": architecture_map}
+            return {"architecture_map": architecture_map}
 
     async def _build_map(self, project, codebase, repo_path: str, state: dict) -> dict:
         # ── Try ReAct agent with MCP tools when we have a real repo path ────────
@@ -68,10 +68,12 @@ class ArchitectureAgent(ReActMixin, BaseAgent):
 
             user_message = (
                 f"Analyze the project '{project.name}' located at: {repo_path}\n\n"
+                f"IMPORTANT: Every file path you read MUST start exactly with: {repo_path}\n"
+                f"Do not construct or guess paths under any other directory.\n\n"
                 f"Known file listing (from static parse):\n{file_listing}\n\n"
                 + (f"API specs found:\n{api_context}\n\n" if api_context else "")
                 + (f"Infrastructure context:\n{infra_context}\n\n" if infra_context else "")
-                + "Use the file listing and context above as your map. "
+                + "Use the file listing above as your map — read paths exactly as shown. "
                 "Use query_code_graph to explore import dependencies. "
                 "Skip directory listing — go directly to reading config files and key modules."
             )
@@ -84,7 +86,6 @@ class ArchitectureAgent(ReActMixin, BaseAgent):
                     self._make_graph_tool(project.id),
                 ],
                 sandbox_path=repo_path,
-                repo_path=repo_path,
             )
             if result:
                 try:

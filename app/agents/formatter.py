@@ -54,7 +54,9 @@ class FormatterAgent(BaseAgent):
                 "formats": list(output_formats),
                 "export_keys": export_keys,
             })
-            return {**state, "generated_docs": formatted_docs, "export_keys": export_keys}
+            # Use formatted_docs (a regular list key) instead of re-emitting generated_docs
+            # through the Annotated operator.add reducer, which would double the list.
+            return {"formatted_docs": formatted_docs, "export_keys": export_keys}
 
     async def _generate_export(self, fmt: str, docs: list[dict], project) -> list[str]:
         from app.storage.s3 import StorageClient

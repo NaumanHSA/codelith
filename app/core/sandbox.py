@@ -3,13 +3,17 @@ from pathlib import Path
 
 from app.config import get_settings
 
+# Resolve relative JOB_SANDBOX_BASE_DIR paths against the project root so the
+# Celery worker (which may run from any CWD) always lands in the right place.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 class JobSandbox:
     """
     Isolated per-job working directory.
 
     Layout:
-        /tmp/jobs/{job_id}/
+        ./runs/{job_id}/
           scratch/repo/   ← cloned repository
           memory/         ← agent progress checkpoints (JSON)
           outputs/        ← generated markdown before DB save
@@ -19,7 +23,10 @@ class JobSandbox:
     def __init__(self, job_id: int | str) -> None:
         settings = get_settings()
         self.job_id = str(job_id)
-        self.root = Path(settings.JOB_SANDBOX_BASE_DIR) / self.job_id
+        base = Path(settings.JOB_SANDBOX_BASE_DIR)
+        if not base.is_absolute():
+            base = _PROJECT_ROOT / base
+        self.root = base / self.job_id
         self.scratch = self.root / "scratch"
         self.repo = self.scratch / "repo"
         self.memory = self.root / "memory"

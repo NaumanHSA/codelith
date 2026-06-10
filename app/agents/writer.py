@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Any
 
 from app.agents.base import BaseAgent
@@ -33,6 +35,7 @@ class WriterAgent(ReActMixin, BaseAgent):
         strategy: dict = state.get("strategy", {})
         sandbox = state.get("sandbox")
         repo_path = state.get("repo_path") or ""
+        documentation_plan: dict = state.get("documentation_plan") or {}
 
         # Fan-out: current_doc_type set by Send(); fallback to iterating doc_types
         single_type: str | None = state.get("current_doc_type")
@@ -53,7 +56,8 @@ class WriterAgent(ReActMixin, BaseAgent):
             for doc_type in doc_types:
                 try:
                     content = await self._write_doc(
-                        doc_type, project, codebase, architecture_map, strategy, sandbox, repo_path
+                        doc_type, project, codebase, architecture_map, strategy,
+                        sandbox, repo_path, documentation_plan
                     )
                     new_docs.append({
                         "doc_type": doc_type,
@@ -71,51 +75,122 @@ class WriterAgent(ReActMixin, BaseAgent):
 
     async def _write_doc(
         self, doc_type: str, project, codebase, architecture_map: dict, strategy: dict,
-        sandbox, repo_path: str = ""
+        sandbox, repo_path: str = "", documentation_plan: dict | None = None
     ) -> str:
         # ── Try ReAct if we have an actual repo path ───────────────────────────
         if repo_path:
             strategy_hint = self._strategy_hint(strategy, doc_type)
             arch_summary = self._arch_summary(architecture_map)
-
             file_listing = self._summarize_structure(codebase)
+            section_plan = self._section_plan_for(documentation_plan, doc_type)
+            planned = self._planned_sections(documentation_plan, doc_type)
+
             user_message = (
                 f"Write a complete '{doc_type}' documentation for project '{project.name}'.\n\n"
                 f"Repository: {repo_path}\n\n"
+                f"IMPORTANT: Every file path you read MUST start exactly with: {repo_path}\n"
+                f"Do not construct or guess paths under any other directory.\n\n"
                 f"Known files:\n{file_listing}\n\n"
                 f"Architecture context:\n{arch_summary}\n\n"
+                f"Sections to write:\n{section_plan}\n\n"
                 f"Documentation guidance:\n{strategy_hint}\n\n"
-                f"Read the files most relevant to '{doc_type}' before writing. "
-                f"Do not list directories — the file list above is complete."
+                "Instructions:\n"
+                "1. For each section listed above, FIRST read the key_files for that section using the filesystem tools.\n"
+                "2. Then call write_section(section_name, content) with the written content.\n"
+                "3. Begin each section's content with a Markdown H2 heading: '## Section Name'.\n"
+                "4. Repeat for every section before giving your final answer.\n"
+                "5. Use exact paths from the Known files list above. Never guess paths.\n"
+                "6. Your final answer should be a brief summary of sections written, not the full content."
             )
+
+            # write_section tool: each call saves one section file to sandbox
+            sections_dir = sandbox.outputs / doc_type if sandbox else None
+            written_sections: list[str] = []
+            completed: dict[str, str] = {}  # section_name(lower) -> status note
+
+            # Seed progress.md with the FULL plan up-front, so every TODO section is
+            # visible before any writing happens (checked off as each completes).
+            if sections_dir is not None:
+                try:
+                    sections_dir.mkdir(parents=True, exist_ok=True)
+                    (sections_dir / "progress.md").write_text(
+                        self._render_progress(doc_type, planned, completed), encoding="utf-8"
+                    )
+                except Exception:
+                    pass
+
+            from langchain_core.tools import tool as lc_tool
+
+            @lc_tool
+            def write_section(section_name: str, content: str) -> str:
+                """Write one documentation section to disk. Call once per section."""
+                if sections_dir is None:
+                    return f"Section '{section_name}' captured (no sandbox)"
+                try:
+                    sections_dir.mkdir(parents=True, exist_ok=True)
+                    safe = re.sub(r"[^\w\-]", "_", section_name.lower())[:60]
+                    idx = len(written_sections) + 1
+                    section_file = sections_dir / f"{idx:02d}_{safe}.md"
+                    # Heading-aware: add '## Name' only if the model didn't already write one
+                    # (prevents both duplicate headings and missing headings).
+                    body = content.lstrip()
+                    if not body.startswith("#"):
+                        body = f"## {section_name}\n\n{body}"
+                    section_file.write_text(body, encoding="utf-8")
+                    written_sections.append(str(section_file))
+                    completed[section_name.lower().strip()] = f"written ({len(content)} chars)"
+                    # Re-render progress.md: planned TODOs + completed checkmarks
+                    (sections_dir / "progress.md").write_text(
+                        self._render_progress(doc_type, planned, completed), encoding="utf-8"
+                    )
+                    return f"Section '{section_name}' written ({len(content)} chars)"
+                except Exception as exc:
+                    return f"Error writing section '{section_name}': {exc}"
 
             result = await self._run_react(
                 system_prompt=_WRITER_SYSTEM_PROMPT,
                 user_message=user_message,
-                extra_tools=[self._make_search_tool(project.id, self.db)],
+                extra_tools=[self._make_search_tool(project.id, self.db), write_section],
                 sandbox_path=repo_path,
-                repo_path=repo_path,
             )
 
-            if result and len(result) > 200:
-                # Persist to sandbox outputs + memory
+            # Assemble final content from saved section files (preferred) or raw answer
+            combined = self._collect_sections(sections_dir, written_sections) if written_sections else result
+            if combined and len(combined) > 200:
                 try:
-                    sandbox.output_path(doc_type).write_text(result, encoding="utf-8")
+                    sandbox.output_path(doc_type).write_text(combined, encoding="utf-8")
                     self._save_memory_checkpoint(sandbox, f"writer_{doc_type}", {
                         "doc_type": doc_type,
-                        "content_preview": result[:500],
-                        "length": len(result),
+                        "sections": len(written_sections),
+                        "content_preview": combined[:500],
+                        "length": len(combined),
                     })
                 except Exception:
                     pass
-                return result
+                return combined
 
         # ── Fallback: single-shot LLM ─────────────────────────────────────────
         await self._emit_log("info", f"Writer falling back to single-shot for {doc_type}")
-        return await self._generate_doc_single_shot(doc_type, project, codebase, architecture_map, strategy)
+        section_plan = self._section_plan_for(documentation_plan, doc_type)
+        content = await self._generate_doc_single_shot(
+            doc_type, project, codebase, architecture_map, strategy, section_plan
+        )
+        if content and sandbox:
+            try:
+                sandbox.output_path(doc_type).write_text(content, encoding="utf-8")
+                self._save_memory_checkpoint(sandbox, f"writer_{doc_type}", {
+                    "doc_type": doc_type,
+                    "content_preview": content[:500],
+                    "length": len(content),
+                    "method": "single_shot",
+                })
+            except Exception:
+                pass
+        return content
 
     async def _generate_doc_single_shot(
-        self, doc_type: str, project, codebase, architecture_map: dict, strategy: dict
+        self, doc_type: str, project, codebase, architecture_map: dict, strategy: dict,
+        section_plan: str = ""
     ) -> str:
         arch_summary = self._arch_summary(architecture_map)
         strategy_hint = self._strategy_hint(strategy, doc_type)
@@ -137,6 +212,7 @@ class WriterAgent(ReActMixin, BaseAgent):
                 source_code=first_file.content[:3000],
             )
         else:
+            section_hint = f"\n\nSections to write:\n{section_plan}" if section_plan else ""
             messages = [
                 {"role": "system", "content": "You are a senior technical writer."},
                 {
@@ -145,6 +221,7 @@ class WriterAgent(ReActMixin, BaseAgent):
                         f"Write a comprehensive {doc_type} document for project '{project.name}'.\n\n"
                         f"Architecture context:\n{arch_summary}\n\n"
                         f"Documentation guidance:\n{strategy_hint}"
+                        f"{section_hint}"
                     ),
                 },
             ]
@@ -152,6 +229,66 @@ class WriterAgent(ReActMixin, BaseAgent):
         return await self._call_llm(messages, task_type="write")
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _collect_sections(self, sections_dir: Path | None, written: list[str]) -> str:
+        """Concatenate numbered section files into one markdown document."""
+        if not sections_dir or not written:
+            return ""
+        parts: list[str] = []
+        for path_str in written:
+            try:
+                parts.append(Path(path_str).read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return "\n\n".join(parts)
+
+    def _planned_sections(self, documentation_plan: dict | None, doc_type: str) -> list[dict]:
+        """Return the structured section list (name/focus/key_files) for this doc_type."""
+        if documentation_plan:
+            for doc in documentation_plan.get("documents", []):
+                if doc.get("type") == doc_type:
+                    return doc.get("sections", []) or []
+        return []
+
+    def _render_progress(self, doc_type: str, planned: list[dict], completed: dict[str, str]) -> str:
+        """Render progress.md: all planned sections as a checklist, ticked as completed.
+
+        `completed` maps lower-cased section name -> status note (e.g. 'written (1234 chars)').
+        """
+        lines = [f"# {doc_type.title()} — Writing Progress", ""]
+        lines.append(f"Plan: {len(planned)} section(s) to write. Each is read-then-write.")
+        lines.append("")
+        rendered: set[str] = set()
+        for sec in planned:
+            name = sec.get("name", "")
+            focus = sec.get("focus", "")
+            key = name.lower().strip()
+            rendered.add(key)
+            if key in completed:
+                lines.append(f"- [x] {name} — {completed[key]}")
+            else:
+                suffix = f": {focus}" if focus else ""
+                lines.append(f"- [ ] {name}{suffix}")
+        # Any sections the writer produced that weren't in the plan
+        for key, note in completed.items():
+            if key not in rendered:
+                lines.append(f"- [x] {key} — {note}")
+        return "\n".join(lines)
+
+    def _section_plan_for(self, documentation_plan: dict | None, doc_type: str) -> str:
+        if not documentation_plan:
+            return "(no section plan — write comprehensive sections based on the architecture)"
+        for doc in documentation_plan.get("documents", []):
+            if doc.get("type") == doc_type:
+                lines = [f"Write these sections in order:"]
+                for s in doc.get("sections", []):
+                    name = s.get("name", "")
+                    focus = s.get("focus", "")
+                    key_files = s.get("key_files", [])
+                    files_hint = f" [key files: {', '.join(key_files)}]" if key_files else ""
+                    lines.append(f"  - {name}: {focus}{files_hint}")
+                return "\n".join(lines)
+        return "(no section plan — write comprehensive sections based on the architecture)"
 
     def _title_for(self, doc_type: str, project_name: str) -> str:
         titles = {

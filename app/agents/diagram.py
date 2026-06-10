@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from app.agents.base import BaseAgent
@@ -18,12 +19,24 @@ class DiagramAgent(BaseAgent):
             await self._emit_log("info", "DiagramAgent: generating Mermaid diagrams")
             await self._update_step(self.name, "running")
 
+            strategy: dict = state.get("strategy", {})
+            if not strategy.get("generate_diagrams", True):
+                await self._emit_log("info", "DiagramAgent: skipped (strategy: no diagrams needed)")
+                t.outputs(diagrams=0, skipped=True)
+                await self._update_step(self.name, "completed", {"diagrams": 0, "skipped": True})
+                return {"diagrams": []}
+
             project = state["project"]
             architecture_map: dict = state.get("architecture_map", {})
+            sandbox = state.get("sandbox")
+            generated_docs: list[dict] = state.get("generated_docs", [])
 
             services_list = self._services_list(architecture_map)
-            tech_stack = self._tech_stack_str(architecture_map)
             entry_points = ", ".join(architecture_map.get("entry_points", [])) or "main"
+            patterns = ", ".join(architecture_map.get("patterns", [])) or "none identified"
+            external_deps = ", ".join(architecture_map.get("external_dependencies", [])) or "none"
+            architecture_json = json.dumps(architecture_map, indent=2)[:2500]
+            doc_context = self._extract_doc_context(generated_docs, preferred_type="architecture")
 
             diagrams: list[dict] = []
 
@@ -31,7 +44,9 @@ class DiagramAgent(BaseAgent):
                 ARCHITECTURE_DIAGRAM,
                 project_name=project.name,
                 services_list=services_list,
-                tech_stack=tech_stack,
+                architecture_json=architecture_json,
+                patterns=patterns,
+                external_deps=external_deps,
             )
             if arch_diagram:
                 diagrams.append({
@@ -45,6 +60,8 @@ class DiagramAgent(BaseAgent):
                 project_name=project.name,
                 services_list=services_list,
                 entry_points=entry_points,
+                patterns=patterns,
+                doc_context=doc_context,
             )
             if seq_diagram:
                 diagrams.append({
@@ -53,11 +70,21 @@ class DiagramAgent(BaseAgent):
                     "content": seq_diagram,
                 })
 
+            if sandbox and diagrams:
+                try:
+                    diagrams_dir = sandbox.outputs / "diagrams"
+                    diagrams_dir.mkdir(parents=True, exist_ok=True)
+                    for d in diagrams:
+                        safe_name = d["name"].lower().replace(" ", "_").replace("/", "-")
+                        (diagrams_dir / f"{safe_name}.mmd").write_text(d["content"], encoding="utf-8")
+                except Exception:
+                    pass
+
             t.outputs(diagrams=len(diagrams))
             await self._update_step(self.name, "completed", {"diagrams": len(diagrams)})
             await self._emit_log("info", "Diagrams generated", count=len(diagrams))
 
-            return {**state, "diagrams": diagrams}
+            return {"diagrams": diagrams}
 
     async def _generate_diagram(self, prompt_template, **kwargs) -> str | None:
         try:
@@ -82,13 +109,22 @@ class DiagramAgent(BaseAgent):
         services = arch.get("services", [])
         if not services:
             return "(no services identified)"
-        return "\n".join(f"- {s['name']}: {s.get('description', s.get('type', ''))}" for s in services)
+        lines = []
+        for s in services:
+            desc = s.get("description") or s.get("type", "")
+            files = s.get("files", [])
+            files_hint = f" [files: {', '.join(files[:2])}]" if files else ""
+            lines.append(f"- {s['name']} ({s.get('type', 'service')}): {desc}{files_hint}")
+        return "\n".join(lines)
 
-    def _tech_stack_str(self, arch: dict) -> str:
-        tech = arch.get("tech_stack", {})
-        parts = []
-        if tech.get("language"):
-            parts.append(tech["language"])
-        parts.extend(tech.get("frameworks", [])[:3])
-        parts.extend(tech.get("databases", [])[:2])
-        return ", ".join(parts) or "unknown"
+    def _extract_doc_context(self, generated_docs: list[dict], preferred_type: str = "architecture") -> str:
+        for doc in generated_docs:
+            if doc.get("doc_type") == preferred_type:
+                content = doc.get("content_markdown", "")
+                return content[:2000] if content else "(no doc content)"
+        # Fallback: first available doc
+        for doc in generated_docs:
+            content = doc.get("content_markdown", "")
+            if content:
+                return content[:2000]
+        return "(no generated doc content yet)"

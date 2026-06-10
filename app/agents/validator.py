@@ -1,28 +1,35 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
 from app.agents.base import BaseAgent
 from app.agents.react_mixin import ReActMixin
+from app.config import get_settings
 from app.llm.prompts.validator_prompts import VALIDATE_CLAIMS
 
 
-_MAX_CLAIMS_PER_DOC = 3
+_MAX_CLAIMS_PER_DOC = 4
 
 _VALIDATOR_SYSTEM_PROMPT = """\
 You are a technical documentation fact-checker. Your job is to verify claims in documentation
 against the actual source code.
 
-For each claim you receive:
-1. Search the codebase for the relevant code using search_codebase
-2. If a specific file is mentioned, read it using filesystem tools
-3. Determine if the claim is accurate, partially accurate, or inaccurate
+CRITICAL INSTRUCTIONS:
+- Do NOT explain your plan or write a preamble. Call tools immediately on receipt of the task.
+- For each claim: search or read the relevant source code, then determine if the claim is accurate.
+- Use search_codebase to find relevant code. Use filesystem tools to read specific files.
+- After checking all claims, output ONLY a JSON array. No prose, no explanation before or after.
 
-Return a JSON object for each claim:
-{"verified": true|false, "confidence": 0.0-1.0, "explanation": "...", "evidence": "..."}
+Output format (JSON array only):
+[
+  {"claim": "...", "verified": true|false, "confidence": 0.0-1.0, "explanation": "one sentence", "evidence": "code snippet or file:line"},
+  ...
+]
 
-Be precise — only mark something as false if you can confirm from the code that it is wrong.
+Be precise — only mark verified=false if the code clearly contradicts the claim.
+If a claim cannot be verified, set verified=true with confidence=0.5.
 """
 
 
@@ -47,20 +54,27 @@ class ValidatorAgent(ReActMixin, BaseAgent):
             repo_path = state.get("repo_path") or ""
             validation_results = []
 
+            # Deduplicate: validate each doc_type only once (state doubling guard)
+            seen_types: set[str] = set()
             for doc in generated_docs:
+                doc_type = doc.get("doc_type") or ""
+                if doc_type in seen_types:
+                    continue
+                seen_types.add(doc_type)
+
                 content = doc.get("content_markdown", "")
                 claims = self._extract_claims(content)[:_MAX_CLAIMS_PER_DOC]
 
                 if repo_path and claims:
                     doc_validations = await self._validate_via_react(
-                        claims, project, sandbox, repo_path
+                        claims, project, sandbox, repo_path, codebase
                     )
                 else:
                     doc_validations = await self._validate_single_shot(claims, codebase)
 
                 passed = sum(1 for r in doc_validations if r.get("verified", True))
                 validation_results.append({
-                    "doc_type": doc.get("doc_type"),
+                    "doc_type": doc_type,
                     "claims_checked": len(doc_validations),
                     "claims_passed": passed,
                     "details": doc_validations,
@@ -70,16 +84,24 @@ class ValidatorAgent(ReActMixin, BaseAgent):
             await self._update_step(self.name, "completed", {"docs_validated": len(validation_results)})
             await self._emit_log("info", "Validation complete", docs=len(validation_results))
 
-            return {**state, "validation_results": validation_results}
+            return {"validation_results": validation_results}
 
-    async def _validate_via_react(self, claims: list[str], project, sandbox, repo_path: str) -> list[dict]:
-        """Use a single ReAct loop to verify all claims at once."""
-        claims_text = "\n".join(f"{i+1}. {c}" for i, c in enumerate(claims))
+    async def _validate_via_react(
+        self, claims: list[str], project, sandbox, repo_path: str, codebase=None
+    ) -> list[dict]:
+        """Use a single ReAct loop to verify all claims at once.
+
+        Falls back to single-shot LLM validation if the loop gives up
+        ("Sorry, need more steps") or fails to return a JSON array.
+        """
+        settings = get_settings()
+        claims_text = "\n".join(f"Claim {i+1}: {c.strip()}" for i, c in enumerate(claims))
         user_message = (
-            f"Verify the following claims about project '{project.name}' "
-            f"using the source code at {repo_path}:\n\n{claims_text}\n\n"
-            "For each claim, search or read the relevant code and return a JSON array:\n"
-            '[{"verified": true, "confidence": 0.9, "explanation": "...", "evidence": "..."}, ...]'
+            f"Verify these {len(claims)} claims about project '{project.name}'.\n\n"
+            f"Source code is at: {repo_path}\n"
+            f"IMPORTANT: All file paths MUST start with: {repo_path}\n\n"
+            f"{claims_text}\n\n"
+            f"Call tools now to verify each claim. Then output ONLY the JSON array."
         )
 
         result = await self._run_react(
@@ -87,20 +109,28 @@ class ValidatorAgent(ReActMixin, BaseAgent):
             user_message=user_message,
             extra_tools=[self._make_search_tool(project.id, self.db)],
             sandbox_path=repo_path,
-            repo_path=repo_path,
+            max_iterations=settings.REACT_MAX_ITERATIONS + 10,
         )
 
-        if result:
-            try:
-                parsed = self._extract_json(result)
-                import json
-                data = json.loads(parsed)
-                if isinstance(data, list):
-                    return data
-            except Exception:
-                pass
+        # Give-up / non-JSON responses → fall back to per-claim single-shot validation
+        sorry_patterns = ("sorry", "need more steps", "cannot complete", "unable to")
+        if not result or any(p in result.lower() for p in sorry_patterns):
+            await self._emit_log(
+                "warning", "Validator ReAct gave no usable answer — falling back to single-shot"
+            )
+            return await self._validate_single_shot(claims, codebase)
 
-        return [{"verified": True, "confidence": 0.5, "explanation": "Could not verify via ReAct"} for _ in claims]
+        try:
+            data = json.loads(self._extract_json(result))
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+
+        await self._emit_log(
+            "warning", "Validator ReAct returned non-JSON — falling back to single-shot"
+        )
+        return await self._validate_single_shot(claims, codebase)
 
     async def _validate_single_shot(self, claims: list[str], codebase) -> list[dict]:
         results = []
@@ -120,10 +150,27 @@ class ValidatorAgent(ReActMixin, BaseAgent):
             return {"verified": True, "confidence": 0.5, "explanation": "Could not verify"}
 
     def _extract_claims(self, content: str) -> list[str]:
-        sentences = re.split(r'(?<=[.!?])\s+', content)
+        # Strip markdown headings and code fences to get prose sentences only
+        clean = re.sub(r"^#{1,6}\s.*$", "", content, flags=re.MULTILINE)
+        clean = re.sub(r"```[\s\S]*?```", "", clean)
+        clean = re.sub(r"`[^`]+`", lambda m: m.group().strip("`"), clean)
+        sentences = re.split(r"(?<=[.!?])\s+", clean)
         keywords = ("function", "class", "method", "endpoint", "route", "module", "import",
-                    "returns", "accepts", "calls", "uses", "implements")
-        return [s.strip() for s in sentences if any(k in s.lower() for k in keywords)][:10]
+                    "returns", "accepts", "calls", "uses", "implements", "supports", "provides",
+                    "exposes", "handles", "manages")
+        candidates = [
+            s.strip() for s in sentences
+            if len(s.strip()) > 30 and any(k in s.lower() for k in keywords)
+        ]
+        # Deduplicate by first 40 chars
+        seen: set[str] = set()
+        unique: list[str] = []
+        for c in candidates:
+            key = c[:40]
+            if key not in seen:
+                seen.add(key)
+                unique.append(c)
+        return unique[:10]
 
     def _find_relevant_source(self, claim: str, codebase) -> str:
         if not codebase:

@@ -59,12 +59,12 @@ class BaseAgent(ABC):
             agent_id=self.name,
             label=f"llm.{task_type}",
             start_message=f"LLM [{task_type}] ~{token_count} tokens",
-            inputs={"task_type": task_type, "tokens": token_count},
+            inputs={"task_type": task_type, "tokens": token_count, "messages": messages},
         ) as t:
             try:
                 result = await self._chat_with_retry(messages, selected_model)
                 llm_calls_total.labels(model=selected_model, task_type=task_type, status="success").inc()
-                t.outputs(response_len=len(result))
+                t.outputs(response_len=len(result), response=result)
                 return result
             except Exception:
                 llm_calls_total.labels(model=selected_model, task_type=task_type, status="error").inc()

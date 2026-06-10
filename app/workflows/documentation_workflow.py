@@ -47,16 +47,19 @@ class DocumentationWorkflow:
         }
 
     def _build_graph(self) -> StateGraph:
-        db = self.db
         job_id = self.job_id
 
         def make_node(agent_cls):
             async def node(state: DocumentationState) -> DocumentationState:
-                agent = agent_cls(db=db, job_id=job_id)
+                # Each node gets its own session so fan-out writers don't collide
+                # during concurrent flush operations on a shared session.
+                from app.db.session import AsyncSessionLocal
                 from app.observability.metrics import time_agent
                 from app.observability.tracing import agent_span
-                with time_agent(agent.name), agent_span(agent.name, job_id):
-                    return await agent.run(state)
+                async with AsyncSessionLocal() as node_db:
+                    agent = agent_cls(db=node_db, job_id=job_id)
+                    with time_agent(agent.name), agent_span(agent.name, job_id):
+                        return await agent.run(state)
             return node
 
         graph = StateGraph(DocumentationState)
@@ -81,11 +84,11 @@ class DocumentationWorkflow:
 
         # ── Edges ─────────────────────────────────────────────────────────────
         graph.set_entry_point("coordinator")
-        graph.add_edge("coordinator", "planner")
-        graph.add_edge("planner", "repo_analyzer")
+        graph.add_edge("coordinator", "repo_analyzer")
         graph.add_edge("repo_analyzer", "code_understanding")
         graph.add_edge("code_understanding", "architecture")
-        graph.add_edge("architecture", "strategy")
+        graph.add_edge("architecture", "planner")   # planner now has real data
+        graph.add_edge("planner", "strategy")
 
         # Fan-out: strategy → one writer node per doc_type via Send()
         graph.add_conditional_edges("strategy", self._fan_out_writers, ["writer"])

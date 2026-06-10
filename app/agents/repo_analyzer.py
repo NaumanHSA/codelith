@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import Any
 from app.agents.base import BaseAgent
@@ -28,18 +29,26 @@ class RepoAnalyzerAgent(BaseAgent):
             clone_path: Path | None = getattr(pipeline, "_last_clone_path", None)
             repo_path_str = str(clone_path) if clone_path else ""
 
-            # Wire the cloned repo into the sandbox so ReAct agents can find it
+            # Copy the source into the sandbox so MCP tools never touch the original repo.
             if sandbox and clone_path and clone_path.exists():
                 try:
                     if sandbox.repo.is_symlink():
                         sandbox.repo.unlink()
                     elif sandbox.repo.exists():
-                        import shutil
                         shutil.rmtree(sandbox.repo)
-                    sandbox.repo.symlink_to(clone_path.resolve())
-                    await self._emit_log("info", "sandbox.repo linked", path=str(clone_path))
+                    shutil.copytree(
+                        clone_path.resolve(),
+                        sandbox.repo,
+                        ignore=shutil.ignore_patterns(
+                            ".git", "__pycache__", "*.pyc", "*.pyo",
+                            "node_modules", ".venv", "venv", ".env",
+                        ),
+                        dirs_exist_ok=False,
+                    )
+                    repo_path_str = str(sandbox.repo)
+                    await self._emit_log("info", "sandbox.repo copied", path=repo_path_str)
                 except Exception as exc:
-                    await self._emit_log("warning", f"Could not link sandbox.repo: {exc}")
+                    await self._emit_log("warning", f"Could not copy to sandbox.repo: {exc}")
 
             t.outputs(
                 sources=ingestion_result.get("sources_processed", 0),
@@ -50,7 +59,6 @@ class RepoAnalyzerAgent(BaseAgent):
             await self._emit_log("info", "Sources analyzed", **ingestion_result)
 
             return {
-                **state,
                 "ingestion_result": ingestion_result,
                 "codebase": codebase,
                 "repo_path": repo_path_str,

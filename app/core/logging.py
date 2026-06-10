@@ -32,8 +32,22 @@ def setup_logging() -> None:
 
     logging.basicConfig(level=log_level, stream=sys.stdout, format="%(message)s")
     # Quiet noisy libs
-    for name in ("uvicorn.access", "sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"):
+    _error_level = (
+        "uvicorn.access",
+        "sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool",
+    )
+    _warning_level = (
+        "httpx", "httpcore", "httpcore.http11", "httpcore.connection",
+        "openai._base_client", "openai.http_client",
+        "git", "git.cmd", "git.repo",
+        "pydot",
+        "langgraph",
+        "neo4j", "neo4j.io", "neo4j.pool", "neo4j.notifications",
+    )
+    for name in _error_level:
         logging.getLogger(name).setLevel(logging.ERROR)
+    for name in _warning_level:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> structlog.BoundLogger:
