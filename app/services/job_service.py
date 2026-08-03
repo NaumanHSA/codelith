@@ -69,14 +69,16 @@ class JobService:
     async def approve(self, job_id: int, approved: bool, comment: str | None = None) -> Job:
         new_status = "running" if approved else "failed"
         error = None if approved else (comment or "Rejected by reviewer")
-        job = await self.repo.update(job_id, status=new_status, error_message=error)
+        await self.repo.update(job_id, status=new_status, error_message=error)
         await self.db.commit()
-        return job  # type: ignore[return-value]
+        # Re-fetch with steps eager-loaded: this is returned as JobOut, which declares
+        # `steps`, and a lazy load during serialization raises MissingGreenlet.
+        return await self.get(job_id)
 
     async def cancel(self, job_id: int) -> Job:
-        job = await self.repo.update(job_id, status="cancelled", completed_at=datetime.now(UTC))
+        await self.repo.update(job_id, status="cancelled", completed_at=datetime.now(UTC))
         await self.db.commit()
-        return job  # type: ignore[return-value]
+        return await self.get(job_id)
 
     async def update_config(self, job_id: int, extra: dict) -> None:
         """Merge extra key/value pairs into the job's config_json."""

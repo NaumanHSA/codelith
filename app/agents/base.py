@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -122,9 +123,17 @@ class BaseAgent(ABC):
     async def _update_step(self, step_name: str, status: str, output: dict | None = None) -> None:
         from app.db.repositories.job_repo import JobStepRepository
         repo = JobStepRepository(self.db)
+
+        # Stamp the timings the UI derives step duration from.
+        timing: dict[str, Any] = {}
+        if status == "running":
+            timing["started_at"] = datetime.now(UTC)
+        elif status in ("completed", "failed"):
+            timing["completed_at"] = datetime.now(UTC)
+
         existing = await repo.list(job_id=self.job_id, agent_name=step_name)
         if existing:
-            await repo.update(existing[0].id, status=status, output_json=output or {})
+            await repo.update(existing[0].id, status=status, output_json=output or {}, **timing)
         else:
             await repo.create(
                 job_id=self.job_id,
@@ -132,6 +141,7 @@ class BaseAgent(ABC):
                 status=status,
                 input_json={},
                 output_json=output or {},
+                **timing,
             )
         await self.db.commit()
 

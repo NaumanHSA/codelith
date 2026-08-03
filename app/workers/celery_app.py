@@ -32,9 +32,11 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # Routes match the task NAME, not the module path — the tasks are registered
+    # as "ingestion.*" / "generation.*" / "export.*" via @celery_app.task(name=...).
     task_routes={
-        "app.workers.tasks.ingestion_tasks.*": {"queue": "ingestion"},
-        "app.workers.tasks.generation_tasks.*": {"queue": "generation"},
-        "app.workers.tasks.export_tasks.*": {"queue": "export"},
+        "ingestion.*": {"queue": "ingestion"},
+        "generation.*": {"queue": "generation"},
+        "export.*": {"queue": "export"},
     },
 )
