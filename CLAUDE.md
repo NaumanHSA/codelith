@@ -16,6 +16,7 @@ AI Documentation Generation Platform. Ingests repos/files, runs a multi-agent La
 - **LLM**: `openai.AsyncOpenAI` pointed at LM Studio (`http://localhost:1234/v1`) — swap `LLM_BASE_URL` to use any OpenAI-compatible endpoint
 - **Storage**: MinIO (S3-compatible) via boto3
 - **Logging**: structlog (JSON in prod, colored in dev)
+- **UI**: React 18 + Vite 6 + Tailwind 4 + shadcn/Radix, in `ui/` (same repo — there is no separate UI repository)
 
 ## Running Locally
 
@@ -24,6 +25,8 @@ cp .env.example .env       # fill in values
 make dev                   # starts Docker infra + hot-reload API on :8000
 make migrate               # apply DB migrations
 make worker                # start Celery worker in another terminal
+
+cd ui && npm install && npm run dev   # studio on :5173
 ```
 
 ## Key Conventions
@@ -47,17 +50,27 @@ app/
   models/          ORM models
   schemas/         Pydantic v2 request/response
   services/        Business logic
-  agents/          12 specialized agents
+  agents/          11 specialized agents
   workflows/       LangGraph graphs + states
   ingestion/       Repo cloning + file parsers
-  memory/          Short/long-term, Qdrant, Neo4j
+  memory/          Short/long-term, pgvector, Neo4j
   llm/             LLM client + prompt templates
   tools/           Agent tools (file, git, search, diagram)
-  formatters/      Markdown, PDF, DOCX, MkDocs, Docusaurus
+  formatters/      Markdown, DOCX, MkDocs, Docusaurus
   storage/         S3/MinIO client
   workers/         Celery app + task definitions
   observability/   OpenTelemetry + Prometheus
+
+ui/                React studio (Vite) — see ui/README.md
 ```
+
+## UI Conventions
+
+- **Dark theme only** — no light mode, no toggle. `index.html` puts `class="dark"` on `<html>`.
+  Style with the theme tokens in `ui/src/styles/theme.css` (`bg-background`, `text-brand`, …),
+  never hardcoded Tailwind colors like `bg-white`
+- API base URL comes from `VITE_API_URL` (set in `ui/.env.local`), defaulting to `:8000`
+- All HTTP goes through `ui/src/app/lib/api.ts` — it attaches the JWT and refreshes on 401
 
 ## Testing
 

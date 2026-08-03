@@ -78,7 +78,18 @@ make seed             # creates admin@docany.local / admin1234
 make worker
 ```
 
-### 7. Explore the API
+### 7. Start the UI (third terminal)
+
+```bash
+cd ui
+npm install
+npm run dev           # studio on http://localhost:5173
+```
+
+The UI talks to `http://localhost:8000` by default; set `VITE_API_URL` in `ui/.env.local`
+to point it elsewhere.
+
+### 8. Explore the API
 
 Open `http://localhost:8000/docs` for the interactive Swagger UI.
 
@@ -141,6 +152,7 @@ document-anything/
 │   ├── storage/                    S3/MinIO client
 │   ├── workers/                    Celery app + task definitions
 │   └── observability/              OpenTelemetry + Prometheus metrics
+├── ui/                             React studio (Vite + Tailwind) — see ui/README.md
 ├── alembic/                        DB migrations
 ├── tests/
 │   ├── unit/                       Unit tests (no DB required)
