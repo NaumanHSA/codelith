@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router';
-import { ArrowLeft, CheckCircle2, Circle, Loader2, XCircle, ChevronDown, Download, FileText } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, Clock, Loader2, Sparkles, XCircle, ChevronDown, Download, FileText } from 'lucide-react';
+import { Badge, StatusPill } from '../../components/shared/Badge';
+import { elapsedSeconds, formatDuration, humanize } from '../../lib/format';
 import { apiGet, apiPost, getStreamUrl } from '../../lib/api';
 import type { Job, AgentLog, Document, DocType } from '../../lib/types';
 import { StatusBadge } from '../../components/shared/StatusBadge';
@@ -11,19 +13,50 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 
 /**
- * Graph order from app/workflows/documentation_workflow.py. Used only to lay out
- * the not-yet-started agents — live status always comes from job.steps, and any
- * step the backend reports that isn't listed here is appended rather than hidden.
+ * Graph order per phase, from app/workflows/{analysis,composition}_workflow.py.
+ *
+ * Used only to lay out the not-yet-started agents — live status always comes from
+ * job.steps, and any step the backend reports that isn't listed here is appended
+ * rather than hidden. Keyed by job type: showing an analysis job the composition
+ * pipeline (and vice versa) leaves most rows permanently grey.
  */
-const AGENT_PIPELINE = [
-  'coordinator', 'repo_analyzer', 'code_understanding', 'architecture',
-  'planner', 'strategy', 'writer', 'diagram', 'qa', 'formatter', 'publisher',
-];
+const PIPELINES: Record<string, string[]> = {
+  analysis: [
+    'repo_analyzer', 'structured_extractor', 'semantic_indexer',
+    'module_summarizer', 'architecture_synthesizer', 'narrative_writer', 'kb_persister',
+  ],
+  composition: [
+    'kb_loader', 'composition_strategy', 'composition_planner', 'composition_writer',
+    'diagram', 'qa', 'formatter', 'publisher',
+  ],
+  // Pre-split single-shot jobs still exist in history.
+  legacy: [
+    'coordinator', 'repo_analyzer', 'code_understanding', 'architecture',
+    'planner', 'strategy', 'writer', 'diagram', 'qa', 'formatter', 'publisher',
+  ],
+};
+
+function pipelineFor(job: Job | null): string[] {
+  if (!job) return PIPELINES.legacy;
+  if (job.job_type === 'analysis') return PIPELINES.analysis;
+  if (job.job_type === 'composition') return PIPELINES.composition;
+  return PIPELINES.legacy;
+}
 
 const AGENT_LABELS: Record<string, string> = {
   qa: 'QA',
   repo_analyzer: 'Repo Analyzer',
   code_understanding: 'Code Understanding',
+  structured_extractor: 'Structured Facts',
+  semantic_indexer: 'Semantic Index',
+  module_summarizer: 'Module Summaries',
+  architecture_synthesizer: 'Architecture Map',
+  narrative_writer: 'Narratives',
+  kb_persister: 'Finalise KB',
+  kb_loader: 'Load Knowledge Base',
+  composition_strategy: 'Strategy',
+  composition_planner: 'Section Plan',
+  composition_writer: 'Writer',
 };
 
 const DOC_TYPE_ICONS: Record<DocType, string> = {
@@ -48,13 +81,14 @@ interface PipelineRow {
   duration?: number;
 }
 
-function buildPipeline(steps: Job['steps']): PipelineRow[] {
+function buildPipeline(job: Job | null): PipelineRow[] {
   const byAgent = new Map<string, { status: string; duration_seconds?: number }>();
-  for (const s of steps || []) {
+  for (const s of job?.steps || []) {
     byAgent.set(normalizeAgent(s.name), s);
   }
 
-  const rows: PipelineRow[] = AGENT_PIPELINE.map(agent => {
+  const expected = pipelineFor(job);
+  const rows: PipelineRow[] = expected.map(agent => {
     const step = byAgent.get(agent);
     return {
       key: agent,
@@ -66,7 +100,7 @@ function buildPipeline(steps: Job['steps']): PipelineRow[] {
 
   // Surface anything the backend ran that isn't in the canonical list.
   for (const [agent, step] of byAgent) {
-    if (!AGENT_PIPELINE.includes(agent)) {
+    if (!expected.includes(agent)) {
       rows.push({
         key: agent,
         label: agentLabel(agent),
@@ -263,8 +297,21 @@ export default function JobDetailPage() {
   };
 
   const isRunning = job?.status === 'pending' || job?.status === 'running';
+
+  // Re-render once a second while running so the elapsed clock actually moves.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!isRunning) return;
+    const t = setInterval(() => forceTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [isRunning]);
+
   const showReview = job?.status === 'awaiting_review';
-  const showResults = job?.status === 'completed';
+  const isAnalysis = job?.job_type === 'analysis';
+  // An analysis job produces a knowledge base, not documents — offering a
+  // "Results / View Documents" tab for one is just wrong.
+  const showResults = job?.status === 'completed' && !isAnalysis;
+  const showKbReady = job?.status === 'completed' && isAnalysis;
 
   if (loading) return <div className="flex items-center justify-center p-20"><Spinner size="lg" className="text-muted-foreground" /></div>;
   if (!job) return <div className="p-6 text-muted-foreground">Job not found</div>;
@@ -276,10 +323,23 @@ export default function JobDetailPage() {
         <Link to={`/app/projects/${projectId}`} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
           <ArrowLeft size={18} />
         </Link>
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="text-foreground" style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-            Job #{jobId?.slice(-6)}
+            Job #{jobId}
           </h1>
+          <Badge tone={job.job_type === 'analysis' ? 'brand' : 'neutral'}>
+            {job.job_type === 'analysis' ? 'Phase 1 · Analysis' : 'Phase 2 · Composition'}
+          </Badge>
+          <StatusPill status={job.status} />
+          {/* Ticks live while running, so the page shows progress even between events. */}
+          <span
+            className="text-muted-foreground tabular-nums"
+            style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)' }}
+            title={isRunning ? 'Elapsed' : 'Total time'}
+          >
+            <Clock size={12} className="inline mr-1 -mt-0.5" />
+            {formatDuration(elapsedSeconds(job.started_at, job.completed_at))}
+          </span>
         </div>
       </div>
 
@@ -300,7 +360,7 @@ export default function JobDetailPage() {
               <div className="flex flex-wrap gap-1">
                 {job.doc_types?.map(t => (
                   <span key={t} className="px-2 py-0.5 rounded-md bg-secondary text-foreground capitalize" style={{ fontSize: '0.75rem' }}>
-                    {DOC_TYPE_ICONS[t]} {t.replace(/_/g, ' ')}
+                    {DOC_TYPE_ICONS[t]} {humanize(t)}
                   </span>
                 ))}
               </div>
@@ -331,13 +391,22 @@ export default function JobDetailPage() {
                 <FileText size={14} /> View Documents
               </Link>
             )}
+            {showKbReady && (
+              // Analysis is only half the flow — send the user on to pick what to write.
+              <Link
+                to={`/app/projects/${projectId}`}
+                className="mt-4 flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-brand text-brand-foreground hover:opacity-90 transition-opacity"
+                style={{ fontSize: '0.8125rem', fontWeight: 600 }}>
+                <Sparkles size={14} /> Knowledge base ready — choose what to write
+              </Link>
+            )}
           </div>
 
           {/* Agent pipeline */}
           <div className="bg-card border border-border rounded-xl p-5">
             <h2 className="text-foreground mb-4" style={{ fontSize: '0.875rem', fontWeight: 600 }}>Agent Pipeline</h2>
             <div className="space-y-2">
-              {buildPipeline(job.steps).map(row => (
+              {buildPipeline(job).map(row => (
                 <div key={row.key} className="flex items-center gap-3">
                   <StepIcon status={row.status} />
                   <div className="flex-1">

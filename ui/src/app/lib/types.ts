@@ -57,10 +57,14 @@ export interface JobStep {
   output_json?: Record<string, unknown>;
 }
 
+export type JobType = 'analysis' | 'composition';
+
 export interface Job {
   id: number;
   project_id: number;
   project_name?: string;
+  /** "analysis" builds the knowledge base; "composition" writes docs from one. */
+  job_type: JobType;
   status: JobStatus;
   doc_types: DocType[];
   output_formats: OutputFormat[];
@@ -70,6 +74,41 @@ export interface Job {
   duration_seconds?: number;
   steps: JobStep[];
   review_comment?: string;
+}
+
+// ── Knowledge base (Phase 1 output) ─────────────────────────────────────────
+
+export type KBStatus = 'pending' | 'running' | 'ready' | 'degraded' | 'failed' | 'stale';
+
+export interface KnowledgeBase {
+  id: number;
+  project_id: number;
+  job_id?: number;
+  commit_sha?: string;
+  status: KBStatus;
+  schema_version: number;
+  stats: Record<string, unknown>;
+  error_message?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+/** A document type worth offering, with the evidence behind it. */
+export interface DocTypeSuggestion {
+  doc_type: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface KnowledgeBaseSummary {
+  knowledge_base: KnowledgeBase;
+  module_count: number;
+  entity_count: number;
+  narrative_topics: string[];
+  languages: string[];
+  roles: Record<string, number>;
+  entity_kinds: Record<string, number>;
+  suggested_doc_types: DocTypeSuggestion[];
 }
 
 export type DocStatus = 'draft' | 'published';

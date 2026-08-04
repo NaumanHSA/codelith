@@ -5,11 +5,14 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { apiGet, apiPost, apiDelete } from '../../lib/api';
 import type { Project, Job, Document, DocType, OutputFormat } from '../../lib/types';
 import { StatusBadge } from '../../components/shared/StatusBadge';
+import { KnowledgeBasePanel } from '../../components/knowledge/KnowledgeBasePanel';
 import { Spinner } from '../../components/shared/Spinner';
 import { EmptyState } from '../../components/shared/EmptyState';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { SourceFormBody, submitSource } from './ProjectsPage';
 import type { SourceTab } from './ProjectsPage';
+import { Badge, StatusPill } from '../../components/shared/Badge';
+import { elapsedSeconds, formatDuration, humanize } from '../../lib/format';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -273,7 +276,9 @@ export default function ProjectDetailPage() {
           <h1 className="text-foreground" style={{ fontSize: '1.375rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{project.name}</h1>
           {project.description && <p className="text-muted-foreground" style={{ fontSize: '0.875rem' }}>{project.description}</p>}
         </div>
-        <NewJobModal projectId={id!} onCreated={j => setJobs(prev => [j, ...prev])} />
+        {/* The single-shot "run everything" job is superseded by the two-phase flow on
+            the Overview tab (analyse, then choose). The legacy endpoint still exists for
+            API clients; competing buttons here just muddied the flow. */}
         <ConfirmDialog
           trigger={<button className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"><Trash2 size={17} /></button>}
           title="Delete project"
@@ -308,6 +313,13 @@ export default function ProjectDetailPage() {
       {activeTab === 'Overview' && (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
+            {/* Phase 1 then Phase 2 — the doc-type picker stays gated until a
+                knowledge base exists, which is the flow the split exists for. */}
+            <KnowledgeBasePanel
+              projectId={id!}
+              hasSources={(project.sources?.length ?? project.stats?.source_count ?? 0) > 0}
+              onJobStarted={j => setJobs(prev => [j, ...prev])}
+            />
             <div className="bg-card border border-border rounded-xl p-5">
               <h2 className="text-foreground mb-4" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>Project Details</h2>
               <dl className="space-y-3">
@@ -354,32 +366,57 @@ export default function ProjectDetailPage() {
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <h2 className="text-foreground" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>Jobs</h2>
-            <NewJobModal projectId={id!} onCreated={j => setJobs(prev => [j, ...prev])} />
+            <button
+              onClick={() => setActiveTab('Overview')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              style={{ fontSize: '0.8125rem' }}
+            >
+              <Play size={13} /> New job
+            </button>
           </div>
           {jobs.length === 0 ? (
             <EmptyState icon={<Play size={32} />} title="No jobs yet" description="Run your first documentation job to get started." />
           ) : (
             <table className="w-full">
               <thead><tr className="border-b border-border">
-                {['#', 'Status', 'Doc Types', 'Started', 'Actions'].map(h => (
+                {['#', 'Phase', 'Status', 'Produces', 'Started', 'Took', ''].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-muted-foreground" style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody className="divide-y divide-border">
-                {jobs.map(job => (
-                  <tr key={job.id} className="hover:bg-secondary/30">
-                    <td className="px-5 py-3"><span className="text-muted-foreground font-mono" style={{ fontSize: '0.8125rem' }}>#{job.id}</span></td>
-                    <td className="px-5 py-3"><StatusBadge status={job.status} size="sm" /></td>
-                    <td className="px-5 py-3"><span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>{job.doc_types?.slice(0, 2).join(', ')}{job.doc_types?.length > 2 ? '...' : ''}</span></td>
-                    <td className="px-5 py-3"><span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>{job.started_at ? formatDistanceToNow(new Date(job.started_at), { addSuffix: true }) : '—'}</span></td>
-                    <td className="px-5 py-3">
-                      <Link to={`/app/projects/${id}/jobs/${job.id}`}
-                        className="inline-flex items-center gap-1.5 text-brand hover:underline" style={{ fontSize: '0.8125rem' }}>
-                        <Eye size={13} /> View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {jobs.map(job => {
+                  const analysis = job.job_type === 'analysis';
+                  return (
+                    <tr key={job.id} className="hover:bg-secondary/30">
+                      <td className="px-5 py-3"><span className="text-muted-foreground font-mono" style={{ fontSize: '0.8125rem' }}>#{job.id}</span></td>
+                      <td className="px-5 py-3">
+                        <Badge tone={analysis ? 'brand' : 'neutral'}>
+                          {analysis ? 'Analysis' : 'Composition'}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3"><StatusPill status={job.status} /></td>
+                      <td className="px-5 py-3">
+                        <span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>
+                          {analysis
+                            ? 'knowledge base'
+                            : (job.doc_types?.map(humanize).join(', ') || '—')}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3"><span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>{job.started_at ? formatDistanceToNow(new Date(job.started_at), { addSuffix: true }) : '—'}</span></td>
+                      <td className="px-5 py-3">
+                        <span className="text-muted-foreground tabular-nums" style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)' }}>
+                          {formatDuration(elapsedSeconds(job.started_at, job.completed_at))}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <Link to={`/app/projects/${id}/jobs/${job.id}`}
+                          className="inline-flex items-center gap-1.5 text-brand hover:underline" style={{ fontSize: '0.8125rem' }}>
+                          <Eye size={13} /> View
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

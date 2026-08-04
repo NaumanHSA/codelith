@@ -2,14 +2,23 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Query, Request, UploadFile, File, HTTPException
-from app.dependencies import DbSession, CurrentUser, ManagerUser
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectSourceCreate, ProjectSourceOut
-from app.schemas.job import JobCreate, JobOut
-from app.services.project_service import ProjectService
-from app.services.job_service import JobService
-from app.services.audit_service import AuditService
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+
 from app.config import get_settings
+from app.dependencies import CurrentUser, DbSession, ManagerUser
+from app.schemas.job import JobCreate, JobOut
+from app.schemas.knowledge import AnalyzeRequest, ComposeRequest, KnowledgeBaseSummary
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectOut,
+    ProjectSourceCreate,
+    ProjectSourceOut,
+    ProjectUpdate,
+)
+from app.services.audit_service import AuditService
+from app.services.job_service import JobService
+from app.services.knowledge_service import KnowledgeService
+from app.services.project_service import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -56,10 +65,66 @@ async def delete_project(project_id: int, db: DbSession, user: ManagerUser, requ
     )
 
 
+# ── Two-phase routes: analyse first, then choose what to write ────────────────
+
+@router.post("/{project_id}/analyze", response_model=JobOut, status_code=202)
+async def analyze_project(
+    project_id: int,
+    db: DbSession,
+    user: ManagerUser,
+    request: Request,
+    req: AnalyzeRequest = AnalyzeRequest(),
+):
+    """
+    Phase 1 — build the knowledge base. Deliberately takes no document type: the user
+    chooses what to write once we know what the codebase contains.
+    """
+    job = await KnowledgeService(db).start_analysis(project_id, user, force=req.force)
+    await AuditService(db).log(
+        "project.analyze", "job",
+        user_id=user.id, resource_id=job.id,
+        details={"project_id": project_id, "force": req.force},
+        ip_address=request.client.host if request.client else None,
+    )
+    return job
+
+
+@router.get("/{project_id}/knowledge-base", response_model=KnowledgeBaseSummary | None)
+async def get_knowledge_base(project_id: int, db: DbSession, user: CurrentUser):
+    """
+    What we know about this project, plus which document types are worth offering.
+
+    Returns null when the project has never been analysed — the UI shows the analyse
+    action instead of a document-type picker.
+    """
+    return await KnowledgeService(db).get_summary(project_id, user)
+
+
+@router.post("/{project_id}/compose", response_model=JobOut, status_code=202)
+async def compose_documents(
+    project_id: int, req: ComposeRequest, db: DbSession, user: ManagerUser, request: Request
+):
+    """Phase 2 — write the requested documents from the existing knowledge base."""
+    job = await KnowledgeService(db).start_composition(project_id, req, user)
+    await AuditService(db).log(
+        "project.compose", "job",
+        user_id=user.id, resource_id=job.id,
+        details={"project_id": project_id, "doc_types": req.doc_types},
+        ip_address=request.client.host if request.client else None,
+    )
+    return job
+
+
 # ── Job routes (project-scoped) ───────────────────────────────────────────────
 
 @router.post("/{project_id}/jobs", response_model=JobOut, status_code=201)
 async def create_job(project_id: int, req: JobCreate, db: DbSession, user: ManagerUser, request: Request):
+    """
+    Legacy single-shot endpoint: analyse and write in one job.
+
+    Kept working for existing clients. New callers should use `/analyze` then
+    `/compose`, which avoids re-analysing for every document type.
+    """
     from app.workers.tasks.generation_tasks import run_documentation_workflow
 
     svc = JobService(db)

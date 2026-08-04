@@ -13,12 +13,23 @@ class JobService:
         self.log_repo = AgentLogRepository(db)
         self.db = db
 
-    async def create(self, project_id: int, req: JobCreate, user: User) -> Job:
+    async def create(
+        self,
+        project_id: int,
+        req: JobCreate,
+        user: User,
+        job_type: str = "composition",
+        config_overrides: dict | None = None,
+    ) -> Job:
+        config = req.config.model_dump()
+        if config_overrides:
+            config.update(config_overrides)
         job = await self.repo.create(
             project_id=project_id,
             created_by=user.id,
+            job_type=job_type,
             status="pending",
-            config_json=req.config.model_dump(),
+            config_json=config,
         )
         await self.db.commit()
         return job

@@ -54,3 +54,10 @@ Thumbs.db
 
 # Machine-local compose overrides (e.g. shifting host ports off a conflict)
 docker-compose.infra.local.yml
+
+# CodeGraph evaluation artifacts (local only)
+/test_codegraph/
+/.codegraph/
+
+# Phase run artifacts (large, regenerable)
+.dev/runs/
