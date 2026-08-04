@@ -18,6 +18,11 @@ def count_tokens(messages: list[dict]) -> int:
     return total
 
 
+def count_text_tokens(text: str) -> int:
+    """Token count for a bare string, using the same encoding as `count_tokens`."""
+    return len(_ENCODING.encode(text or ""))
+
+
 def count_tokens_lc(messages: list) -> int:
     """count_tokens adapter for LangChain message objects (have a .content attr)."""
     adapted = []
