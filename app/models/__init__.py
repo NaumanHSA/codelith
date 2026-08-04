@@ -4,6 +4,7 @@ from app.models.project import Project, ProjectSource
 from app.models.job import Job, JobStep, AgentLog
 from app.models.document import Document, DocumentExport
 from app.models.chunk import CodeChunk
+from app.models.knowledge import KnowledgeBase, KBModule, KBEntity, KBNarrative
 from app.models.audit import AuditLog
 from app.models.setting import SystemSetting
 
@@ -20,6 +21,10 @@ __all__ = [
     "Document",
     "DocumentExport",
     "CodeChunk",
+    "KnowledgeBase",
+    "KBModule",
+    "KBEntity",
+    "KBNarrative",
     "AuditLog",
     "SystemSetting",
 ]

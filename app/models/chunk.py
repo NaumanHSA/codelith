@@ -17,6 +17,11 @@ class CodeChunk(Base, TimestampMixin):
     job_id: Mapped[int | None] = mapped_column(
         ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    #: Knowledge base this chunk belongs to. Scoping chunks to a KB generation lets a
+    #: re-analysis replace them atomically instead of accumulating across runs.
+    kb_id: Mapped[int | None] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # Where this chunk came from
     source_path: Mapped[str] = mapped_column(Text, nullable=False)

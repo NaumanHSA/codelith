@@ -18,6 +18,7 @@ class Project(Base, TimestampMixin):
     sources: Mapped[list["ProjectSource"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     jobs: Mapped[list["Job"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # type: ignore[name-defined]
     documents: Mapped[list["Document"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # type: ignore[name-defined]
+    knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # type: ignore[name-defined]
 
 
 class ProjectSource(Base, TimestampMixin):

@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -46,6 +47,8 @@ class AgentLogOut(BaseModel):
 class JobOut(BaseModel):
     id: int
     project_id: int
+    #: "analysis" builds the knowledge base; "composition" writes documents from one.
+    job_type: str = "composition"
     status: str
     config_json: dict
     doc_types: list[str] = []
