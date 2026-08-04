@@ -9,6 +9,8 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "app.workers.tasks.ingestion_tasks",
+        "app.workers.tasks.analysis_tasks",
+        "app.workers.tasks.composition_tasks",
         "app.workers.tasks.generation_tasks",
         "app.workers.tasks.export_tasks",
     ],
@@ -36,6 +38,11 @@ celery_app.conf.update(
     # as "ingestion.*" / "generation.*" / "export.*" via @celery_app.task(name=...).
     task_routes={
         "ingestion.*": {"queue": "ingestion"},
+        # Analysis is ingestion-shaped work (clone, parse, embed), so it shares that
+        # queue rather than needing a new worker to be started.
+        "analysis.*": {"queue": "ingestion"},
+        # Composition is generation-shaped work and shares that queue.
+        "composition.*": {"queue": "generation"},
         "generation.*": {"queue": "generation"},
         "export.*": {"queue": "export"},
     },

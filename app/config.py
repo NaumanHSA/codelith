@@ -1,4 +1,5 @@
 from functools import lru_cache
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,9 +41,28 @@ class Settings(BaseSettings):
     # Embeddings — uses the same LM Studio base URL as the LLM
     # Set EMBEDDING_MODEL to the identifier shown in LM Studio for your embedding model
     EMBEDDING_MODEL: str = "text-embedding-ada-002"
+    # Texts per embeddings request. Batching is what keeps ingestion off a
+    # one-request-per-chunk path; lower it if the endpoint rejects large batches.
+    EMBEDDING_BATCH_SIZE: int = 64
 
     # pgvector — must match your embedding model's output size (common: 1536, 1024, 768, 384)
     VECTOR_DIMENSIONS: int = 1536
+
+    # ── Analysis (Phase 1: build the knowledge base) ──────────────────────────
+    # Modules sent to the summarizer, largest first. Bounds cost on big repos.
+    ANALYSIS_MAX_SUMMARISED_MODULES: int = 40
+    # Source characters shown to the summarizer per module.
+    ANALYSIS_MODULE_CONTEXT_CHARS: int = 6000
+    # Concurrent LLM calls in the summarizer and narrative writer. Narratives are the
+    # binding constraint: 5 topics at 4-way concurrency is two serial batches. Tune to
+    # what the endpoint sustains — too high and requests queue inside LM Studio.
+    ANALYSIS_SUMMARY_CONCURRENCY: int = 6
+
+    # ── Composition (Phase 2: write docs from the knowledge base) ─────────────
+    # Token ceiling for one section's retrieved context bundle.
+    COMPOSITION_SECTION_TOKEN_BUDGET: int = 6000
+    # Concurrent section-writing LLM calls.
+    COMPOSITION_SECTION_CONCURRENCY: int = 4
 
     # Neo4j
     NEO4J_URI: str = "bolt://localhost:7687"

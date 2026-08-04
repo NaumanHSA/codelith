@@ -43,7 +43,10 @@ class CodeUnderstandingAgent(BaseAgent):
                     )
                     t.outputs(chunks_stored=0, cached=True)
                     await self._update_step(self.name, "completed", {"cached": True, "cached_job": cached.id})
-                    return state
+                    # Return only what changed. Echoing the whole state re-applies it
+                    # through the Annotated reducers (generated_docs uses operator.add),
+                    # which silently doubles accumulated lists.
+                    return {}
 
             # ── Embed into pgvector ────────────────────────────────────────────
             store = VectorStore(self.db)

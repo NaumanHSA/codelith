@@ -1,5 +1,4 @@
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chunk import CodeChunk
@@ -41,12 +40,59 @@ class VectorStore:
         await self.session.flush()
         return chunk
 
+    async def bulk_add(self, chunks: list[dict]) -> int:
+        """
+        Insert many chunks in one flush.
+
+        Paired with `create_embeddings`, this replaces the previous
+        one-request-and-one-flush-per-chunk ingestion path.
+        """
+        if not chunks:
+            return 0
+        self.session.add_all([CodeChunk(**c) for c in chunks])
+        await self.session.flush()
+        return len(chunks)
+
+    async def delete_by_kb(self, kb_id: int) -> None:
+        await self.session.execute(delete(CodeChunk).where(CodeChunk.kb_id == kb_id))
+
+    async def get_by_paths(
+        self, kb_id: int, paths: list[str], limit_per_path: int = 6
+    ) -> list[CodeChunk]:
+        """
+        Exact source for known files, in reading order.
+
+        Composition runs as a separate job from analysis, so the cloned repository is
+        long gone by then — the chunk text stored here *is* our copy of the source.
+        This is what lets a writer be handed real code without re-cloning.
+        """
+        if not paths:
+            return []
+        result = await self.session.execute(
+            select(CodeChunk)
+            .where(CodeChunk.kb_id == kb_id, CodeChunk.source_path.in_(paths))
+            .order_by(CodeChunk.source_path, CodeChunk.start_line)
+        )
+        chunks = list(result.scalars().all())
+
+        # Cap per file so one large module cannot crowd out the others.
+        kept: list[CodeChunk] = []
+        seen: dict[str, int] = {}
+        for chunk in chunks:
+            count = seen.get(chunk.source_path, 0)
+            if count < limit_per_path:
+                kept.append(chunk)
+                seen[chunk.source_path] = count + 1
+        return kept
+
     async def search(
         self,
         project_id: int,
         query_embedding: list[float],
         limit: int = 10,
         chunk_type: str | None = None,
+        kb_id: int | None = None,
+        exclude_paths: list[str] | None = None,
     ) -> list[CodeChunk]:
         """Return the most semantically similar chunks using cosine distance (<=>)."""
         stmt = (
@@ -54,6 +100,12 @@ class VectorStore:
             .where(CodeChunk.project_id == project_id)
             .where(CodeChunk.embedding.isnot(None))
         )
+        if kb_id is not None:
+            # Scope to one KB generation so a re-analysis can't mix old and new source.
+            stmt = stmt.where(CodeChunk.kb_id == kb_id)
+        if exclude_paths:
+            # Skip files already supplied verbatim — spend the budget on new material.
+            stmt = stmt.where(CodeChunk.source_path.notin_(exclude_paths))
         if chunk_type:
             stmt = stmt.where(CodeChunk.chunk_type == chunk_type)
 
