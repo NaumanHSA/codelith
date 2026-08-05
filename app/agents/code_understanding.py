@@ -3,9 +3,9 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.llm.client import create_embedding
-from app.memory.vector_store import VectorStore
 from app.memory.graph_store import GraphStore
 from app.memory.long_term import LongTermMemory
+from app.memory.vector_store import VectorStore
 
 _CHUNK_CHARS = 1500
 

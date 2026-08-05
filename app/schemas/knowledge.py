@@ -80,6 +80,24 @@ class DocTypeSuggestion(BaseModel):
     reason: str
 
 
+class ModuleHighlight(BaseModel):
+    """A module worth showing on the knowledge-base card."""
+
+    path: str
+    name: str
+    role: ModuleRole
+    loc: int = 0
+    summary: str | None = None
+
+
+class EntityHighlight(BaseModel):
+    """One extracted fact, shown as evidence of what analysis found."""
+
+    kind: EntityKind
+    name: str
+    detail: str | None = None
+
+
 class KnowledgeBaseSummary(BaseModel):
     """Everything the 'ready to compose' screen needs in one call."""
 
@@ -91,6 +109,13 @@ class KnowledgeBaseSummary(BaseModel):
     roles: dict[str, int] = Field(default_factory=dict)
     entity_kinds: dict[str, int] = Field(default_factory=dict)
     suggested_doc_types: list[DocTypeSuggestion] = Field(default_factory=list)
+
+    # Evidence. Counts alone say "we did something"; these say *what we found*, which
+    # is what makes the knowledge base feel real rather than a progress bar that ended.
+    top_modules: list[ModuleHighlight] = Field(default_factory=list)
+    sample_routes: list[EntityHighlight] = Field(default_factory=list)
+    key_dependencies: list[str] = Field(default_factory=list)
+    entrypoints: list[str] = Field(default_factory=list)
 
 
 class AnalyzeRequest(BaseModel):
@@ -118,6 +143,8 @@ class ComposeRequest(BaseModel):
 
 
 __all__ = [
+    "ModuleHighlight",
+    "EntityHighlight",
     "KBModuleOut",
     "KBModuleDetail",
     "KBEntityOut",

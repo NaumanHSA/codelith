@@ -1,10 +1,15 @@
 from datetime import UTC, datetime
+
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.exceptions import NotFoundError
-from app.db.repositories.job_repo import JobRepository, AgentLogRepository
+from app.db.repositories.job_repo import AgentLogRepository, JobRepository
 from app.models.job import Job
 from app.models.user import User
 from app.schemas.job import JobCreate
+
+logger = structlog.get_logger(__name__)
 
 
 class JobService:
@@ -87,6 +92,31 @@ class JobService:
         return await self.get(job_id)
 
     async def cancel(self, job_id: int) -> Job:
+        """
+        Actually stop the job, not just relabel it.
+
+        Three things have to happen or the worker keeps generating: signal the running
+        task (Redis flag the workflow polls), revoke it in Celery so a queued task never
+        starts, and only then record the status.
+        """
+        from app.core.cancellation import request_cancel
+
+        job = await self.get(job_id)
+        await request_cancel(job_id)
+
+        if job.celery_task_id:
+            try:
+                from app.workers.celery_app import celery_app
+
+                # terminate=False: let the task unwind cooperatively so it can close the
+                # LLM stream and mark its knowledge base, rather than being SIGKILLed
+                # mid-transaction.
+                celery_app.control.revoke(job.celery_task_id, terminate=False)
+            except Exception as exc:  # pragma: no cover - broker may be unavailable
+                # A revoke failure must not stop us recording the cancellation: the
+                # Redis flag above is what the running worker actually polls.
+                logger.warning("celery_revoke_failed", job_id=job_id, error=str(exc))
+
         await self.repo.update(job_id, status="cancelled", completed_at=datetime.now(UTC))
         await self.db.commit()
         return await self.get(job_id)
@@ -100,7 +130,10 @@ class JobService:
             await self.repo.update(job_id, config_json=existing)
             await self.db.commit()
 
-    async def write_log(self, job_id: int, agent_name: str, level: str, message: str, extra: dict | None = None) -> None:
+    async def write_log(
+        self, job_id: int, agent_name: str, level: str, message: str,
+        extra: dict | None = None,
+    ) -> None:
         await self.log_repo.create(
             job_id=job_id,
             agent_name=agent_name,

@@ -1,10 +1,12 @@
 import asyncio
+
 import structlog
-from app.workers.celery_app import celery_app
+
 from app.db.session import AsyncSessionLocal
-from app.services.job_service import JobService
 from app.observability.metrics import job_total, time_job
 from app.observability.tracing import workflow_span
+from app.services.job_service import JobService
+from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
 
@@ -16,7 +18,7 @@ def run_documentation_workflow(self, job_id: int) -> dict:
 
 async def _run_workflow(job_id: int) -> dict:
     from app.core.sandbox import JobSandbox
-    from app.tracing.runtime import create_tracer, set_tracer, reset_tracer, save_trace_artifacts
+    from app.tracing.runtime import create_tracer, reset_tracer, save_trace_artifacts, set_tracer
 
     sandbox = JobSandbox(job_id)
     sandbox.setup()
@@ -33,9 +35,9 @@ async def _run_workflow(job_id: int) -> dict:
         job_svc = JobService(db)
         with time_job(), workflow_span(job_id):
             try:
-                from app.workflows.documentation_workflow import DocumentationWorkflow
                 from app.db.repositories.job_repo import JobRepository
                 from app.db.repositories.project_repo import ProjectRepository
+                from app.workflows.documentation_workflow import DocumentationWorkflow
 
                 job = await JobRepository(db).get_with_steps(job_id)
                 if not job:

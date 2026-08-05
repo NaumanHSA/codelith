@@ -1,6 +1,43 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class SourceProbeRequest(BaseModel):
+    """Check a source is usable before anything is persisted."""
+
+    source_type: str = Field(description="local | github | gitlab | bitbucket")
+    url_or_path: str
+    branch: str | None = None
+
+
+class SourceProbeOut(BaseModel):
+    ok: bool
+    source_type: str
+    url_or_path: str
+    resolved_path: str | None = None
+    branch: str | None = None
+    commit_sha: str | None = None
+    file_count: int = 0
+    analysable_files: int = 0
+    languages: dict[str, int] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class ProjectCreateWithSource(BaseModel):
+    """
+    Create a project and its first source in one step.
+
+    The source is fetched and validated first; nothing is written unless it works, so
+    a bad URL can no longer leave an empty project behind.
+    """
+
+    name: str
+    description: str | None = None
+    source_type: str
+    url_or_path: str
+    branch: str | None = None
+    config_json: dict | None = None
 
 
 class ProjectSourceCreate(BaseModel):

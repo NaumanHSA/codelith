@@ -33,7 +33,18 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
     tracer = create_tracer(job_id=str(job_id), workflow_type="analysis", run_dir=sandbox.trace)
     trace_token = set_tracer(tracer)
 
-    async with AsyncSessionLocal() as db:
+    from app.core.cancellation import (
+        CancellationToken,
+        JobCancelled,
+        clear_cancel,
+        set_token,
+    )
+
+    # A stale flag from a previous job with this id would kill the new run instantly.
+    await clear_cancel(job_id)
+
+    async with AsyncSessionLocal() as db, CancellationToken(job_id) as token:
+        set_token(token)
         from app.db.repositories.job_repo import JobRepository
         from app.db.repositories.knowledge import KnowledgeBaseRepository
         from app.db.repositories.project_repo import ProjectRepository
@@ -89,6 +100,17 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
                 })
                 return {**result, "reused": False}
 
+            except JobCancelled:
+                # Requested by the user — not a failure. The status was already set by
+                # the cancel endpoint; just stop cleanly and leave no KB mid-build.
+                logger.info("analysis_cancelled", job_id=job_id)
+                await job_svc.write_log(
+                    job_id, "coordinator", "warning", "Analysis cancelled by user"
+                )
+                job_total.labels(status="cancelled").inc()
+                await _mark_kb_cancelled(db, job_id)
+                return {"kb_id": None, "kb_status": "cancelled", "reused": False}
+
             except Exception as exc:
                 logger.exception("analysis_failed", job_id=job_id)
                 await job_svc.fail(job_id, str(exc))
@@ -98,12 +120,22 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
                 raise
 
             finally:
+                set_token(None)
                 save_trace_artifacts(tracer, sandbox.trace)
                 reset_tracer(trace_token)
 
 
+async def _mark_kb_cancelled(db, job_id: int) -> None:
+    """A half-built knowledge base must not be left looking usable."""
+    await _finish_running_kbs(db, job_id, "cancelled by user")
+
+
 async def _mark_kb_failed(db, job_id: int, error: str) -> None:
     """Leave no knowledge base stuck in RUNNING after a crash."""
+    await _finish_running_kbs(db, job_id, error)
+
+
+async def _finish_running_kbs(db, job_id: int, error: str) -> None:
     from sqlalchemy import select
 
     from app.db.repositories.knowledge import KnowledgeBaseRepository

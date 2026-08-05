@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 
 import structlog
-from langgraph.errors import GraphRecursionError
-from langgraph.prebuilt import create_react_agent  # type: ignore[attr-defined]  # Pylance confuses this with langchain.agents.create_react_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool as lc_tool
+from langgraph.errors import GraphRecursionError
+from langgraph.prebuilt import (
+    create_react_agent,  # type: ignore[attr-defined]  # Pylance confuses this with langchain.agents.create_react_agent
+)
 
 from app.config import get_settings
 from app.llm.context_manager import count_tokens_lc, split_for_compaction
@@ -33,9 +36,9 @@ class ReActMixin:
         LangChain-compatible tools. Gracefully falls back to [] on failure.
         """
         try:
+            from langchain_mcp_adapters.tools import load_mcp_tools
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
-            from langchain_mcp_adapters.tools import load_mcp_tools
 
             server_params = StdioServerParameters(
                 command="npx",
@@ -56,9 +59,9 @@ class ReActMixin:
     async def _mcp_git_session(self, repo_path: str) -> AsyncIterator[list]:
         """Start an MCP git server for the cloned repo. Falls back to []."""
         try:
+            from langchain_mcp_adapters.tools import load_mcp_tools
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
-            from langchain_mcp_adapters.tools import load_mcp_tools
 
             server_params = StdioServerParameters(
                 command="npx",

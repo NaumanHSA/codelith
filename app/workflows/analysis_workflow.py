@@ -60,6 +60,11 @@ class AnalysisWorkflow:
 
         def make_node(agent_cls):
             async def node(state: AnalysisState) -> dict:
+                # Stop between stages: a cancelled job should not start the next agent.
+                from app.core.cancellation import check_cancelled
+
+                await check_cancelled()
+
                 # A session per node keeps stages isolated, matching the documentation
                 # workflow's convention.
                 from app.db.session import AsyncSessionLocal

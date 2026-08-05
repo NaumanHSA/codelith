@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import structlog
 from typing import Any
+
+import structlog
 
 from app.agents.base import BaseAgent
 
@@ -67,7 +68,6 @@ class FormatterAgent(BaseAgent):
 
         if fmt == "docx":
             from app.formatters.docx import DocxFormatter
-            from app.models.document import Document
             formatter = DocxFormatter()
             for doc_dict in docs:
                 # Build a lightweight Document-like object

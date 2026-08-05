@@ -1,7 +1,8 @@
 from typing import Any
+
 from app.agents.base import BaseAgent
-from app.services.document_service import DocumentService
 from app.services.audit_service import AuditService
+from app.services.document_service import DocumentService
 
 
 class PublisherAgent(BaseAgent):

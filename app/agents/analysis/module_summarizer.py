@@ -16,6 +16,7 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.config import get_settings
+from app.core.cancellation import JobCancelled
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import ModuleRole
 from app.llm.prompts.analysis_prompts import MODULE_SUMMARY
@@ -64,6 +65,10 @@ class ModuleSummarizerAgent(BaseAgent):
                 *(summarise(m) for m in modules), return_exceptions=True
             )
 
+            for outcome in results:
+                if isinstance(outcome, JobCancelled):
+                    raise outcome
+
             written = failed = 0
             for module, outcome in zip(modules, results, strict=True):
                 if isinstance(outcome, BaseException):
@@ -106,6 +111,8 @@ class ModuleSummarizerAgent(BaseAgent):
         )
         try:
             summary = await self._call_llm(messages, task_type="summarize")
+        except JobCancelled:
+            raise
         except Exception as exc:
             await self._emit_log("warning", f"Summary failed for {module.path}: {exc}")
             return None

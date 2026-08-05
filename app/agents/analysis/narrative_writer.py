@@ -17,6 +17,7 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.config import get_settings
+from app.core.cancellation import JobCancelled
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
 from app.llm.prompts.analysis_prompts import NARRATIVE, TOPIC_GUIDANCE
@@ -95,6 +96,10 @@ class NarrativeWriterAgent(BaseAgent):
 
             results = await asyncio.gather(*(write(x) for x in topics), return_exceptions=True)
 
+            for outcome in results:
+                if isinstance(outcome, JobCancelled):
+                    raise outcome
+
             written = skipped = failed = 0
             # gather preserves order, so results line up with `topics` — which lets a
             # failure name the topic that caused it instead of vanishing into a count.
@@ -165,6 +170,8 @@ class NarrativeWriterAgent(BaseAgent):
         )
         try:
             content = (await self._call_llm(messages, task_type="write") or "").strip()
+        except JobCancelled:
+            raise
         except Exception as exc:
             await self._emit_log("warning", f"Narrative '{topic}' failed: {exc}")
             return None

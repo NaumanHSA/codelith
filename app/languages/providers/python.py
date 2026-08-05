@@ -59,7 +59,29 @@ class PythonProvider(LanguageProvider):
         self._walk(tree.body, parent=None, symbols=symbols)
         return symbols
 
-    def _walk(self, body: list[ast.stmt], parent: str | None, symbols: list[Symbol]) -> None:
+    def _walk(
+        self,
+        body: list[ast.stmt],
+        parent: str | None,
+        symbols: list[Symbol],
+        in_function: bool = False,
+    ) -> None:
+        """
+        Walk a body, recursing into both classes *and* functions.
+
+        Recursing into functions matters more than it looks: a very common FastAPI
+        layout registers every route inside a setup function —
+
+            def mount_chat_routes(router, server):
+                @router.post("/v1/chat/completions")
+                async def chat(...): ...
+
+        Stopping at module level made all of those invisible. On one real project that
+        was 28 routes extracted as 0, which in turn meant no API Reference was ever
+        suggested for it.
+
+        Local variables inside a function are skipped: they are noise, not API surface.
+        """
         for node in body:
             if isinstance(node, ast.ClassDef):
                 symbols.append(
@@ -76,7 +98,7 @@ class PythonProvider(LanguageProvider):
                     )
                 )
                 # Recurse so methods carry their class as `parent`.
-                self._walk(node.body, parent=node.name, symbols=symbols)
+                self._walk(node.body, parent=node.name, symbols=symbols, in_function=False)
 
             elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 decorators = self._decorators(node)
@@ -93,8 +115,10 @@ class PythonProvider(LanguageProvider):
                         decorators=decorators,
                     )
                 )
+                # Nested defs are where framework registrations live.
+                self._walk(node.body, parent=node.name, symbols=symbols, in_function=True)
 
-            elif isinstance(node, ast.Assign | ast.AnnAssign):
+            elif isinstance(node, ast.Assign | ast.AnnAssign) and not in_function:
                 for name in self._assigned_names(node):
                     symbols.append(
                         Symbol(

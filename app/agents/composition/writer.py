@@ -27,6 +27,7 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.config import get_settings
+from app.core.cancellation import JobCancelled, check_cancelled
 from app.knowledge.retrieval import SectionContext, SectionContextBuilder
 from app.llm.prompts.composition_prompts import SECTION_WRITE
 
@@ -99,6 +100,8 @@ class CompositionWriterAgent(BaseAgent):
         # Phase 1: retrieval, sequential — one shared DB session.
         contexts: list[SectionContext] = []
         for section in sections:
+            # Retrieval is cheap but a whole document's worth adds up; bail early.
+            await check_cancelled()
             contexts.append(await builder.build(section, doc_type))
         await self._emit_log(
             "info",
@@ -112,6 +115,8 @@ class CompositionWriterAgent(BaseAgent):
 
         async def generate(index: int) -> str:
             async with semaphore:
+                # Queued sections must not start once the user has cancelled.
+                await check_cancelled()
                 return await self._write_section(
                     sections[index], contexts[index], doc_type, project,
                     audience, tone, outline, builder,
@@ -120,6 +125,12 @@ class CompositionWriterAgent(BaseAgent):
         results = await asyncio.gather(
             *(generate(i) for i in range(len(sections))), return_exceptions=True
         )
+
+        # gather(return_exceptions=True) turns a cancellation into a value; surface it
+        # before treating anything as a per-section failure.
+        for outcome in results:
+            if isinstance(outcome, JobCancelled):
+                raise outcome
 
         parts: list[str] = []
         for section, outcome in zip(sections, results, strict=True):
@@ -182,6 +193,8 @@ class CompositionWriterAgent(BaseAgent):
         )
         try:
             return (await self._call_llm(messages, task_type="write") or "").strip()
+        except JobCancelled:
+            raise  # must not be downgraded to "this section failed"
         except Exception as exc:
             await self._emit_log("warning", f"Section '{name}' generation failed: {exc}")
             return ""

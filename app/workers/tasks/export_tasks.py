@@ -1,7 +1,9 @@
 import asyncio
+
 import structlog
-from app.workers.celery_app import celery_app
+
 from app.db.session import AsyncSessionLocal
+from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
 
@@ -14,7 +16,10 @@ def export_document_task(self, document_id: int, format: str) -> dict:
 async def _export(document_id: int, format: str) -> dict:
     async with AsyncSessionLocal() as db:
         try:
-            from app.db.repositories.document_repo import DocumentRepository, DocumentExportRepository
+            from app.db.repositories.document_repo import (
+                DocumentExportRepository,
+                DocumentRepository,
+            )
             from app.formatters.markdown import MarkdownFormatter
             from app.storage.s3 import StorageClient
 

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     LLM_QUALITY_MODEL: str = "local-model"
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.2
+    # Stream completions so a cancelled job can abandon generation mid-flight rather
+    # than waiting for the model to finish. Disable only to debug the transport.
+    LLM_STREAMING: bool = True
 
     # Embeddings — uses the same LM Studio base URL as the LLM
     # Set EMBEDDING_MODEL to the identifier shown in LM Studio for your embedding model

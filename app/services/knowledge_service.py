@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.db.repositories.knowledge import KnowledgeRepositories
-from app.knowledge.constants import JobType, KBStatus
+from app.knowledge.constants import EntityKind, JobType, KBStatus
 from app.knowledge.roles import suggest_doc_types
 from app.models.job import Job
 from app.models.knowledge import KnowledgeBase
@@ -21,8 +21,10 @@ from app.schemas.job import JobConfig, JobCreate
 from app.schemas.knowledge import (
     ComposeRequest,
     DocTypeSuggestion,
+    EntityHighlight,
     KnowledgeBaseOut,
     KnowledgeBaseSummary,
+    ModuleHighlight,
 )
 from app.services.job_service import JobService
 from app.services.project_service import ProjectService
@@ -118,6 +120,16 @@ class KnowledgeService:
         # Prefer the suggestions computed at build time; recompute if absent (older KB).
         raw = stats.get("suggested_doc_types") or suggest_doc_types(entity_kinds, roles)
 
+        routes = await self.repos.entities.list_by_kind(kb.id, EntityKind.ROUTE, limit=8)
+        deps = await self.repos.entities.list_by_kind(kb.id, EntityKind.DEPENDENCY, limit=12)
+        entrypoints = await self.repos.entities.list_by_kind(kb.id, EntityKind.ENTRYPOINT, limit=6)
+
+        # Biggest non-test modules with a summary — the ones a reader would recognise.
+        highlights = [
+            m for m in sorted(modules, key=lambda m: m.loc, reverse=True)
+            if not m.is_test
+        ][:6]
+
         return KnowledgeBaseSummary(
             knowledge_base=KnowledgeBaseOut.model_validate(kb),
             module_count=len(modules),
@@ -127,6 +139,22 @@ class KnowledgeService:
             roles=roles,
             entity_kinds=entity_kinds,
             suggested_doc_types=[DocTypeSuggestion(**s) for s in raw],
+            top_modules=[
+                ModuleHighlight(
+                    path=m.path, name=m.name, role=m.role, loc=m.loc, summary=m.summary
+                )
+                for m in highlights
+            ],
+            sample_routes=[
+                EntityHighlight(
+                    kind=EntityKind.ROUTE,
+                    name=r.name,
+                    detail=(r.data_json or {}).get("handler"),
+                )
+                for r in routes
+            ],
+            key_dependencies=[d.name for d in deps],
+            entrypoints=[e.name for e in entrypoints],
         )
 
     async def list_bases(self, project_id: int, user: User) -> list[KnowledgeBase]:

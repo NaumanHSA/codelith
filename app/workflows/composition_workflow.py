@@ -63,6 +63,11 @@ class CompositionWorkflow:
 
         def make_node(agent_cls):
             async def node(state: CompositionState) -> dict:
+                # Stop between stages: a cancelled job should not start the next agent.
+                from app.core.cancellation import check_cancelled
+
+                await check_cancelled()
+
                 from app.db.session import AsyncSessionLocal
                 from app.observability.metrics import time_agent
                 from app.observability.tracing import agent_span

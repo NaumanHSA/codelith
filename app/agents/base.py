@@ -8,14 +8,21 @@ from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.config import get_settings
+from app.core.cancellation import JobCancelled
 from app.llm.client import chat_completion
 from app.llm.context_manager import count_tokens, trim_to_limit
 from app.llm.router import select_model
+from app.observability.metrics import llm_call_duration, llm_calls_total, record_llm_tokens
 from app.tracing.runtime import get_tracer
-from app.observability.metrics import llm_calls_total, llm_call_duration, record_llm_tokens
 
 logger = structlog.get_logger(__name__)
 
@@ -64,11 +71,15 @@ class BaseAgent(ABC):
         ) as t:
             try:
                 result = await self._chat_with_retry(messages, selected_model)
-                llm_calls_total.labels(model=selected_model, task_type=task_type, status="success").inc()
+                llm_calls_total.labels(
+                    model=selected_model, task_type=task_type, status="success"
+                ).inc()
                 t.outputs(response_len=len(result), response=result)
                 return result
             except Exception:
-                llm_calls_total.labels(model=selected_model, task_type=task_type, status="error").inc()
+                llm_calls_total.labels(
+                    model=selected_model, task_type=task_type, status="error"
+                ).inc()
                 raise
             finally:
                 llm_call_duration.labels(model=selected_model, task_type=task_type).observe(
@@ -78,7 +89,10 @@ class BaseAgent(ABC):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=30),
-        retry=retry_if_exception_type(Exception),
+        # Retry transport failures, but never a cancellation: JobCancelled is an
+        # Exception, so a blanket predicate would retry it three times with backoff —
+        # re-issuing the very LLM calls the user asked us to stop.
+        retry=retry_if_exception_type(Exception) & retry_if_not_exception_type(JobCancelled),
         reraise=True,
     )
     async def _chat_with_retry(self, messages: list[dict], model: str) -> str:

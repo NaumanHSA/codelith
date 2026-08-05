@@ -24,17 +24,50 @@ async def chat_completion(
     model: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    stream: bool | None = None,
 ) -> str:
+    """
+    Run a chat completion and return the full text.
+
+    Streams by default. Not for latency — for *interruptibility*: a non-streamed call
+    is a single opaque await, so cancelling a job left LM Studio generating to the end
+    while the UI claimed the job had stopped. Streaming lets us check the cancellation
+    token between chunks and abandon the request mid-generation.
+    """
     settings = get_settings()
     client = get_llm_client()
+    use_stream = settings.LLM_STREAMING if stream is None else stream
 
-    response = await client.chat.completions.create(
-        model=model or settings.LLM_DEFAULT_MODEL,
-        messages=messages,  # type: ignore[arg-type]
-        temperature=temperature if temperature is not None else settings.LLM_TEMPERATURE,
-        max_tokens=max_tokens or settings.LLM_MAX_TOKENS,
-    )
-    return response.choices[0].message.content or ""
+    params = {
+        "model": model or settings.LLM_DEFAULT_MODEL,
+        "messages": messages,
+        "temperature": temperature if temperature is not None else settings.LLM_TEMPERATURE,
+        "max_tokens": max_tokens or settings.LLM_MAX_TOKENS,
+    }
+
+    if not use_stream:
+        response = await client.chat.completions.create(**params)  # type: ignore[arg-type]
+        return response.choices[0].message.content or ""
+
+    from app.core.cancellation import check_cancelled
+
+    chunks: list[str] = []
+    stream_obj = await client.chat.completions.create(**params, stream=True)  # type: ignore[arg-type]
+    try:
+        async for event in stream_obj:
+            if not event.choices:
+                continue
+            delta = event.choices[0].delta
+            if delta and delta.content:
+                chunks.append(delta.content)
+            # Cheap: the token caches its answer and only hits Redis once a second.
+            await check_cancelled()
+    finally:
+        # Closing the stream aborts the underlying HTTP request, which is what
+        # actually stops the model generating.
+        await stream_obj.close()
+
+    return "".join(chunks)
 
 
 async def create_embedding(text: str, model: str | None = None) -> list[float] | None:

@@ -1,8 +1,10 @@
 import asyncio
+
 import structlog
-from app.workers.celery_app import celery_app
+
 from app.db.session import AsyncSessionLocal
 from app.services.job_service import JobService
+from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
 
@@ -16,9 +18,9 @@ async def _run_ingestion(job_id: int) -> dict:
     async with AsyncSessionLocal() as db:
         job_svc = JobService(db)
         try:
-            from app.ingestion.pipeline import IngestionPipeline
             from app.db.repositories.job_repo import JobRepository
             from app.db.repositories.project_repo import ProjectRepository
+            from app.ingestion.pipeline import IngestionPipeline
 
             job = await JobRepository(db).get_with_steps(job_id)
             if not job:

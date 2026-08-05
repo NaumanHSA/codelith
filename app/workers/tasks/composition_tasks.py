@@ -32,7 +32,17 @@ async def _run_composition(job_id: int) -> dict:
     tracer = create_tracer(job_id=str(job_id), workflow_type="composition", run_dir=sandbox.trace)
     trace_token = set_tracer(tracer)
 
-    async with AsyncSessionLocal() as db:
+    from app.core.cancellation import (
+        CancellationToken,
+        JobCancelled,
+        clear_cancel,
+        set_token,
+    )
+
+    await clear_cancel(job_id)
+
+    async with AsyncSessionLocal() as db, CancellationToken(job_id) as token:
+        set_token(token)
         from app.db.repositories.job_repo import JobRepository
         from app.db.repositories.project_repo import ProjectRepository
         from app.services.job_service import JobService
@@ -78,6 +88,15 @@ async def _run_composition(job_id: int) -> dict:
                 )
                 return result
 
+            except JobCancelled:
+                # Nothing is published: a half-written document is worse than none.
+                logger.info("composition_cancelled", job_id=job_id)
+                await job_svc.write_log(
+                    job_id, "coordinator", "warning", "Composition cancelled by user"
+                )
+                job_total.labels(status="cancelled").inc()
+                return {"saved_doc_ids": [], "requires_review": False, "cancelled": True}
+
             except Exception as exc:
                 logger.exception("composition_failed", job_id=job_id)
                 await job_svc.fail(job_id, str(exc))
@@ -88,5 +107,6 @@ async def _run_composition(job_id: int) -> dict:
                 raise
 
             finally:
+                set_token(None)
                 save_trace_artifacts(tracer, sandbox.trace)
                 reset_tracer(trace_token)

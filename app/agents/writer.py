@@ -334,7 +334,7 @@ class WriterAgent(ReActMixin, BaseAgent):
             return "(no section plan — write comprehensive sections based on the architecture)"
         for doc in documentation_plan.get("documents", []):
             if doc.get("type") == doc_type:
-                lines = [f"Write these sections in order:"]
+                lines = ["Write these sections in order:"]
                 for s in doc.get("sections", []):
                     name = s.get("name", "")
                     focus = s.get("focus", "")

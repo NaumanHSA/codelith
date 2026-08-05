@@ -10,15 +10,19 @@ from app.schemas.job import JobCreate, JobOut
 from app.schemas.knowledge import AnalyzeRequest, ComposeRequest, KnowledgeBaseSummary
 from app.schemas.project import (
     ProjectCreate,
+    ProjectCreateWithSource,
     ProjectOut,
     ProjectSourceCreate,
     ProjectSourceOut,
     ProjectUpdate,
+    SourceProbeOut,
+    SourceProbeRequest,
 )
 from app.services.audit_service import AuditService
 from app.services.job_service import JobService
 from app.services.knowledge_service import KnowledgeService
 from app.services.project_service import ProjectService
+from app.services.source_service import SourceService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -63,6 +67,64 @@ async def delete_project(project_id: int, db: DbSession, user: ManagerUser, requ
         user_id=user.id, resource_id=project_id,
         ip_address=request.client.host if request.client else None,
     )
+
+
+# ── Source validation ─────────────────────────────────────────────────────────
+
+@router.post("/sources:probe", response_model=SourceProbeOut)
+async def probe_source(req: SourceProbeRequest, user: ManagerUser):
+    """
+    Fetch a source and report what is in it — without creating anything.
+
+    Lets the UI say "Fetching repository… found 142 files" and surface a real error
+    before a project exists.
+    """
+    probe = await SourceService().probe(req.source_type, req.url_or_path, req.branch)
+    return SourceProbeOut(**probe.to_dict())
+
+
+@router.post("/with-source", response_model=ProjectOut, status_code=201)
+async def create_project_with_source(
+    req: ProjectCreateWithSource, db: DbSession, user: ManagerUser, request: Request
+):
+    """
+    Create a project and attach its first source atomically.
+
+    The source is validated first; a failure returns 422 and leaves nothing behind.
+    Previously the project was created before the source was checked, so a typo'd URL
+    left an empty project the user had to clean up.
+    """
+    probe = await SourceService().probe(req.source_type, req.url_or_path, req.branch)
+    if not probe.ok:
+        raise HTTPException(status_code=422, detail=probe.error or "Source is not usable")
+
+    svc = ProjectService(db)
+    project = await svc.create(
+        ProjectCreate(name=req.name, description=req.description), user
+    )
+    await svc.add_source(
+        project.id,
+        source_type=req.source_type,
+        url_or_path=req.url_or_path,
+        user=user,
+        branch=req.branch,
+        config_json={
+            **(req.config_json or {}),
+            "probe": {
+                "file_count": probe.file_count,
+                "analysable_files": probe.analysable_files,
+                "languages": probe.languages,
+                "commit_sha": probe.commit_sha,
+            },
+        },
+    )
+    await AuditService(db).log(
+        "project.create", "project",
+        user_id=user.id, resource_id=project.id,
+        details={"name": project.name, "source_type": req.source_type},
+        ip_address=request.client.host if request.client else None,
+    )
+    return await svc.get(project.id, user)
 
 
 # ── Two-phase routes: analyse first, then choose what to write ────────────────
@@ -118,7 +180,9 @@ async def compose_documents(
 # ── Job routes (project-scoped) ───────────────────────────────────────────────
 
 @router.post("/{project_id}/jobs", response_model=JobOut, status_code=201)
-async def create_job(project_id: int, req: JobCreate, db: DbSession, user: ManagerUser, request: Request):
+async def create_job(
+    project_id: int, req: JobCreate, db: DbSession, user: ManagerUser, request: Request
+):
     """
     Legacy single-shot endpoint: analyse and write in one job.
 
@@ -193,7 +257,10 @@ async def upload_source(
     if suffix not in _ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"File type '{suffix}' is not allowed. Supported: {', '.join(sorted(_ALLOWED_EXTENSIONS))}",
+            detail=(
+                f"File type '{suffix}' is not allowed. "
+                f"Supported: {', '.join(sorted(_ALLOWED_EXTENSIONS))}"
+            ),
         )
 
     upload_root = Path(settings.REPO_SCRATCH_DIR) / "uploads" / str(project_id)

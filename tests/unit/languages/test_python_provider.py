@@ -96,6 +96,50 @@ def test_methods_record_their_class(provider: PythonProvider) -> None:
     assert run.qualified_name == "Service.run"
 
 
+NESTED_ROUTES = textwrap.dedent(
+    '''
+    def mount_chat_routes(router, server) -> None:
+        """Register chat endpoints."""
+        local_only = 1
+
+        @router.post("/v1/chat/completions")
+        async def chat(body: dict):
+            return {}
+
+        @router.get("/v1/models")
+        async def models():
+            return []
+    '''
+)
+
+
+def test_recurses_into_function_bodies(provider: PythonProvider) -> None:
+    """
+    Regression: a very common FastAPI layout registers routes inside a setup
+    function. Stopping at module level made all of them invisible — 28 routes in one
+    real project were extracted as 0, so no API Reference was ever suggested.
+    """
+    names = {s.qualified_name for s in provider.extract_symbols(NESTED_ROUTES, "routes.py")}
+
+    assert "mount_chat_routes" in names
+    assert "mount_chat_routes.chat" in names
+    assert "mount_chat_routes.models" in names
+
+
+def test_nested_routes_are_detected_as_entities(provider: PythonProvider) -> None:
+    symbols = provider.extract_symbols(NESTED_ROUTES, "routes.py")
+    routes = {e.name for e in provider.detect_entities("routes.py", NESTED_ROUTES, symbols)
+              if e.kind == "route"}
+
+    assert routes == {"POST /v1/chat/completions", "GET /v1/models"}
+
+
+def test_function_locals_are_not_treated_as_api_surface(provider: PythonProvider) -> None:
+    """Recursing into functions must not flood the KB with local variables."""
+    names = {s.name for s in provider.extract_symbols(NESTED_ROUTES, "routes.py")}
+    assert "local_only" not in names
+
+
 def test_syntax_error_returns_empty_not_raises(provider: PythonProvider) -> None:
     assert provider.extract_symbols("def broken(:\n  pass", "bad.py") == []
 
