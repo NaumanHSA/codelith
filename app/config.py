@@ -95,6 +95,18 @@ class Settings(BaseSettings):
     # Per-job sandbox
     JOB_SANDBOX_BASE_DIR: str = "/tmp/jobs"
 
+    # ── Step artifacts ────────────────────────────────────────────────────────
+    # What each agent actually produced — architecture map, section plan, strategy,
+    # narratives, the context a section was written from — dumped verbatim to
+    # ./runs/{job_id}/artifacts/. The tracer records that a stage ran; this records
+    # what it made. Set ARTIFACTS_ENABLED=false to switch the whole thing off.
+    ARTIFACTS_ENABLED: bool = True
+    # Inputs (prompt payloads, retrieved context, inventories) are far larger than
+    # the outputs they produce, so they are gated separately.
+    ARTIFACTS_INCLUDE_INPUTS: bool = True
+    # Per-file ceiling. 0 disables truncation.
+    ARTIFACTS_MAX_CHARS: int = 400_000
+
     # Tracing
     TRACING_ENABLED: bool = True
     TRACING_LOG_STEPS: bool = True

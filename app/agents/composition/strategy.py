@@ -15,6 +15,7 @@ from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import NarrativeTopic
 from app.llm.prompts.composition_prompts import COMPOSITION_STRATEGY
+from app.tracing.artifacts import save_artifact, save_input_artifact
 
 
 class CompositionStrategyAgent(BaseAgent):
@@ -48,6 +49,8 @@ class CompositionStrategyAgent(BaseAgent):
                 facts=json.dumps(stats.get("entity_kinds", {})),
             )
 
+            save_input_artifact("strategy.prompt", messages)
+
             strategy = await self._call_llm_json(messages, task_type="plan")
             if not strategy or not isinstance(strategy, dict):
                 strategy = self._default(doc_types, stats)
@@ -55,6 +58,8 @@ class CompositionStrategyAgent(BaseAgent):
 
             strategy.setdefault("audiences", self._default(doc_types, stats)["audiences"])
             strategy.setdefault("generate_diagrams", True)
+
+            save_artifact("strategy.strategy", strategy)
 
             t.outputs(doc_types=doc_types, diagrams=strategy.get("generate_diagrams"))
             await self._update_step(self.name, "completed", {"doc_types": doc_types})

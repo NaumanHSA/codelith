@@ -18,6 +18,7 @@ class JobSandbox:
           memory/         ← agent progress checkpoints (JSON)
           outputs/        ← generated markdown before DB save
           trace/          ← trace.json + trace.md
+          artifacts/      ← what each agent produced (architecture map, plan, …)
     """
 
     def __init__(self, job_id: int | str) -> None:
@@ -32,9 +33,17 @@ class JobSandbox:
         self.memory = self.root / "memory"
         self.outputs = self.root / "outputs"
         self.trace = self.root / "trace"
+        self.artifacts = self.root / "artifacts"
 
     def setup(self) -> None:
-        for d in (self.scratch, self.repo, self.memory, self.outputs, self.trace):
+        for d in (
+            self.scratch,
+            self.repo,
+            self.memory,
+            self.outputs,
+            self.trace,
+            self.artifacts,
+        ):
             d.mkdir(parents=True, exist_ok=True)
 
     def cleanup(self) -> None:

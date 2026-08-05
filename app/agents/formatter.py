@@ -5,6 +5,7 @@ from typing import Any
 import structlog
 
 from app.agents.base import BaseAgent
+from app.tracing.artifacts import save_artifact
 
 logger = structlog.get_logger(__name__)
 
@@ -49,6 +50,22 @@ class FormatterAgent(BaseAgent):
                     await self._emit_log("info", f"Export generated: {fmt}", files=len(keys))
                 except Exception as exc:
                     await self._emit_log("warning", f"Export failed for {fmt}: {exc}")
+
+            save_artifact(
+                "formatter.result",
+                {
+                    "formats": list(output_formats),
+                    "export_keys": export_keys,
+                    "documents": [
+                        {
+                            "doc_type": d.get("doc_type"),
+                            "title": d.get("title"),
+                            "chars": len(d.get("content_markdown") or ""),
+                        }
+                        for d in formatted_docs
+                    ],
+                },
+            )
 
             t.outputs(formats=list(output_formats), exports=export_keys)
             await self._update_step(self.name, "completed", {

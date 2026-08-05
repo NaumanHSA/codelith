@@ -4,6 +4,7 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.ingestion.pipeline import IngestionPipeline
+from app.tracing.artifacts import save_artifact, save_input_artifact
 
 
 class RepoAnalyzerAgent(BaseAgent):
@@ -50,6 +51,15 @@ class RepoAnalyzerAgent(BaseAgent):
                     await self._emit_log("info", "sandbox.repo copied", path=repo_path_str)
                 except Exception as exc:
                     await self._emit_log("warning", f"Could not copy to sandbox.repo: {exc}")
+
+            save_artifact("repo_analyzer.ingestion", ingestion_result)
+            save_input_artifact(
+                "repo_analyzer.files",
+                [
+                    {"path": f.path, "language": f.language, "chars": len(f.content)}
+                    for f in (getattr(codebase, "files", None) or [])
+                ],
+            )
 
             t.outputs(
                 sources=ingestion_result.get("sources_processed", 0),

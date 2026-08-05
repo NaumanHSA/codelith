@@ -3,6 +3,7 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
+from app.tracing.artifacts import save_artifact, save_text_artifact
 
 
 class PublisherAgent(BaseAgent):
@@ -58,6 +59,19 @@ class PublisherAgent(BaseAgent):
                 resource_id=self.job_id,
                 details={"doc_count": len(saved_doc_ids), "doc_ids": saved_doc_ids},
                 commit=False,
+            )
+
+            for doc in generated_docs:
+                save_text_artifact(
+                    f"publisher.{doc['doc_type']}.published",
+                    doc.get("content_markdown") or "",
+                )
+            save_artifact(
+                "publisher.documents",
+                [
+                    {"id": i, "doc_type": d.get("doc_type"), "title": d.get("title")}
+                    for d, i in zip(generated_docs, saved_doc_ids, strict=False)
+                ],
             )
 
             t.outputs(saved_doc_ids=saved_doc_ids)

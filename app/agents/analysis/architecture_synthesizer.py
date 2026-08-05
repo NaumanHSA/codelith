@@ -18,6 +18,7 @@ from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole
 from app.llm.prompts.analysis_prompts import ARCHITECTURE_SYNTHESIS
+from app.tracing.artifacts import save_artifact, save_input_artifact
 
 #: How much of each module summary survives into a downstream prompt.
 _SUMMARY_CHARS = 400
@@ -62,6 +63,8 @@ class ArchitectureSynthesizerAgent(BaseAgent):
                 infrastructure=", ".join(i.name for i in infra[:20]) or "(none detected)",
             )
 
+            save_input_artifact("architecture_synthesizer.prompt", messages)
+
             architecture_map = await self._call_llm_json(messages, task_type="architecture")
             degraded = False
             if not architecture_map or not isinstance(architecture_map, dict):
@@ -70,6 +73,8 @@ class ArchitectureSynthesizerAgent(BaseAgent):
                 )
                 architecture_map = self._derive(modules, deps, entrypoints, infra)
                 degraded = True
+
+            save_artifact("architecture_synthesizer.architecture_map", architecture_map)
 
             services = len(architecture_map.get("services", []) or [])
             await self._emit_log("info", "Architecture map built", services=services)

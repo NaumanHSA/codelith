@@ -15,6 +15,7 @@ from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import KBStatus
 from app.knowledge.roles import suggest_doc_types
+from app.tracing.artifacts import save_artifact
 
 
 class KBPersisterAgent(BaseAgent):
@@ -55,6 +56,11 @@ class KBPersisterAgent(BaseAgent):
 
             reasons = self._degradation_reasons(state, modules, topics, missing_summaries)
             status = KBStatus.DEGRADED if reasons else KBStatus.READY
+
+            save_artifact(
+                "kb_persister.kb_stats",
+                {"kb_id": kb_id, "status": str(status), "degraded_because": reasons, **stats},
+            )
 
             await repos.bases.finish_build(
                 kb_id,

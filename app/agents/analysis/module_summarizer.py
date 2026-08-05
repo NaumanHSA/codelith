@@ -20,6 +20,7 @@ from app.core.cancellation import JobCancelled
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import ModuleRole
 from app.llm.prompts.analysis_prompts import MODULE_SUMMARY
+from app.tracing.artifacts import save_artifact
 
 #: Roles not worth spending a summary on.
 _SKIPPED_ROLES = {ModuleRole.TEST}
@@ -70,6 +71,7 @@ class ModuleSummarizerAgent(BaseAgent):
                     raise outcome
 
             written = failed = 0
+            summaries: dict[str, str] = {}
             for module, outcome in zip(modules, results, strict=True):
                 if isinstance(outcome, BaseException):
                     await self._emit_log(
@@ -82,10 +84,13 @@ class ModuleSummarizerAgent(BaseAgent):
                 path, summary = outcome
                 if summary:
                     await repos.modules.set_summary(kb_id, path, summary)
+                    summaries[path] = summary
                     written += 1
                 else:
                     failed += 1
             await self.db.commit()
+
+            save_artifact("module_summarizer.summaries", summaries)
 
             await self._emit_log(
                 "info", f"Summarised {written}/{len(modules)} modules", failed=failed

@@ -13,6 +13,7 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import KBStatus
+from app.tracing.artifacts import save_artifact
 
 
 class KBLoaderAgent(BaseAgent):
@@ -62,6 +63,18 @@ class KBLoaderAgent(BaseAgent):
                 modules=stats.get("modules"),
                 narratives=stats.get("narratives"),
             )
+            save_artifact(
+                "kb_loader.resolved",
+                {
+                    "kb_id": kb.id,
+                    "kb_status": kb.status,
+                    "commit_sha": kb.commit_sha,
+                    "doc_types": doc_types,
+                    "output_formats": output_formats,
+                    "kb_stats": stats,
+                },
+            )
+
             t.outputs(kb_id=kb.id, doc_types=doc_types, kb_status=kb.status)
             await self._update_step(
                 self.name, "completed", {"kb_id": kb.id, "doc_types": doc_types}

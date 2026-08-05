@@ -14,6 +14,7 @@ from app.agents.base import BaseAgent
 from app.knowledge.builder import SourceFile, chunk_files
 from app.llm.client import create_embeddings
 from app.memory.vector_store import VectorStore
+from app.tracing.artifacts import save_artifact
 
 
 class SemanticIndexerAgent(BaseAgent):
@@ -62,6 +63,25 @@ class SemanticIndexerAgent(BaseAgent):
             ]
             stored = await VectorStore(self.db).bulk_add(rows)
             await self.db.commit()
+
+            save_artifact(
+                "semantic_indexer.chunks",
+                {
+                    "stored": stored,
+                    "embed_failures": failures,
+                    # Metadata only — the chunk text itself is already in Postgres.
+                    "chunks": [
+                        {
+                            "path": c.get("source_path"),
+                            "language": c.get("language"),
+                            "start_line": c.get("start_line"),
+                            "end_line": c.get("end_line"),
+                            "chars": len(c.get("content") or ""),
+                        }
+                        for c in chunks
+                    ],
+                },
+            )
 
             await self._emit_log(
                 "info", f"Indexed {stored} chunks", chunks=stored, embed_failures=failures

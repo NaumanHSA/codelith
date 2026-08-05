@@ -3,6 +3,7 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.llm.prompts.diagram_prompts import ARCHITECTURE_DIAGRAM, SEQUENCE_DIAGRAM
+from app.tracing.artifacts import save_text_artifact
 
 
 class DiagramAgent(BaseAgent):
@@ -80,6 +81,9 @@ class DiagramAgent(BaseAgent):
                         (diagrams_dir / f"{safe_name}.mmd").write_text(d["content"], encoding="utf-8")
                 except Exception:
                     pass
+
+            for d in diagrams:
+                save_text_artifact(f"diagram.{d['name']}", d["content"], ext="mmd")
 
             t.outputs(diagrams=len(diagrams))
             await self._update_step(self.name, "completed", {"diagrams": len(diagrams)})

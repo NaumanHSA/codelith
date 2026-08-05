@@ -21,6 +21,7 @@ from app.knowledge.builder import (
     merge_entities,
     read_manifest_files,
 )
+from app.tracing.artifacts import save_artifact
 
 
 class StructuredExtractorAgent(BaseAgent):
@@ -73,6 +74,9 @@ class StructuredExtractorAgent(BaseAgent):
             await repos.modules.bulk_upsert(kb.id, result.modules)
             await repos.entities.bulk_add(kb.id, entities)
             await self.db.commit()
+
+            save_artifact("structured_extractor.modules", result.modules)
+            save_artifact("structured_extractor.entities", entities)
 
             stats = {**result.stats, "entities": len(entities)}
             await self._emit_log(

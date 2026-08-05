@@ -7,6 +7,7 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.llm.prompts.qa_prompts import QA_CORRECTION, QA_REVIEW
 from app.tools.search_tools import semantic_search
+from app.tracing.artifacts import save_artifact
 
 _CONTENT_LIMIT = 8000
 _MAX_CLAIMS_PER_DOC = 4
@@ -65,6 +66,11 @@ class QAAgent(BaseAgent):
                     score=review.get("score"), approved=review.get("approved"),
                     claims_passed=f"{passed}/{len(claim_checks)}",
                 )
+
+            save_artifact(
+                "qa.reviews",
+                {"reviews": review_results, "validations": validation_results},
+            )
 
             all_approved = all(r["review"].get("approved", False) for r in review_results)
 

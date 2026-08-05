@@ -19,6 +19,11 @@ def run_analysis(self, job_id: int, force: bool = False) -> dict:
 
 async def _run_analysis(job_id: int, force: bool) -> dict:
     from app.core.sandbox import JobSandbox
+    from app.tracing.artifacts import (
+        create_artifact_writer,
+        reset_artifact_writer,
+        set_artifact_writer,
+    )
     from app.tracing.runtime import (
         create_tracer,
         reset_tracer,
@@ -32,6 +37,9 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
 
     tracer = create_tracer(job_id=str(job_id), workflow_type="analysis", run_dir=sandbox.trace)
     trace_token = set_tracer(tracer)
+
+    # Artifacts record what each stage produced, not just that it ran.
+    artifact_token = set_artifact_writer(create_artifact_writer(sandbox.artifacts))
 
     from app.core.cancellation import (
         CancellationToken,
@@ -123,6 +131,7 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
                 set_token(None)
                 save_trace_artifacts(tracer, sandbox.trace)
                 reset_tracer(trace_token)
+                reset_artifact_writer(artifact_token)
 
 
 async def _mark_kb_cancelled(db, job_id: int) -> None:

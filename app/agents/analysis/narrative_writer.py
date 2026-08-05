@@ -21,6 +21,7 @@ from app.core.cancellation import JobCancelled
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
 from app.llm.prompts.analysis_prompts import NARRATIVE, TOPIC_GUIDANCE
+from app.tracing.artifacts import save_text_artifact
 
 #: Sentinel the prompt asks for when a topic does not apply to this codebase.
 _NOT_APPLICABLE = "NOT_APPLICABLE"
@@ -120,6 +121,7 @@ class NarrativeWriterAgent(BaseAgent):
                     await repos.narratives.upsert(
                         kb_id, topic, content, {"generated_by": self.name}
                     )
+                    save_text_artifact(f"narrative_writer.{topic}", content)
                     written += 1
             await self.db.commit()
 

@@ -30,6 +30,11 @@ from app.config import get_settings
 from app.core.cancellation import JobCancelled, check_cancelled
 from app.knowledge.retrieval import SectionContext, SectionContextBuilder
 from app.llm.prompts.composition_prompts import SECTION_WRITE
+from app.tracing.artifacts import (
+    save_artifact,
+    save_input_text_artifact,
+    save_text_artifact,
+)
 
 #: The model's way of saying the packed context was not enough.
 _NEED_CONTEXT = re.compile(r"^\s*NEED_CONTEXT:\s*(.+)$", re.IGNORECASE)
@@ -103,6 +108,30 @@ class CompositionWriterAgent(BaseAgent):
             # Retrieval is cheap but a whole document's worth adds up; bail early.
             await check_cancelled()
             contexts.append(await builder.build(section, doc_type))
+        for section, context in zip(sections, contexts, strict=True):
+            # The exact bundle the model was shown — the single most useful artifact
+            # when a section comes out thin or wrong.
+            save_input_text_artifact(
+                f"writer.{doc_type}.{section.get('name', 'section')}.context",
+                context.render(),
+            )
+        save_artifact(
+            f"writer.{doc_type}.context_stats",
+            [
+                {
+                    "section": c.section_name,
+                    "tokens": c.tokens,
+                    "key_files": c.key_files,
+                    "module_summaries": len(c.module_summaries),
+                    "narratives": len(c.narratives),
+                    "source_blocks": len(c.source_blocks),
+                    "retrieved_blocks": len(c.retrieved_blocks),
+                    "is_thin": c.is_thin,
+                }
+                for c in contexts
+            ],
+        )
+
         await self._emit_log(
             "info",
             f"Built context for {len(contexts)} sections",
@@ -142,8 +171,11 @@ class CompositionWriterAgent(BaseAgent):
                 )
                 continue
             if outcome:
+                save_text_artifact(f"writer.{doc_type}.{name}.section", outcome)
                 parts.append(outcome)
-        return "\n\n".join(parts)
+        document = "\n\n".join(parts)
+        save_text_artifact(f"writer.{doc_type}.document", document)
+        return document
 
     async def _write_section(
         self, section, context, doc_type, project, audience, tone, outline, builder

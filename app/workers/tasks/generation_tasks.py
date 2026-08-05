@@ -18,6 +18,11 @@ def run_documentation_workflow(self, job_id: int) -> dict:
 
 async def _run_workflow(job_id: int) -> dict:
     from app.core.sandbox import JobSandbox
+    from app.tracing.artifacts import (
+        create_artifact_writer,
+        reset_artifact_writer,
+        set_artifact_writer,
+    )
     from app.tracing.runtime import create_tracer, reset_tracer, save_trace_artifacts, set_tracer
 
     sandbox = JobSandbox(job_id)
@@ -30,6 +35,9 @@ async def _run_workflow(job_id: int) -> dict:
         run_dir=sandbox.trace,
     )
     trace_token = set_tracer(tracer)
+
+    # Artifacts record what each stage produced, not just that it ran.
+    artifact_token = set_artifact_writer(create_artifact_writer(sandbox.artifacts))
 
     async with AsyncSessionLocal() as db:
         job_svc = JobService(db)
@@ -97,3 +105,4 @@ async def _run_workflow(job_id: int) -> dict:
                 raise
             finally:
                 reset_tracer(trace_token)
+                reset_artifact_writer(artifact_token)

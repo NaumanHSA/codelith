@@ -16,6 +16,7 @@ from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
 from app.llm.prompts.composition_prompts import SECTION_PLAN
+from app.tracing.artifacts import save_artifact, save_input_artifact
 
 #: Module roles worth showing the planner, per document type.
 _ROLE_FOCUS: dict[str, tuple[ModuleRole, ...]] = {
@@ -63,6 +64,8 @@ class CompositionPlannerAgent(BaseAgent):
                     doc_type, project, overview, modules, facts, strategy
                 )
 
+            save_artifact("planner.documentation_plan", plans)
+
             total = sum(len(p.get("sections", [])) for p in plans.values())
             await self._emit_log(
                 "info", f"Planned {total} sections across {len(plans)} document(s)"
@@ -92,7 +95,12 @@ class CompositionPlannerAgent(BaseAgent):
             facts=facts,
         )
 
+        save_input_artifact(f"planner.{doc_type}.prompt", messages)
+
         plan = await self._call_llm_json(messages, task_type="plan")
+        # Saved before validation so a dropped `key_files` path is visible as a diff
+        # against the stored plan, not just as a missing entry.
+        save_artifact(f"planner.{doc_type}.raw_response", plan)
         sections = self._validate(plan, modules) if plan else []
         if not sections:
             await self._emit_log(
