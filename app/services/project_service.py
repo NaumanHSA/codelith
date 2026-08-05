@@ -1,3 +1,7 @@
+# Deferred annotations are load-bearing here: this class defines a method named
+# `list`, which shadows the builtin for every annotation evaluated after it.
+from __future__ import annotations
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from slugify import slugify
@@ -44,7 +48,7 @@ class ProjectService:
 
     async def list(self, user: User, limit: int = 50, offset: int = 0) -> list[ProjectOut]:
         projects = await self.repo.list_by_org(user.org_id or 0, limit=limit, offset=offset)
-        return [self._to_out_light(p) for p in projects]
+        return await self._to_out_many(projects)
 
     async def update(self, project_id: int, req: ProjectUpdate, user: User) -> ProjectOut:
         project = await self.repo.get_by_id(project_id)
@@ -119,11 +123,66 @@ class ProjectService:
         out.latest_job = LatestJobOut.model_validate(latest_job_row) if latest_job_row else None
         return out
 
-    def _to_out_light(self, project: Project) -> ProjectOut:
-        """Lightweight ProjectOut for list view — only source_count to avoid N+1."""
-        out = ProjectOut.model_validate(project)
-        out.stats = ProjectStats(source_count=len(project.sources))
-        return out
+    async def _to_out_many(self, projects: list[Project]) -> list[ProjectOut]:
+        """
+        List view stats in three queries for the whole page, not three per project.
+
+        The previous version filled in `source_count` only and left the job and
+        document counts at their zero defaults, so every row in the studio read
+        "0 jobs · 0 documents" however much had actually run — and `latest_job`
+        was always null, which is what the list uses to show project status.
+        """
+        from app.models.document import Document
+        from app.models.job import Job
+
+        if not projects:
+            return []
+
+        ids = [p.id for p in projects]
+
+        job_counts = dict(
+            (
+                await self.db.execute(
+                    select(Job.project_id, func.count())
+                    .where(Job.project_id.in_(ids))
+                    .group_by(Job.project_id)
+                )
+            ).all()
+        )
+        doc_counts = dict(
+            (
+                await self.db.execute(
+                    select(Document.project_id, func.count())
+                    .where(Document.project_id.in_(ids))
+                    .group_by(Document.project_id)
+                )
+            ).all()
+        )
+        # DISTINCT ON needs the distinct expression to lead the ORDER BY.
+        latest_jobs = {
+            job.project_id: job
+            for job in (
+                await self.db.execute(
+                    select(Job)
+                    .where(Job.project_id.in_(ids))
+                    .distinct(Job.project_id)
+                    .order_by(Job.project_id, Job.created_at.desc())
+                )
+            ).scalars()
+        }
+
+        outs: list[ProjectOut] = []
+        for project in projects:
+            out = ProjectOut.model_validate(project)
+            out.stats = ProjectStats(
+                source_count=len(project.sources),
+                job_count=int(job_counts.get(project.id, 0)),
+                doc_count=int(doc_counts.get(project.id, 0)),
+            )
+            latest = latest_jobs.get(project.id)
+            out.latest_job = LatestJobOut.model_validate(latest) if latest else None
+            outs.append(out)
+        return outs
 
     def _check_access(self, project: Project, user: User) -> None:
         if project.org_id != (user.org_id or 0) and user.role != "admin":
