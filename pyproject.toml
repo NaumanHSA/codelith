@@ -20,10 +20,16 @@ dependencies = [
     # Auth & Security
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
+    # passlib 1.7.4 probes its bcrypt backend with a >72-byte password. bcrypt 5.0
+    # raises on that instead of truncating, so every hash_password() call dies with
+    # "password cannot be longer than 72 bytes" — including seeding and login.
+    "bcrypt>=4.0,<5",
     "python-multipart>=0.0.12",
 
     # Config & Validation
-    "pydantic>=2.10.0",
+    # [email] is required: app/schemas/auth.py uses EmailStr, and without the extra
+    # the app fails to import at startup.
+    "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.6.0",
 
     # LLM
