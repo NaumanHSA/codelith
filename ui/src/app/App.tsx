@@ -1,64 +1,114 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
-import { Toaster } from 'sonner';
-import { AuthProvider } from './lib/auth';
-import { ThemeProvider } from './lib/theme';
-import { ProtectedRoute } from './components/layout/ProtectedRoute';
-import { AppShell } from './components/layout/AppShell';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import DashboardPage from './pages/app/DashboardPage';
-import ProjectsPage from './pages/app/ProjectsPage';
-import ProjectDetailPage from './pages/app/ProjectDetailPage';
-import JobDetailPage from './pages/app/JobDetailPage';
-import DocumentsPage from './pages/app/DocumentsPage';
-import DocumentViewerPage from './pages/app/DocumentViewerPage';
-import SettingsPage from './pages/app/SettingsPage';
+import { lazy, Suspense, type ReactNode } from 'react'
+import {
+  BrowserRouter, Navigate, Route, Routes, useLocation,
+} from 'react-router-dom'
+import { AuthProvider, useAuth } from './auth'
+import { RunningJobsProvider } from './running-jobs'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { SkeletonPanel } from './components/States'
+import Shell from './components/layout/Shell'
+
+import LandingPage from './pages/LandingPage'
+import SignInPage from './pages/auth/SignInPage'
+import RegisterPage from './pages/auth/RegisterPage'
+import DashboardPage from './pages/app/DashboardPage'
+import ProjectsPage from './pages/app/ProjectsPage'
+import ProjectDetailPage from './pages/app/ProjectDetailPage'
+import JobProgressPage from './pages/app/JobProgressPage'
+import DocumentsPage from './pages/app/DocumentsPage'
+import SettingsPage from './pages/app/SettingsPage'
+
+// The Markdown stack is ~350 kB. Load it only when a document is opened.
+const DocumentReaderPage = lazy(() => import('./pages/app/DocumentReaderPage'))
+
+function BootScreen() {
+  return (
+    <div className="bp-grid flex h-screen items-center justify-center">
+      <div className="flex items-center gap-2.5">
+        <span className="anim-spin block size-3 rounded-full border-2 border-hot border-t-transparent" />
+        <span className="tag text-ink-dim">restoring session</span>
+      </div>
+    </div>
+  )
+}
+
+/** Everything under /app requires a session. */
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { user, booting } = useAuth()
+  const location = useLocation()
+  if (booting) return <BootScreen />
+  if (!user) return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />
+  return <>{children}</>
+}
+
+/** Signed-in users should not sit on the sign-in form. */
+function RedirectIfAuthed({ children }: { children: ReactNode }) {
+  const { user, booting } = useAuth()
+  if (booting) return <BootScreen />
+  if (user) return <Navigate to="/app" replace />
+  return <>{children}</>
+}
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/auth/login" element={<LoginPage />} />
-            <Route path="/auth/register" element={<RegisterPage />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <RunningJobsProvider>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route
+                path="/sign-in"
+                element={
+                  <RedirectIfAuthed>
+                    <SignInPage />
+                  </RedirectIfAuthed>
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  <RedirectIfAuthed>
+                    <RegisterPage />
+                  </RedirectIfAuthed>
+                }
+              />
 
-            {/* Protected app routes */}
-            <Route
-              path="/app"
-              element={
-                <ProtectedRoute>
-                  <AppShell />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<DashboardPage />} />
-              <Route path="projects" element={<ProjectsPage />} />
-              <Route path="projects/:id" element={<ProjectDetailPage />} />
-              <Route path="projects/:id/jobs/:jobId" element={<JobDetailPage />} />
-              <Route path="documents" element={<DocumentsPage />} />
-              <Route path="documents/:id" element={<DocumentViewerPage />} />
-              <Route path="settings" element={<SettingsPage />} />
-            </Route>
+              <Route
+                path="/app"
+                element={
+                  <RequireAuth>
+                    <Shell />
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<DashboardPage />} />
+                <Route path="projects" element={<ProjectsPage />} />
+                <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+                <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
+                <Route path="documents" element={<DocumentsPage />} />
+                <Route
+                  path="documents/:documentId"
+                  element={
+                    <Suspense
+                      fallback={
+                        <div className="mx-auto max-w-[1080px] p-5">
+                          <SkeletonPanel rows={8} />
+                        </div>
+                      }
+                    >
+                      <DocumentReaderPage />
+                    </Suspense>
+                  }
+                />
+                <Route path="settings" element={<SettingsPage />} />
+              </Route>
 
-            {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-        <Toaster
-          position="top-right"
-          theme="dark"
-          toastOptions={{
-            style: {
-              fontFamily: 'var(--font-sans)',
-              fontSize: '0.875rem',
-            },
-          }}
-        />
-      </AuthProvider>
-    </ThemeProvider>
-  );
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </RunningJobsProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
+  )
 }

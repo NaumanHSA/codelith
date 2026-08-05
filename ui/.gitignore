@@ -1,33 +1,16 @@
-# Dependencies
 node_modules/
-.pnpm-store/
-
-# Build output
 dist/
 build/
-.next/
-out/
-
-# Vite
-.vite/
-
-# Environment
+.cache/
 .env
 .env.local
 .env.*.local
-
-# Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
-pnpm-debug.log*
-
-# TypeScript
+!.env.example
+.vite/
+vite.config.*.timestamp-*
 *.tsbuildinfo
+*-debug.log*
+logs/
+*.log
+.claude-replay.*
+.tmp-*

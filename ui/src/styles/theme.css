@@ -1,200 +1,108 @@
-@custom-variant dark (&:is(.dark *));
+/* ------------------------------------------------------------------ *
+ * Design tokens. Every colour in the studio comes from here.
+ *
+ * Values live on :root as raw custom properties and are mapped into
+ * Tailwind through `@theme inline`, so a `.dark` block can override them
+ * at runtime without a single component changing. Light ships today.
+ *
+ * Fonts are bundled from src/assets/fonts — the studio makes no network
+ * request to any origin other than the API.
+ * ------------------------------------------------------------------ */
 
-:root {
-  --font-size: 16px;
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-  /* Portfolio-inspired warm off-white theme */
-  --background: #f9f7f4;
-  --foreground: #1a1917;
-  --card: #ffffff;
-  --card-foreground: #1a1917;
-  --popover: #ffffff;
-  --popover-foreground: #1a1917;
-  --primary: #1a1917;
-  --primary-foreground: #ffffff;
-  --secondary: #f3f1ee;
-  --secondary-foreground: #1a1917;
-  --muted: #f3f1ee;
-  --muted-foreground: #6b6760;
-  --accent: #f3f1ee;
-  --accent-foreground: #1a1917;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --border: #e5e2dc;
-  --input: #ffffff;
-  --input-background: #ffffff;
-  --switch-background: #c8c5bf;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --ring: #1a56db;
-  --brand: #1a56db;
-  --brand-foreground: #ffffff;
-  --chart-1: #1a56db;
-  --chart-2: #0ea5e9;
-  --chart-3: #8b5cf6;
-  --chart-4: #f59e0b;
-  --chart-5: #10b981;
-  --radius: 0.5rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #1a1917;
-  --sidebar-primary: #1a1917;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f3f1ee;
-  --sidebar-accent-foreground: #1a1917;
-  --sidebar-border: #e5e2dc;
-  --sidebar-ring: #1a56db;
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
 }
 
-.dark {
-  --background: #111110;
-  --foreground: #e8e6e3;
-  --card: #1c1b1a;
-  --card-foreground: #e8e6e3;
-  --popover: #1c1b1a;
-  --popover-foreground: #e8e6e3;
-  --primary: #e8e6e3;
-  --primary-foreground: #111110;
-  --secondary: #252422;
-  --secondary-foreground: #e8e6e3;
-  --muted: #252422;
-  --muted-foreground: #8a8784;
-  --accent: #252422;
-  --accent-foreground: #e8e6e3;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #2e2d2b;
-  --input: #1c1b1a;
-  --input-background: #1c1b1a;
-  --switch-background: #3a3835;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --ring: #4f8ef7;
-  --brand: #4f8ef7;
-  --brand-foreground: #111110;
-  --chart-1: #4f8ef7;
-  --chart-2: #38bdf8;
-  --chart-3: #a78bfa;
-  --chart-4: #fbbf24;
-  --chart-5: #34d399;
-  --sidebar: #161514;
-  --sidebar-foreground: #e8e6e3;
-  --sidebar-primary: #e8e6e3;
-  --sidebar-primary-foreground: #111110;
-  --sidebar-accent: #252422;
-  --sidebar-accent-foreground: #e8e6e3;
-  --sidebar-border: #2e2d2b;
-  --sidebar-ring: #4f8ef7;
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/inter-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ground */
+  --paper: #f4f3ef;
+  --panel: #ffffff;
+  --sunk: #eceae4;
+
+  /* ink */
+  --ink: #14120f;
+  --ink-mid: #55504a;
+  --ink-dim: #8a847c;
+  --on-ink: #efe9e1;
+
+  /* structure */
+  --rule: #dcd8d0;
+
+  /* the one hot accent — #ff6b35 fails AA as text on paper, so graphics
+     use --hot and any text uses the darkened --hot-ink */
+  --hot: #ff6b35;
+  --hot-press: #e8551f;
+  --hot-ink: #c2400c;
+  --hot-wash: #fff0e9;
+  --hot-edge: #ffc7ac;
+  --on-hot: #ffffff;
+
+  /* signal */
+  --ok: #1f7a4d;
+  --ok-wash: #edf8f2;
+  --warn: #9a5b00;
+  --warn-wash: #fdf6e7;
+  --bad: #c0271a;
+  --bad-wash: #fdefee;
+
+  /* terminal surfaces — the one place we go dark in a light theme */
+  --term: #14120f;
+  --term-rule: #2e2820;
+  --term-text: #d5cdc2;
+  --term-dim: #8a8178;
+  --term-ok: #7fc79c;
+
+  --grid-line: rgba(20, 18, 15, 0.045);
+  --hatch-line: rgba(20, 18, 15, 0.05);
+  --scroll-thumb: #c3bdb4;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-input-background: var(--input-background);
-  --color-switch-background: var(--switch-background);
-  --color-ring: var(--ring);
-  --color-brand: var(--brand);
-  --color-brand-foreground: var(--brand-foreground);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-}
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-sunk: var(--sunk);
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
+  --color-ink: var(--ink);
+  --color-ink-mid: var(--ink-mid);
+  --color-ink-dim: var(--ink-dim);
+  --color-on-ink: var(--on-ink);
 
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-sans);
-  }
+  --color-rule: var(--rule);
 
-  code, pre, kbd, samp {
-    font-family: var(--font-mono);
-  }
+  --color-hot: var(--hot);
+  --color-hot-press: var(--hot-press);
+  --color-hot-ink: var(--hot-ink);
+  --color-hot-wash: var(--hot-wash);
+  --color-hot-edge: var(--hot-edge);
+  --color-on-hot: var(--on-hot);
 
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn: var(--warn);
+  --color-warn-wash: var(--warn-wash);
+  --color-bad: var(--bad);
+  --color-bad-wash: var(--bad-wash);
 
-  html {
-    font-size: var(--font-size);
-  }
+  --color-term: var(--term);
+  --color-term-rule: var(--term-rule);
+  --color-term-text: var(--term-text);
+  --color-term-dim: var(--term-dim);
+  --color-term-ok: var(--term-ok);
 
-  h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
 
-  h2 {
-    font-size: var(--text-xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  h3 {
-    font-size: var(--text-lg);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  h4 {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  label {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  button {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  input {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-normal);
-    line-height: 1.5;
-  }
+  --radius-none: 0px;
 }

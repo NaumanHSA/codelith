@@ -1,562 +1,472 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
-import {
-  Github, Terminal, ArrowRight, Eye, EyeOff, GitBranch, Boxes,
-  Workflow, Network, FileCode2, ServerCog,
-} from 'lucide-react';
-import { useAuth } from '../lib/auth';
-import { toast } from 'sonner';
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../auth'
+import { Chip, GitHubMark, Logo } from '../components/ui'
 
-const REPO_URL = 'https://github.com/NaumanHSA/document-anything';
+const STAGES = [
+  {
+    num: '01',
+    name: 'Analyse',
+    tagline: 'Extract the facts',
+    desc: 'Clones the repository and walks every file. Records what is actually there — HTTP routes, entry points, module boundaries, dependencies, config, data stores. Nothing is inferred.',
+    facts: [
+      ['files walked', '257'],
+      ['modules mapped', '45'],
+      ['HTTP routes', '28'],
+      ['data stores', '2'],
+    ],
+  },
+  {
+    num: '02',
+    name: 'Knowledge base',
+    tagline: 'Build the index',
+    desc: 'Chunks and embeds every finding into a structured store pinned to the commit SHA. The knowledge base is the product of analysis — written once, reused by every document you ask for.',
+    facts: [
+      ['chunks embedded', '1,103'],
+      ['commit', '4865c2f'],
+      ['index size', '4.2 MB'],
+      ['cross-refs', '847'],
+    ],
+  },
+  {
+    num: '03',
+    name: 'Choose',
+    tagline: 'See what is worth writing',
+    desc: 'Because analysis already ran, the tool knows what exists. It offers an API Reference only when it found routes — and tells you how many. Evidence before effort.',
+    facts: [
+      ['Architecture', '90% →'],
+      ['Getting Started', '70% →'],
+      ['Module docs', '60% →'],
+      ['API Reference', '28 routes'],
+    ],
+  },
+  {
+    num: '04',
+    name: 'Compose',
+    tagline: 'Write the document',
+    desc: 'Pulls the right slice of the knowledge base for each section, writes prose, generates diagrams, runs a QA pass against source, then emits Markdown, MkDocs or Docusaurus.',
+    facts: [
+      ['sections written', '8'],
+      ['Mermaid diagrams', '2'],
+      ['QA verified', '100%'],
+      ['formats', 'MD · MkDocs'],
+    ],
+  },
+]
 
-/** Mirrors the real graph order in app/workflows/documentation_workflow.py. */
-const PIPELINE = [
-  { agent: 'coordinator',        msg: 'Resolving job scope and sources' },
-  { agent: 'repo_analyzer',      msg: 'Walked 142 files across 23 modules' },
-  { agent: 'code_understanding', msg: 'Embedded 1,284 chunks → pgvector' },
-  { agent: 'architecture',       msg: 'Mapped module boundaries and data flow' },
-  { agent: 'planner',            msg: 'Drafted outline — 6 sections' },
-  { agent: 'strategy',           msg: 'Assigned depth + audience per section' },
-  { agent: 'writer',             msg: 'Writing sections (fan-out ×6)' },
-  { agent: 'diagram',            msg: 'Generated 4 Mermaid diagrams' },
-  { agent: 'qa',                 msg: 'Verified claims against source' },
-  { agent: 'formatter',          msg: 'Rendered Markdown + MkDocs site' },
-  { agent: 'publisher',          msg: 'Published 6 documents' },
-];
+const TERMINAL = [
+  { t: 'cmd', s: '$ document-anything analyse github.com/acme/neurosurfer' },
+  { t: 'ok', s: '  ✓ repo_analyzer        257 files · 45 modules          3.7s' },
+  { t: 'ok', s: '  ✓ structured_extractor 45 modules · 77 facts          141ms' },
+  { t: 'ok', s: '  ✓ semantic_indexer     1,103 chunks · pgvector          21s' },
+  { t: 'ok', s: '  ✓ module_summarizer    40/40 summarised                 13s' },
+  { t: 'ok', s: '  ✓ architecture_synth   5 components mapped              93s' },
+  { t: 'live', s: '  … narrative_writer     writing 6 narratives…' },
+]
 
-// ─── Background ───────────────────────────────────────────────────────────────
+const AGENTS = [
+  'repo_analyzer', 'structured_extractor', 'semantic_indexer', 'module_summarizer',
+  'architecture_synthesizer', 'narrative_writer', 'kb_persister', 'composition_strategy',
+  'composition_planner', 'composition_writer', 'diagram_agent', 'qa_agent', 'formatter',
+  'publisher',
+]
 
-function Backdrop() {
-  const gridMask = 'radial-gradient(ellipse 75% 60% at 50% 0%, #000 55%, transparent 100%)';
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
-          backgroundSize: '56px 56px',
-          maskImage: gridMask,
-          WebkitMaskImage: gridMask,
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(58% 44% at 18% -6%, rgba(79,142,247,0.20), transparent 68%), radial-gradient(48% 40% at 88% 4%, rgba(167,139,250,0.14), transparent 70%)',
-        }}
-      />
-    </div>
-  );
-}
-
-// ─── Animated pipeline terminal ───────────────────────────────────────────────
-
-function PipelineTerminal() {
-  const [done, setDone] = useState(0);
-  const holdRef = useRef(0);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setDone(n => {
-        if (n < PIPELINE.length) return n + 1;
-        // Linger on the finished run before looping.
-        holdRef.current += 1;
-        if (holdRef.current > 6) {
-          holdRef.current = 0;
-          return 0;
-        }
-        return n;
-      });
-    }, 620);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="rounded-xl border border-border bg-card/70 backdrop-blur overflow-hidden shadow-2xl shadow-black/40">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-secondary/40">
-        <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]/70" />
-        <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]/70" />
-        <span className="w-2.5 h-2.5 rounded-full bg-[#34d399]/70" />
-        <span
-          className="ml-2 text-muted-foreground"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}
-        >
-          job #42 — langgraph pipeline
-        </span>
-      </div>
-
-      <div className="p-4 space-y-1.5" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-        {PIPELINE.map((step, i) => {
-          const state = i < done ? 'done' : i === done ? 'active' : 'idle';
-          return (
-            <div
-              key={step.agent}
-              className="flex items-start gap-2.5 transition-all duration-500"
-              style={{
-                opacity: state === 'idle' ? 0.22 : 1,
-                transform: state === 'idle' ? 'translateY(2px)' : 'none',
-              }}
-            >
-              <span className="w-3.5 shrink-0 pt-px">
-                {state === 'done' ? (
-                  <span className="text-[#34d399]">✓</span>
-                ) : state === 'active' ? (
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
-                ) : (
-                  <span className="text-muted-foreground">·</span>
-                )}
-              </span>
-              <span className="shrink-0 text-brand" style={{ minWidth: '9.5rem' }}>
-                {step.agent}
-              </span>
-              <span className="text-muted-foreground">{step.msg}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Auth card ────────────────────────────────────────────────────────────────
-
-const isDev = Boolean((import.meta as { env: Record<string, unknown> }).env.DEV);
-
-function AuthCard() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const { login, register } = useAuth();
-  const navigate = useNavigate();
-
-  const switchMode = (next: 'login' | 'register') => {
-    setMode(next);
-    setError('');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      if (mode === 'login') {
-        await login(email, password);
-        toast.success('Welcome back');
-      } else {
-        await register(fullName, email, password);
-        toast.success('Account created');
-      }
-      navigate('/app');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const inputClass =
-    'w-full px-3 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all';
+/** The four-stage pipeline as a live schematic. */
+function FlowDiagram({ active }: { active: number }) {
+  const cols = [40, 175, 310, 445]
+  const on = (i: number) => i <= active
 
   return (
-    <div
-      id="get-started"
-      className="rounded-2xl border border-border bg-card/80 backdrop-blur p-6 shadow-2xl shadow-black/50"
-    >
-      <div className="flex p-1 rounded-lg bg-secondary/60 mb-6">
-        {(['login', 'register'] as const).map(m => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => switchMode(m)}
-            className="flex-1 py-2 rounded-md transition-all"
-            style={{
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              background: mode === m ? 'var(--card)' : 'transparent',
-              color: mode === m ? 'var(--foreground)' : 'var(--muted-foreground)',
-              boxShadow: mode === m ? '0 1px 2px rgba(0,0,0,0.4)' : 'none',
-            }}
-          >
-            {m === 'login' ? 'Sign in' : 'Create account'}
-          </button>
-        ))}
-      </div>
+    <svg viewBox="0 0 540 150" className="w-full" role="img" aria-label="Four-stage pipeline">
+      <defs>
+        <pattern id="fg" width="12" height="12" patternUnits="userSpaceOnUse">
+          <path d="M12 0H0V12" fill="none" stroke="var(--grid-line)" />
+        </pattern>
+      </defs>
+      <rect width="540" height="150" fill="url(#fg)" />
 
-      {error && (
-        <div
-          className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-destructive"
-          style={{ fontSize: '0.8125rem' }}
-        >
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-3.5">
-        {mode === 'register' && (
-          <div>
-            <label className="block text-foreground mb-1.5" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
-              Full name
-            </label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              required
-              placeholder="Ada Lovelace"
-              className={inputClass}
-              style={{ fontSize: '0.9rem' }}
+      {[0, 1, 2].map(i => {
+        const x1 = cols[i] + 78
+        const x2 = cols[i + 1] + 2
+        const live = on(i + 1)
+        return (
+          <g key={i}>
+            <line x1={x1} y1="62" x2={x2} y2="62" stroke="var(--rule)" strokeWidth="1.5" />
+            {live && (
+              <line
+                x1={x1} y1="62" x2={x2} y2="62"
+                stroke="var(--hot)" strokeWidth="1.5" className="anim-flow"
+              />
+            )}
+            <path
+              d={`M${x2 - 6} 58 L${x2} 62 L${x2 - 6} 66`}
+              fill="none"
+              stroke={live ? 'var(--hot)' : 'var(--rule)'}
+              strokeWidth="1.5"
             />
-          </div>
-        )}
+          </g>
+        )
+      })}
 
-        <div>
-          <label className="block text-foreground mb-1.5" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            placeholder="you@example.com"
-            className={inputClass}
-            style={{ fontSize: '0.9rem' }}
-          />
-        </div>
-
-        <div>
-          <label className="block text-foreground mb-1.5" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
-            Password
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              className={`${inputClass} pr-10`}
-              style={{ fontSize: '0.9rem' }}
+      {STAGES.map((s, i) => {
+        const x = cols[i]
+        const cur = i === active
+        const past = i < active
+        return (
+          <g key={s.num} style={{ transition: 'opacity .2s' }} opacity={past || cur ? 1 : 0.4}>
+            {cur && (
+              <rect
+                x={x - 3} y="27" width="86" height="70"
+                fill="none" stroke="var(--hot)" strokeWidth="1" strokeDasharray="3 3"
+              />
+            )}
+            <rect
+              x={x} y="30" width="80" height="64"
+              fill={cur ? 'var(--hot-wash)' : 'var(--panel)'}
+              stroke={cur ? 'var(--hot)' : 'var(--ink)'}
+              strokeWidth={cur ? 2 : 1.2}
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(s => !s)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            <text
+              x={x + 7} y="45" fontSize="8" fontWeight="700" letterSpacing="0.1em"
+              fill={cur ? 'var(--hot-ink)' : 'var(--ink-dim)'} fontFamily="var(--font-mono)"
             >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-        </div>
+              {s.num}
+            </text>
+            <text
+              x={x + 7} y="62" fontSize="11" fontWeight="700"
+              fill="var(--ink)" fontFamily="var(--font-mono)"
+            >
+              {s.name.split(' ')[0]}
+            </text>
+            {s.name.includes(' ') && (
+              <text
+                x={x + 7} y="75" fontSize="11" fontWeight="700"
+                fill="var(--ink)" fontFamily="var(--font-mono)"
+              >
+                {s.name.split(' ')[1]}
+              </text>
+            )}
+            <rect
+              x={x + 7} y="82" width={cur ? 40 : 18} height="3"
+              fill={cur ? 'var(--hot)' : 'var(--rule)'}
+              style={{ transition: 'width .3s' }}
+            />
+            {cur && (
+              <circle cx={x + 74} cy="38" r="3" fill="var(--hot)">
+                <animate attributeName="opacity" values="1;.2;1" dur="1.3s" repeatCount="indefinite" />
+              </circle>
+            )}
+          </g>
+        )
+      })}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2.5 rounded-lg bg-brand text-brand-foreground hover:opacity-90 transition-opacity disabled:opacity-60 flex items-center justify-center gap-2"
-          style={{ fontSize: '0.9375rem', fontWeight: 600 }}
-        >
-          {loading ? (
-            <>
-              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              {mode === 'login' ? 'Signing in…' : 'Creating account…'}
-            </>
-          ) : (
-            <>
-              {mode === 'login' ? 'Sign in' : 'Create account'}
-              <ArrowRight size={16} />
-            </>
-          )}
-        </button>
-      </form>
+      <line x1="525" y1="62" x2="533" y2="62" stroke="var(--rule)" strokeWidth="1.5" />
+      {[0, 1, 2].map(i => (
+        <path
+          key={i}
+          d={`M533 62 V${34 + i * 28} H540`}
+          fill="none"
+          stroke={active === 3 ? 'var(--hot)' : 'var(--rule)'}
+          strokeWidth="1.2"
+        />
+      ))}
 
-      {isDev && mode === 'login' && (
-        <button
-          type="button"
-          onClick={() => {
-            setEmail('admin@docany.dev');
-            setPassword('admin1234');
-          }}
-          className="mt-3 w-full text-muted-foreground hover:text-foreground transition-colors"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
-        >
-          fill seeded admin credentials
-        </button>
-      )}
-    </div>
-  );
+      <line x1="40" y1="118" x2="500" y2="118" stroke="var(--rule)" strokeDasharray="2 4" />
+      <text x="40" y="132" fontSize="8" letterSpacing="0.12em" fill="var(--ink-dim)" fontFamily="var(--font-mono)">
+        READ ONCE
+      </text>
+      <text x="310" y="132" fontSize="8" letterSpacing="0.12em" fill="var(--hot-ink)" fontFamily="var(--font-mono)">
+        WRITE MANY TIMES
+      </text>
+    </svg>
+  )
 }
-
-// ─── Sections ─────────────────────────────────────────────────────────────────
-
-function Nav() {
-  return (
-    <nav className="relative z-10 flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
-      <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-brand/15 border border-brand/30 flex items-center justify-center">
-          <Terminal size={15} className="text-brand" />
-        </div>
-        <span
-          className="text-foreground"
-          style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.95rem' }}
-        >
-          document-anything
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <a
-          href={REPO_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-          style={{ fontSize: '0.8125rem' }}
-        >
-          <Github size={15} />
-          <span className="hidden sm:inline">GitHub</span>
-        </a>
-        <a
-          href="#get-started"
-          className="px-3.5 py-2 rounded-lg bg-foreground text-background hover:opacity-90 transition-opacity"
-          style={{ fontSize: '0.8125rem', fontWeight: 600 }}
-        >
-          Get started
-        </a>
-      </div>
-    </nav>
-  );
-}
-
-function Hero() {
-  return (
-    <section className="relative z-10 max-w-6xl mx-auto px-6 pt-10 pb-16">
-      <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-12 lg:gap-16 items-start">
-        {/* Left — the pitch */}
-        <div>
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-secondary/50 text-muted-foreground mb-6"
-            style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#34d399]" />
-            open source · self-hosted · runs offline
-          </div>
-
-          <h1
-            className="text-foreground mb-5"
-            style={{
-              fontSize: 'clamp(2rem, 4.6vw, 3.15rem)',
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 700,
-              lineHeight: 1.12,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Documentation that
-            <br />
-            <span className="text-brand">reads your code</span> first.
-          </h1>
-
-          <p className="text-muted-foreground mb-8 max-w-xl" style={{ fontSize: '1.0625rem', lineHeight: 1.65 }}>
-            Point it at a repository. A pipeline of eleven specialised agents clones it,
-            reads it, maps the architecture, then writes the docs — with diagrams, and a
-            QA pass that checks every claim back against the source.
-          </p>
-
-          <ul className="space-y-2.5">
-            {[
-              'Your code never leaves your machine — any OpenAI-compatible endpoint',
-              'Markdown, DOCX, MkDocs and Docusaurus output',
-              'Every run traced step by step, on disk',
-            ].map(item => (
-              <li key={item} className="flex items-start gap-2.5 text-muted-foreground">
-                <span className="text-brand mt-0.5 shrink-0" style={{ fontSize: '0.8rem' }}>▸</span>
-                <span style={{ fontSize: '0.9375rem' }}>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Right — auth */}
-        <div>
-          <AuthCard />
-          <p className="text-center text-muted-foreground mt-4" style={{ fontSize: '0.75rem' }}>
-            Self-hosted — your account lives in your own database.
-          </p>
-        </div>
-      </div>
-
-      {/* Full-width so the run reads like a real log, not a sidebar widget */}
-      <div className="mt-14">
-        <PipelineTerminal />
-      </div>
-    </section>
-  );
-}
-
-const FEATURES = [
-  {
-    icon: Workflow,
-    title: 'Multi-agent pipeline',
-    body: 'A LangGraph state machine coordinates eleven agents, fanning out one writer per section and rejoining for review.',
-  },
-  {
-    icon: GitBranch,
-    title: 'Reads real repositories',
-    body: 'Clones from GitHub, GitLab or Bitbucket, or ingests local folders and files across a dozen languages.',
-  },
-  {
-    icon: Network,
-    title: 'Grounded in your code',
-    body: 'pgvector semantic search over embedded chunks, plus a Neo4j graph of how code entities actually relate.',
-  },
-  {
-    icon: ServerCog,
-    title: 'Fully offline',
-    body: 'Talks to LM Studio, vLLM, Ollama — anything OpenAI-compatible. No third-party API, no data leaving your box.',
-  },
-  {
-    icon: FileCode2,
-    title: 'Publishable output',
-    body: 'Ships Markdown, DOCX, and ready-to-deploy MkDocs and Docusaurus sites — not just a wall of text.',
-  },
-  {
-    icon: Boxes,
-    title: 'Built to self-host',
-    body: 'FastAPI, Postgres, Redis and Celery in Docker Compose, with Kubernetes manifests when you outgrow it.',
-  },
-];
-
-function Features() {
-  return (
-    <section className="relative z-10 max-w-6xl mx-auto px-6 py-16 border-t border-border">
-      <h2
-        className="text-foreground mb-3"
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontWeight: 700,
-          fontSize: 'clamp(1.35rem, 2.4vw, 1.75rem)',
-        }}
-      >
-        What's under the hood
-      </h2>
-      <p className="text-muted-foreground mb-10" style={{ fontSize: '0.9375rem' }}>
-        No magic and no lock-in — every piece is something you can run and inspect yourself.
-      </p>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {FEATURES.map(f => (
-          <div
-            key={f.title}
-            className="group p-5 rounded-xl border border-border bg-card/50 hover:bg-card hover:border-brand/40 transition-all"
-          >
-            <div className="w-9 h-9 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center mb-4 group-hover:bg-brand/20 transition-colors">
-              <f.icon size={16} className="text-brand" />
-            </div>
-            <h3 className="text-foreground mb-2" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>
-              {f.title}
-            </h3>
-            <p className="text-muted-foreground" style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>
-              {f.body}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const STACK = [
-  'FastAPI', 'LangGraph', 'PostgreSQL', 'pgvector', 'Redis',
-  'Celery', 'Neo4j', 'MinIO', 'React', 'Docker',
-];
-
-function Stack() {
-  return (
-    <section className="relative z-10 max-w-6xl mx-auto px-6 py-14 border-t border-border">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
-        <span
-          className="text-muted-foreground mr-2"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}
-        >
-          built with
-        </span>
-        {STACK.map(s => (
-          <span
-            key={s}
-            className="px-2.5 py-1 rounded-md border border-border bg-secondary/40 text-muted-foreground"
-            style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}
-          >
-            {s}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function Footer() {
-  return (
-    <footer className="relative z-10 border-t border-border">
-      <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <Terminal size={14} className="text-muted-foreground" />
-          <span
-            className="text-muted-foreground"
-            style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
-          >
-            document-anything
-          </span>
-        </div>
-
-        <div className="flex items-center gap-5">
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-            style={{ fontSize: '0.8125rem' }}
-          >
-            <Github size={14} />
-            Source
-          </a>
-          <a
-            href={`${REPO_URL}/issues`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            style={{ fontSize: '0.8125rem' }}
-          >
-            Issues
-          </a>
-          <a
-            href="#get-started"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            style={{ fontSize: '0.8125rem' }}
-          >
-            Get started
-          </a>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
+  const { user } = useAuth()
+  const [active, setActive] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [lines, setLines] = useState(1)
+
+  const enterTo = user ? '/app' : '/sign-in'
+  const enterLabel = user ? 'Open the studio →' : 'Sign in →'
+
+  useEffect(() => {
+    if (paused) return
+    const t = setInterval(() => setActive(s => (s + 1) % STAGES.length), 3200)
+    return () => clearInterval(t)
+  }, [paused])
+
+  useEffect(() => {
+    if (lines >= TERMINAL.length) return
+    const t = setTimeout(() => setLines(v => v + 1), 480)
+    return () => clearTimeout(t)
+  }, [lines])
+
+  const stage = STAGES[active]
+
+  const cta = 'tag inline-flex items-center justify-center gap-1.5 border transition-colors'
+
   return (
-    <div className="relative min-h-screen bg-background">
-      <Backdrop />
-      <Nav />
-      <Hero />
-      <Features />
-      <Stack />
-      <Footer />
+    <div className="min-h-screen bg-paper">
+      <nav className="sticky top-0 z-50 flex items-center gap-3 border-b border-rule bg-paper/95 px-4 py-2 backdrop-blur">
+        <Logo size={17} />
+        <span className="text-[11.5px] font-bold tracking-tight text-ink">
+          document<span className="text-hot">·</span>anything
+        </span>
+        <Chip>v0.4.1</Chip>
+        <div className="ml-auto flex items-center gap-3">
+          <a href="#pipeline" className="tag hidden text-ink-dim transition-colors hover:text-ink sm:block">
+            Pipeline
+          </a>
+          <a
+            href="https://github.com/document-anything"
+            target="_blank"
+            rel="noreferrer"
+            className="tag flex items-center gap-1.5 text-ink-dim transition-colors hover:text-ink"
+          >
+            <GitHubMark size={12} /> Source
+          </a>
+          <Link
+            to={enterTo}
+            className={`${cta} border-ink bg-ink px-3 py-[7px] text-paper hover:border-hot hover:bg-hot`}
+          >
+            {enterLabel}
+          </Link>
+        </div>
+      </nav>
+
+      {/* hero */}
+      <section className="bp-grid border-b border-rule">
+        <div className="mx-auto grid max-w-[1180px] grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+          <div className="border-rule px-5 py-10 lg:border-r lg:py-14">
+            <div className="mb-5 flex flex-wrap gap-1.5">
+              <Chip>open source</Chip>
+              <Chip>MIT</Chip>
+              <Chip>self-hosted</Chip>
+              <Chip tone="hot">● runs fully offline</Chip>
+            </div>
+
+            <h1 className="mb-5 text-[clamp(30px,5.4vw,58px)] leading-[0.95] font-bold tracking-[-0.045em] text-ink">
+              Documentation
+              <br />
+              that reads your
+              <br />
+              <span className="relative inline-block">
+                <span className="relative z-10 text-hot">code first.</span>
+                <span className="absolute inset-x-0 bottom-[0.1em] z-0 h-[0.16em] bg-hot/20" />
+              </span>
+            </h1>
+
+            <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
+              Point it at a repository. It analyses the codebase, builds a structured knowledge
+              base, then writes real prose — architecture guides, API references, getting-started
+              guides — from that knowledge base rather than from a chat session.
+            </p>
+            <p className="mb-6 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
+              Everything runs on your machine against a local LLM.{' '}
+              <strong className="font-semibold text-ink">No code leaves the box.</strong>
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={enterTo}
+                className={`${cta} border-hot bg-hot px-5 py-2.5 text-on-hot hover:border-hot-press hover:bg-hot-press`}
+              >
+                {enterLabel}
+              </Link>
+              <a
+                href="https://github.com/document-anything"
+                target="_blank"
+                rel="noreferrer"
+                className={`${cta} border-rule bg-panel px-3 py-[10px] text-ink-mid hover:border-ink hover:text-ink`}
+              >
+                <GitHubMark size={12} /> Read the source
+              </a>
+            </div>
+          </div>
+
+          {/* terminal */}
+          <div className="flex flex-col justify-center border-t border-rule px-5 py-8 lg:border-t-0">
+            <div className="border border-ink bg-term">
+              <div className="tag flex items-center gap-2 border-b border-term-rule px-3 py-2 text-term-dim">
+                <span className="size-[6px] rotate-45 bg-hot" />
+                job #38 — analysis
+                <span className="ml-auto">local</span>
+              </div>
+              <div className="px-3 py-2.5">
+                {TERMINAL.slice(0, lines).map((l, i) => (
+                  <div
+                    key={i}
+                    className={`anim-rise overflow-x-auto text-[11px] leading-[1.75] whitespace-pre ${
+                      l.t === 'cmd' ? 'text-on-ink' : l.t === 'live' ? 'text-term-dim' : 'text-term-ok'
+                    }`}
+                  >
+                    {l.s}
+                    {l.t === 'live' && i === lines - 1 && <span className="anim-blink text-hot">▌</span>}
+                  </div>
+                ))}
+              </div>
+              <div className="tag flex items-center gap-2 border-t border-term-rule px-3 py-1.5 text-term-dim">
+                <span>elapsed 2m 32s</span>
+                <span className="ml-auto text-hot">6/7 stages</span>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-px border border-rule bg-rule">
+              {[
+                ['zero', 'bytes uploaded'],
+                ['14', 'local agents'],
+                ['1', 'read per commit'],
+              ].map(([v, k]) => (
+                <div key={k} className="bg-panel px-2.5 py-2">
+                  <div className="text-[16px] leading-none font-bold text-ink">{v}</div>
+                  <div className="tag mt-1 text-ink-dim">{k}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ticker */}
+      <div className="overflow-hidden border-b border-rule bg-term py-1.5">
+        <div className="flex w-max gap-6 whitespace-nowrap" style={{ animation: 'ticker 38s linear infinite' }}>
+          {[...AGENTS, ...AGENTS].map((a, i) => (
+            <span key={i} className="tag flex items-center gap-2 text-term-dim">
+              <span className="size-[4px] rotate-45 bg-hot" />
+              {a}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* pipeline */}
+      <section id="pipeline" className="mx-auto max-w-[1180px] px-5 py-12">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
+          <div>
+            <p className="tag mb-2 text-hot-ink">How it works</p>
+            <h2 className="text-[clamp(20px,3vw,34px)] leading-[1.05] font-bold tracking-[-0.035em] text-ink">
+              Analyse once.
+              <br />
+              Write as many times as you need.
+            </h2>
+          </div>
+          <button
+            onClick={() => setPaused(p => !p)}
+            className="tag border border-rule bg-panel px-3 py-2 text-ink-dim transition-colors hover:border-ink hover:text-ink"
+          >
+            {paused ? '▶ resume' : '❚❚ pause'}
+          </button>
+        </div>
+
+        <div className="mb-4 border border-rule bg-panel p-4">
+          <FlowDiagram active={active} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-px border border-rule bg-rule lg:grid-cols-4">
+          {STAGES.map((s, i) => {
+            const cur = active === i
+            return (
+              <button
+                key={s.num}
+                onClick={() => {
+                  setActive(i)
+                  setPaused(true)
+                }}
+                className={`relative px-3 py-2.5 text-left transition-colors ${
+                  cur ? 'bg-hot-wash' : 'bg-panel hover:bg-sunk'
+                }`}
+              >
+                {cur && <span className="absolute inset-x-0 top-0 h-[2px] bg-hot" />}
+                <span className={`tag block ${cur ? 'text-hot-ink' : 'text-ink-dim'}`}>{s.num}</span>
+                <span className="mt-1.5 block text-[14px] font-bold tracking-tight text-ink">{s.name}</span>
+                <span className="mt-0.5 block text-[10.5px] text-ink-dim">{s.tagline}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div
+          key={active}
+          className="anim-rise grid grid-cols-1 gap-5 border border-t-0 border-rule bg-panel p-4 lg:grid-cols-[minmax(0,1fr)_300px]"
+        >
+          <div>
+            <p className="tag mb-2.5 text-hot-ink">{stage.tagline}</p>
+            <p className="mb-4 max-w-[56ch] font-sans text-[13.5px] leading-[1.75] text-ink-mid">
+              {stage.desc}
+            </p>
+            {!paused && (
+              <div className="flex items-center gap-2.5">
+                <span className="h-[2px] w-40 overflow-hidden bg-rule">
+                  <span className="block h-full bg-hot" style={{ animation: 'sweep 3.2s linear' }} />
+                </span>
+                <span className="tag text-ink-dim">
+                  {active + 1} / {STAGES.length}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-px self-start border border-rule bg-rule">
+            {stage.facts.map(([k, v]) => (
+              <div key={k} className="bg-paper px-2.5 py-2">
+                <div className="tag mb-1 text-ink-dim">{k}</div>
+                <div className="text-[14px] leading-none font-bold text-ink">{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* claims */}
+      <section className="border-y border-rule bg-panel">
+        <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-px bg-rule md:grid-cols-3">
+          {[
+            ['Evidence, not vibes', 'A section on authentication only appears if the analyser actually found auth. Every claim is traceable back to a file and line.'],
+            ['Local by construction', 'Point the endpoint at LM Studio or Ollama and the process never opens a socket to the internet. Your source stays yours.'],
+            ['Cheap to re-run', 'The expensive read happens once per commit. Asking for a fifth document costs a composition pass, not another full analysis.'],
+          ].map(([t, d], i) => (
+            <div key={t} className="group bg-panel px-5 py-8 transition-colors hover:bg-hot-wash/50">
+              <div className="tag mb-3 text-rule transition-colors group-hover:text-hot">
+                {String(i + 1).padStart(2, '0')}
+              </div>
+              <h3 className="mb-2 text-[15px] font-bold tracking-tight text-ink">{t}</h3>
+              <p className="font-sans text-[12.5px] leading-relaxed text-ink-mid">{d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* cta */}
+      <section className="bp-hatch border-b border-rule px-5 py-14 text-center">
+        <h2 className="mb-3 text-[clamp(20px,3.4vw,34px)] leading-tight font-bold tracking-[-0.035em] text-ink">
+          Stop writing docs your code
+          <br />
+          already knows.
+        </h2>
+        <p className="mx-auto mb-6 max-w-[48ch] font-sans text-[13.5px] leading-relaxed text-ink-mid">
+          Clone it, point it at a repository, and read what comes out.
+        </p>
+        <Link
+          to={enterTo}
+          className={`${cta} border-hot bg-hot px-6 py-3 text-on-hot hover:border-hot-press hover:bg-hot-press`}
+        >
+          {enterLabel}
+        </Link>
+      </section>
+
+      <footer className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-3 px-5 py-5">
+        <Logo size={15} />
+        <span className="tag text-ink-dim">document-anything · MIT licence · free forever</span>
+        <a
+          href="https://github.com/document-anything"
+          target="_blank"
+          rel="noreferrer"
+          className="tag ml-auto flex items-center gap-1.5 text-ink-dim transition-colors hover:text-ink"
+        >
+          <GitHubMark size={12} /> github.com/document-anything
+        </a>
+      </footer>
     </div>
-  );
+  )
 }

@@ -1,0 +1,201 @@
+@import 'tailwindcss';
+@import './styles/theme.css';
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--hot);
+  color: var(--on-hot);
+}
+
+/* --- blueprint ground ------------------------------------------------- */
+.bp-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.bp-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--hatch-line) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* --- brutalist plate: hard offset shadow on hover --------------------- */
+.plate {
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  transition:
+    transform 0.14s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.14s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.14s;
+}
+.plate-lift:hover {
+  border-color: var(--ink);
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 0 var(--ink);
+}
+.plate-lift:hover .plate-arrow {
+  transform: translateX(3px);
+  color: var(--hot-ink);
+}
+.plate-hot:hover {
+  border-color: var(--hot);
+  box-shadow: 4px 4px 0 0 var(--hot);
+}
+
+.plate-arrow {
+  transition:
+    transform 0.14s ease,
+    color 0.14s ease;
+}
+
+/* --- micro label ------------------------------------------------------ */
+.tag {
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* --- focus ------------------------------------------------------------ */
+*:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: 1px;
+}
+
+/* --- scrollbars: hidden until scroll ---------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover,
+*:focus-within {
+  scrollbar-color: var(--rule) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  background-clip: content-box;
+}
+
+/* --- motion ----------------------------------------------------------- */
+@keyframes flow {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes sweep {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: -320px 0;
+  }
+  to {
+    background-position: 320px 0;
+  }
+}
+
+.anim-rise {
+  animation: rise 0.22s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.anim-flow {
+  stroke-dasharray: 5 7;
+  animation: flow 14s linear infinite;
+}
+.anim-spin {
+  animation: spin 0.7s linear infinite;
+}
+.anim-blink {
+  animation: blink 1.05s step-end infinite;
+}
+
+/* skeleton loading bar */
+.skel {
+  background-image: linear-gradient(
+    90deg,
+    var(--sunk) 0%,
+    var(--panel) 50%,
+    var(--sunk) 100%
+  );
+  background-size: 320px 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.25s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,393 +1,281 @@
-import { useEffect, useState } from 'react';
-import { useAuth } from '../../lib/auth';
-import { apiGet, apiPut, apiPost } from '../../lib/api';
-import type { LLMSettings, TemplateSettings, DocType } from '../../lib/types';
-import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
-import { Spinner } from '../../components/shared/Spinner';
-import { toast } from 'sonner';
+import { useEffect, useState } from 'react'
+import { api, ApiError } from '../../lib/api'
+import { useAsync } from '../../lib/hooks'
+import type { LLMSettings } from '../../lib/types'
+import { Button, Field, PageHead, Panel, inputClass } from '../../components/ui'
+import { ErrorState, SkeletonPanel, Working } from '../../components/States'
 
-const DOC_TYPES: DocType[] = ['architecture', 'api', 'modules', 'getting_started', 'deployment', 'contributing', 'changelog'];
-const TEMPLATE_VARS = [
-  { name: '{project_name}', desc: 'Name of the project' },
-  { name: '{file_listing}', desc: 'List of files in the repository' },
-  { name: '{api_context}', desc: 'Extracted API context' },
-  { name: '{module_context}', desc: 'Module dependency information' },
-  { name: '{git_history}', desc: 'Recent commit history' },
-];
+/* ------------------------------------------------------------------ *
+ * Settings — LLM configuration (admin-only in the real system).
+ *
+ * GET /settings/llm  →  show current values
+ * PUT /settings/llm  →  save
+ *
+ * The form mirrors the LLMSettings shape exactly; no field is omitted.
+ * ------------------------------------------------------------------ */
 
-const DEFAULT_LLM: LLMSettings = {
-  base_url: 'http://localhost:1234/v1',
-  api_key: 'lm-studio',
-  default_model: 'local-model',
-  quality_model: 'local-model',
-  fast_model: 'local-model',
-  max_tokens: 8192,
+const DEFAULTS: LLMSettings = {
+  base_url: 'http://localhost:11434/v1',
+  api_key: '',
+  default_model: 'llama3.1:8b',
+  quality_model: 'llama3.1:70b',
+  fast_model: 'llama3.1:8b',
   temperature: 0.2,
-  max_react_iterations: 20,
-};
-
-type Tab = 'llm' | 'templates' | 'organization' | 'profile';
-
-function LLMTab() {
-  const [settings, setSettings] = useState<LLMSettings>(DEFAULT_LLM);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
-
-  useEffect(() => {
-    apiGet<LLMSettings>('/api/v1/settings/llm')
-      .then(s => setSettings(s))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await apiPut('/api/v1/settings/llm', settings);
-      toast.success('LLM settings saved');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTest = async () => {
-    setTestStatus('testing');
-    try {
-      await fetch(settings.base_url + '/models', {
-        headers: { 'Authorization': `Bearer ${settings.api_key}` }
-      });
-      setTestStatus('ok');
-      setTimeout(() => setTestStatus('idle'), 3000);
-    } catch {
-      setTestStatus('fail');
-      setTimeout(() => setTestStatus('idle'), 3000);
-    }
-  };
-
-  const set = (key: keyof LLMSettings, val: string | number) => setSettings(s => ({ ...s, [key]: val }));
-
-  if (loading) return <div className="flex justify-center py-10"><Spinner className="text-muted-foreground" /></div>;
-
-  return (
-    <div className="space-y-5">
-      <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-        <p className="text-amber-700 dark:text-amber-300" style={{ fontSize: '0.8125rem' }}>
-          ⚠ Changes take effect on the next documentation job. Running jobs use the configuration they started with.
-        </p>
-      </div>
-
-      {([
-        { key: 'base_url', label: 'LLM Base URL', type: 'text', placeholder: 'http://localhost:1234/v1' },
-        { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'lm-studio' },
-        { key: 'default_model', label: 'Default Model', type: 'text', placeholder: 'local-model' },
-        { key: 'quality_model', label: 'Quality Model', type: 'text', placeholder: 'local-model' },
-        { key: 'fast_model', label: 'Fast Model', type: 'text', placeholder: 'local-model' },
-        { key: 'max_tokens', label: 'Max Tokens', type: 'number', placeholder: '8192' },
-        { key: 'max_react_iterations', label: 'Max ReAct Iterations', type: 'number', placeholder: '20' },
-      ] as { key: keyof LLMSettings; label: string; type: string; placeholder: string }[]).map(field => (
-        <div key={field.key}>
-          <label className="block text-foreground mb-1.5" style={{ fontSize: '0.875rem', fontWeight: 500 }}>{field.label}</label>
-          <input type={field.type} value={String(settings[field.key])} onChange={e => set(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
-            placeholder={field.placeholder}
-            className="w-full px-3 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            style={{ fontSize: '0.9rem', fontFamily: field.type === 'text' && field.key !== 'default_model' ? 'var(--font-mono)' : undefined }} />
-        </div>
-      ))}
-
-      <div>
-        <label className="block text-foreground mb-2" style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-          Temperature: <span style={{ fontFamily: 'var(--font-mono)' }}>{settings.temperature.toFixed(2)}</span>
-        </label>
-        <input type="range" min={0} max={1} step={0.05} value={settings.temperature}
-          onChange={e => set('temperature', parseFloat(e.target.value))}
-          className="w-full accent-primary" />
-        <div className="flex justify-between text-muted-foreground mt-1" style={{ fontSize: '0.75rem' }}>
-          <span>0 (deterministic)</span><span>1 (creative)</span>
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <button onClick={handleTest} disabled={testStatus === 'testing'}
-          className={`px-4 py-2 rounded-lg border transition-colors ${
-            testStatus === 'ok' ? 'border-green-500 text-green-600' :
-            testStatus === 'fail' ? 'border-destructive text-destructive' :
-            'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
-          }`}
-          style={{ fontSize: '0.875rem' }}>
-          {testStatus === 'testing' ? 'Testing...' : testStatus === 'ok' ? '✓ Connected' : testStatus === 'fail' ? '✗ Failed' : 'Test Connection'}
-        </button>
-        <button onClick={handleSave} disabled={saving}
-          className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
-          style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
-    </div>
-  );
+  max_tokens: 4096,
+  max_react_iterations: 10,
 }
 
-function TemplatesTab() {
-  const [templates, setTemplates] = useState<Record<string, string>>({});
-  const [selectedType, setSelectedType] = useState<DocType>('architecture');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [showVars, setShowVars] = useState(false);
+function NumericField({
+  label,
+  name,
+  help,
+  value,
+  onChange,
+  step = 1,
+  min,
+  max,
+}: {
+  label: string
+  name: string
+  help?: string
+  value: number
+  onChange: (v: number) => void
+  step?: number
+  min?: number
+  max?: number
+}) {
+  return (
+    <Field label={label} help={help}>
+      <input
+        type="number"
+        name={name}
+        value={value}
+        step={step}
+        min={min}
+        max={max}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        className={inputClass}
+      />
+    </Field>
+  )
+}
+
+function TextField({
+  label,
+  name,
+  help,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string
+  name: string
+  help?: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+}) {
+  return (
+    <Field label={label} help={help}>
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className={inputClass}
+      />
+    </Field>
+  )
+}
+
+function SettingsForm({ initial }: { initial: LLMSettings }) {
+  const [form, setForm] = useState<LLMSettings>(initial)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    apiGet<TemplateSettings[]>('/api/v1/settings/templates')
-      .then(data => {
-        const map: Record<string, string> = {};
-        data.forEach(t => { map[t.doc_type] = t.system_prompt; });
-        setTemplates(map);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    setForm(initial)
+    setDirty(false)
+  }, [initial])
 
-  const handleSave = async () => {
-    setSaving(true);
+  function set<K extends keyof LLMSettings>(k: K, v: LLMSettings[K]) {
+    setForm(prev => ({ ...prev, [k]: v }))
+    setDirty(true)
+    setSaved(false)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
     try {
-      await apiPut('/api/v1/settings/templates', {
-        doc_type: selectedType,
-        system_prompt: templates[selectedType] || '',
-      });
-      toast.success('Template saved');
+      await api.putLlmSettings(form)
+      setSaved(true)
+      setDirty(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed');
+      setError(err instanceof ApiError ? err.message : 'Failed to save settings.')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
-
-  if (loading) return <div className="flex justify-center py-10"><Spinner className="text-muted-foreground" /></div>;
+  }
 
   return (
-    <div className="grid lg:grid-cols-[200px_1fr] gap-5">
-      <div className="space-y-1">
-        {DOC_TYPES.map(t => (
-          <button key={t} onClick={() => setSelectedType(t)}
-            className={`w-full text-left px-3 py-2 rounded-lg capitalize transition-colors ${selectedType === t ? 'bg-secondary text-foreground font-medium' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
-            style={{ fontSize: '0.875rem' }}>
-            {t.replace(/_/g, ' ')}
-          </button>
-        ))}
-      </div>
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-foreground capitalize" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>{selectedType.replace(/_/g, ' ')} Template</h3>
-          <button onClick={() => setShowVars(v => !v)} className="text-brand hover:underline" style={{ fontSize: '0.8125rem' }}>
-            {showVars ? 'Hide' : 'Show'} variables
-          </button>
-        </div>
-        {showVars && (
-          <div className="mb-4 p-3 rounded-lg bg-secondary border border-border">
-            <p className="text-foreground mb-2" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>Available variables:</p>
-            {TEMPLATE_VARS.map(v => (
-              <div key={v.name} className="flex gap-3 mb-1">
-                <code className="text-brand flex-shrink-0" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>{v.name}</code>
-                <span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>{v.desc}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <textarea value={templates[selectedType] || ''} onChange={e => setTemplates(prev => ({ ...prev, [selectedType]: e.target.value }))}
-          rows={14}
-          className="w-full px-3 py-3 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', lineHeight: 1.6 }}
-          placeholder={`System prompt for ${selectedType.replace(/_/g, ' ')} documentation...`} />
-        <div className="flex gap-3 mt-3">
-          <ConfirmDialog
-            trigger={<button className="px-4 py-2 border border-border rounded-lg text-muted-foreground hover:text-destructive hover:border-destructive transition-colors" style={{ fontSize: '0.875rem' }}>Reset to Default</button>}
-            title="Reset template"
-            description={`This will reset the ${selectedType} template to its default. Your customizations will be lost.`}
-            confirmLabel="Reset"
-            variant="danger"
-            onConfirm={() => setTemplates(prev => ({ ...prev, [selectedType]: '' }))}
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      {/* Endpoint */}
+      <Panel title="Endpoint" index="01">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+          <TextField
+            label="Base URL"
+            name="base_url"
+            help="OpenAI-compatible base URL. Ollama: http://localhost:11434/v1"
+            value={form.base_url}
+            onChange={v => set('base_url', v)}
           />
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
-            style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-            {saving ? 'Saving...' : 'Save Template'}
-          </button>
+          <TextField
+            label="API Key"
+            name="api_key"
+            type="password"
+            help='Leave blank for Ollama or "ollama" for the default local key.'
+            value={form.api_key}
+            onChange={v => set('api_key', v)}
+          />
         </div>
-      </div>
-    </div>
-  );
-}
+      </Panel>
 
-function OrganizationTab() {
-  const [orgName, setOrgName] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await new Promise(r => setTimeout(r, 500));
-    toast.success('Organization settings saved');
-    setSaving(false);
-  };
-
-  return (
-    <div className="space-y-5 max-w-lg">
-      <div>
-        <label className="block text-foreground mb-1.5" style={{ fontSize: '0.875rem', fontWeight: 500 }}>Organization name</label>
-        <input value={orgName} onChange={e => setOrgName(e.target.value)} placeholder="Acme Corp"
-          className="w-full px-3 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          style={{ fontSize: '0.9rem' }} />
-      </div>
-      <div>
-        <label className="block text-foreground mb-2" style={{ fontSize: '0.875rem', fontWeight: 500 }}>Default output formats</label>
-        <div className="flex flex-wrap gap-2">
-          {['markdown', 'docx', 'mkdocs', 'docusaurus'].map(f => (
-            <label key={f} className="flex items-center gap-2 cursor-pointer capitalize">
-              <input type="checkbox" defaultChecked={f === 'markdown'} className="accent-primary" />
-              <span className="text-foreground" style={{ fontSize: '0.875rem' }}>{f}</span>
-            </label>
-          ))}
+      {/* Models */}
+      <Panel title="Models" index="02">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
+          <TextField
+            label="Default model"
+            name="default_model"
+            help="Used when no quality tier is specified."
+            value={form.default_model}
+            onChange={v => set('default_model', v)}
+          />
+          <TextField
+            label="Quality model"
+            name="quality_model"
+            help="Used for high-stakes generation steps."
+            value={form.quality_model}
+            onChange={v => set('quality_model', v)}
+          />
+          <TextField
+            label="Fast model"
+            name="fast_model"
+            help="Used for quick, low-cost steps."
+            value={form.fast_model}
+            onChange={v => set('fast_model', v)}
+          />
         </div>
-      </div>
-      <button onClick={handleSave} disabled={saving}
-        className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
-        style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-        {saving ? 'Saving...' : 'Save Changes'}
-      </button>
-    </div>
-  );
-}
+      </Panel>
 
-function ProfileTab() {
-  const { user } = useAuth();
-  const [currentPw, setCurrentPw] = useState('');
-  const [newPw, setNewPw] = useState('');
-  const [confirmPw, setConfirmPw] = useState('');
-  const [pwLoading, setPwLoading] = useState(false);
+      {/* Sampling */}
+      <Panel title="Sampling" index="03">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
+          <NumericField
+            label="Temperature"
+            name="temperature"
+            help="0.0 = deterministic · 1.0 = creative"
+            value={form.temperature}
+            onChange={v => set('temperature', v)}
+            step={0.05}
+            min={0}
+            max={2}
+          />
+          <NumericField
+            label="Max tokens"
+            name="max_tokens"
+            help="Upper bound per LLM call."
+            value={form.max_tokens}
+            onChange={v => set('max_tokens', v)}
+            min={256}
+            max={128000}
+          />
+          <NumericField
+            label="Max ReAct iterations"
+            name="max_react_iterations"
+            help="How many reasoning loops the agents may run."
+            value={form.max_react_iterations}
+            onChange={v => set('max_react_iterations', v)}
+            min={1}
+            max={50}
+          />
+        </div>
+      </Panel>
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPw !== confirmPw) { toast.error("Passwords don't match"); return; }
-    setPwLoading(true);
-    try {
-      await apiPost('/api/v1/auth/change-password', { current_password: currentPw, new_password: newPw });
-      toast.success('Password updated');
-      setCurrentPw(''); setNewPw(''); setConfirmPw('');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed';
-      if (msg.includes('404') || msg.includes('not found')) toast.error('Password change not available yet');
-      else toast.error(msg);
-    } finally {
-      setPwLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6 max-w-lg">
-      <div className="space-y-4">
-        <div>
-          <label className="block text-muted-foreground mb-1" style={{ fontSize: '0.8125rem' }}>Full name</label>
-          <input defaultValue={user?.full_name} readOnly className="w-full px-3 py-2.5 rounded-lg border border-border bg-secondary text-muted-foreground" style={{ fontSize: '0.9rem' }} />
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1" style={{ fontSize: '0.8125rem' }}>Email</label>
-          <input defaultValue={user?.email} readOnly className="w-full px-3 py-2.5 rounded-lg border border-border bg-secondary text-muted-foreground" style={{ fontSize: '0.9rem' }} />
-          <p className="mt-1 text-muted-foreground" style={{ fontSize: '0.75rem' }}>Contact support to change your email.</p>
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1" style={{ fontSize: '0.8125rem' }}>Role</label>
-          <span className="inline-block px-2.5 py-1 rounded-full bg-secondary text-foreground capitalize" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{user?.role}</span>
-        </div>
-        {user?.created_at && (
-          <div>
-            <label className="block text-muted-foreground mb-1" style={{ fontSize: '0.8125rem' }}>Member since</label>
-            <span className="text-foreground" style={{ fontSize: '0.875rem' }}>{new Date(user.created_at).toLocaleDateString()}</span>
-          </div>
+      {/* Footer */}
+      <div className="flex items-center gap-3">
+        <Button type="submit" variant="hot" disabled={saving || !dirty}>
+          {saving ? 'Saving…' : 'Save settings'}
+        </Button>
+        {saving && <Working label="Saving" />}
+        {saved && !dirty && (
+          <span className="tag flex items-center gap-1.5 text-ok">
+            <span className="block size-[5px] bg-ok" /> Saved
+          </span>
+        )}
+        {error && <span className="tag text-bad">{error}</span>}
+        {dirty && !saving && (
+          <span className="tag text-ink-dim">Unsaved changes</span>
         )}
       </div>
 
-      <div className="border-t border-border pt-5">
-        <h3 className="text-foreground mb-4" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>Change Password</h3>
-        <form onSubmit={handleChangePassword} className="space-y-3">
-          {[
-            { label: 'Current password', val: currentPw, set: setCurrentPw },
-            { label: 'New password', val: newPw, set: setNewPw },
-            { label: 'Confirm new password', val: confirmPw, set: setConfirmPw },
-          ].map(f => (
-            <div key={f.label}>
-              <label className="block text-foreground mb-1.5" style={{ fontSize: '0.875rem', fontWeight: 500 }}>{f.label}</label>
-              <input type="password" value={f.val} onChange={e => f.set(e.target.value)} required
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                style={{ fontSize: '0.9rem' }} />
-            </div>
-          ))}
-          <button type="submit" disabled={pwLoading}
-            className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
-            style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-            {pwLoading ? 'Updating...' : 'Update Password'}
-          </button>
-        </form>
+      {/* Reset */}
+      <div className="border-t border-rule pt-4">
+        <button
+          type="button"
+          className="tag text-ink-dim underline-offset-2 hover:text-bad hover:underline transition-colors"
+          onClick={() => {
+            setForm(DEFAULTS)
+            setDirty(true)
+            setSaved(false)
+          }}
+        >
+          Reset to defaults
+        </button>
       </div>
-
-      <div className="border border-destructive/30 rounded-xl p-4">
-        <h3 className="text-destructive mb-2" style={{ fontSize: '0.9rem', fontWeight: 600 }}>Danger Zone</h3>
-        <p className="text-muted-foreground mb-3" style={{ fontSize: '0.8125rem' }}>Permanently delete your account and all associated data.</p>
-        <ConfirmDialog
-          trigger={<button className="px-4 py-2 border border-destructive text-destructive rounded-lg hover:bg-destructive/10 transition-colors" style={{ fontSize: '0.875rem' }}>Delete Account</button>}
-          title="Delete account"
-          description="Are you absolutely sure? This action cannot be undone."
-          confirmLabel="Delete Account"
-          variant="danger"
-          onConfirm={() => toast.error('Account deletion not implemented yet')}
-        />
-      </div>
-    </div>
-  );
+    </form>
+  )
 }
-
-const TABS: { key: Tab; label: string; adminOnly?: boolean }[] = [
-  { key: 'llm', label: 'LLM Configuration', adminOnly: true },
-  { key: 'templates', label: 'Doc Templates', adminOnly: true },
-  { key: 'organization', label: 'Organization', adminOnly: true },
-  { key: 'profile', label: 'User Profile' },
-];
 
 export default function SettingsPage() {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
-
-  useEffect(() => {
-    if (user?.role === 'admin') setActiveTab('llm');
-  }, [user?.role]);
-
-  if (!user) return null;
-
-  const visibleTabs = TABS.filter(t => !t.adminOnly || user.role === 'admin');
+  const { data, loading, error, reload } = useAsync(sig => api.llmSettings(), [])
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-foreground" style={{ fontSize: '1.375rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>Settings</h1>
-        <p className="text-muted-foreground mt-0.5" style={{ fontSize: '0.875rem' }}>Manage your account and application configuration</p>
-      </div>
+    <div className="mx-auto max-w-[900px] p-5">
+      <PageHead
+        index="06"
+        title="Settings"
+        sub="LLM endpoint and sampling configuration"
+      />
 
-      <div className="grid lg:grid-cols-[220px_1fr] gap-6">
-        <nav className="space-y-1">
-          {visibleTabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={`w-full text-left px-4 py-2.5 rounded-lg transition-colors ${activeTab === tab.key ? 'bg-secondary text-foreground font-medium' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}
-              style={{ fontSize: '0.875rem' }}>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="bg-card border border-border rounded-xl p-6">
-          {activeTab === 'llm' && user.role === 'admin' && <LLMTab />}
-          {activeTab === 'templates' && user.role === 'admin' && <TemplatesTab />}
-          {activeTab === 'organization' && user.role === 'admin' && <OrganizationTab />}
-          {activeTab === 'profile' && <ProfileTab />}
+      {/* Info strip */}
+      <div className="mb-5 border border-rule bg-sunk/40 px-4 py-3">
+        <div className="flex items-start gap-2.5">
+          <span className="block size-[7px] rotate-45 bg-hot shrink-0 mt-1" />
+          <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
+            Document Anything connects to any OpenAI-compatible LLM endpoint.
+            Configure Ollama locally or point at a hosted provider.
+            Changes take effect for the next job run.
+          </p>
         </div>
       </div>
+
+      {loading ? (
+        <div className="flex flex-col gap-4">
+          <SkeletonPanel rows={3} />
+          <SkeletonPanel rows={3} />
+        </div>
+      ) : error ? (
+        <ErrorState
+          message={`Could not load settings: ${error}`}
+          onRetry={reload}
+        />
+      ) : (
+        <SettingsForm initial={data ?? DEFAULTS} />
+      )}
     </div>
-  );
+  )
 }

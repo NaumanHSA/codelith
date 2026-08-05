@@ -1,588 +1,514 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router';
-import { ArrowLeft, Plus, Trash2, Play, Eye, Github, GitBranch, Upload, HardDrive, Globe } from 'lucide-react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { apiGet, apiPost, apiDelete } from '../../lib/api';
-import type { Project, Job, Document, DocType, OutputFormat } from '../../lib/types';
-import { StatusBadge } from '../../components/shared/StatusBadge';
-import { KnowledgeBasePanel } from '../../components/knowledge/KnowledgeBasePanel';
-import { Spinner } from '../../components/shared/Spinner';
-import { EmptyState } from '../../components/shared/EmptyState';
-import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
-import { SourceFormBody, submitSource } from './ProjectsPage';
-import type { SourceTab } from './ProjectsPage';
-import { Badge, StatusPill } from '../../components/shared/Badge';
-import { elapsedSeconds, formatDuration, humanize } from '../../lib/format';
-import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { api, ApiError } from '../../lib/api'
+import { useAsync } from '../../lib/hooks'
+import { useAuth } from '../../auth'
+import { useRunningJobs } from '../../running-jobs'
+import { countLabel, humanize, languageShares, relativeTime, shortSha } from '../../lib/format'
+import { confidenceLabel, docTypeMeta, DOC_TYPES, OUTPUT_FORMATS } from '../../lib/docTypes'
+import type { DocType, Job, KnowledgeBase, OutputFormat, Project } from '../../lib/types'
+import { Button, Chip, Eyebrow, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
+import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
+import KnowledgeMap from '../../components/projects/KnowledgeMap'
 
-function AddSourceModal({ projectId, onAdded }: { projectId: string; onAdded: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [sourceTab, setSourceTab] = useState<SourceTab>('github');
-  const [sourceUrl, setSourceUrl] = useState('');
-  const [branch, setBranch] = useState('main');
-  const [token, setToken] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
+/* ------------------------------------------------------------------ *
+ * A project has two lives: before analysis and after.
+ *
+ * GET /knowledge-base resolves to null when a project has never been
+ * analysed — that null is the signal, not an error, and it decides
+ * which of the two screens below is shown.
+ * ------------------------------------------------------------------ */
 
-  const reset = () => { setSourceTab('github'); setSourceUrl(''); setBranch('main'); setToken(''); setUploadFile(null); };
-  const hasSource = sourceTab === 'upload' ? !!uploadFile : !!sourceUrl.trim();
-
-  const handleAdd = async () => {
-    if (!hasSource) return;
-    setLoading(true);
-    try {
-      await submitSource(projectId, sourceTab, sourceUrl, branch, token, uploadFile);
-      toast.success('Source added!');
-      onAdded();
-      setOpen(false);
-      reset();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add source');
-    } finally {
-      setLoading(false);
-    }
-  };
+function SourcePanel({ project }: { project: Project }) {
+  const source = project.sources?.[0]
+  const probe = source?.config_json?.probe
+  const shares = languageShares(probe?.languages)
 
   return (
-    <Dialog.Root open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
-      <Dialog.Trigger asChild>
-        <button className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-border rounded-lg text-foreground hover:bg-secondary transition-colors"
-          style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-          <Plus size={14} /> Add Source
-        </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <Dialog.Title className="text-foreground" style={{ fontSize: '1rem', fontWeight: 600 }}>
-              Add Source
-            </Dialog.Title>
-            <Dialog.Close className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-              <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>×</span>
-            </Dialog.Close>
+    <Panel title="Source" action={<span className="tag text-ink-dim">{source?.source_type}</span>}>
+      <div className="px-3 py-2.5">
+        <a
+          href={source?.source_type === 'local' ? undefined : source?.url_or_path}
+          target="_blank"
+          rel="noreferrer"
+          className="block truncate text-[12px] text-hot-ink hover:underline"
+        >
+          {source?.url_or_path ?? 'No source attached.'}
+        </a>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+          <span className="tag text-ink-dim">branch {source?.branch ?? 'default'}</span>
+          <span className="tag text-ink-dim">sha {shortSha(probe?.commit_sha)}</span>
+          <span className="tag text-ink-dim">
+            {probe?.file_count != null ? countLabel(probe.file_count, 'file') : 'unmeasured'}
+          </span>
+        </div>
+      </div>
+      {shares.length > 0 && (
+        <div className="border-t border-rule px-3 py-2.5">
+          <div className="flex h-[6px] w-full overflow-hidden border border-rule">
+            {shares.slice(0, 6).map((l, i) => (
+              <span
+                key={l.name}
+                title={`${l.name} · ${countLabel(l.count, 'file')}`}
+                style={{ width: `${l.pct}%`, opacity: 1 - i * 0.13 }}
+                className="block bg-hot"
+              />
+            ))}
           </div>
-          <SourceFormBody
-            sourceTab={sourceTab} setSourceTab={setSourceTab}
-            sourceUrl={sourceUrl} setSourceUrl={setSourceUrl}
-            branch={branch} setBranch={setBranch}
-            token={token} setToken={setToken}
-            uploadFile={uploadFile} setUploadFile={setUploadFile}
-          />
-          <div className="flex justify-end gap-2 mt-5">
-            <Dialog.Close asChild>
-              <button className="px-4 py-2 border border-border rounded-lg text-foreground hover:bg-secondary transition-colors" style={{ fontSize: '0.875rem' }}>
-                Cancel
-              </button>
-            </Dialog.Close>
-            <button onClick={handleAdd} disabled={loading || !hasSource}
-              className="px-5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center gap-2"
-              style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-              {loading
-                ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Adding...</>
-                : <><Plus size={14} /> Add Source</>}
-            </button>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+            {shares.slice(0, 5).map(l => (
+              <span key={l.name} className="tag text-ink-dim">
+                {l.name} {Math.round(l.pct)}%
+              </span>
+            ))}
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
+        </div>
+      )}
+    </Panel>
+  )
 }
 
-const DOC_TYPES: DocType[] = ['architecture', 'api', 'modules', 'getting_started', 'deployment', 'contributing', 'changelog'];
-const OUTPUT_FORMATS: OutputFormat[] = ['markdown', 'docx', 'mkdocs', 'docusaurus'];
+function ComposePanel({
+  project,
+  kb,
+  onStarted,
+}: {
+  project: Project
+  kb: KnowledgeBase
+  onStarted: (job: Job) => void
+}) {
+  const suggested = kb.suggested_doc_types ?? []
+  const suggestedTypes = suggested.map(s => s.doc_type)
+  const others = Object.keys(DOC_TYPES).filter(t => !suggestedTypes.includes(t)) as DocType[]
 
-const DOC_TYPE_ICONS: Record<DocType, string> = {
-  architecture: '🏗️', api: '🔌', modules: '📦', getting_started: '🚀',
-  deployment: '☁️', contributing: '🤝', changelog: '📋',
-};
+  // Pre-select what the analysis is confident about — the picker should
+  // open on a sensible plan, not an empty form.
+  const [picked, setPicked] = useState<DocType[]>(
+    suggested.filter(s => s.confidence >= 0.6).map(s => s.doc_type),
+  )
+  const [formats, setFormats] = useState<OutputFormat[]>(['markdown'])
+  const [review, setReview] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-function NewJobModal({ projectId, onCreated }: { projectId: string; onCreated: (j: Job) => void }) {
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState(1);
-  const [docTypes, setDocTypes] = useState<DocType[]>([]);
-  const [formats, setFormats] = useState<OutputFormat[]>(['markdown']);
-  const [requireReview, setRequireReview] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const toggle = (t: DocType) =>
+    setPicked(p => (p.includes(t) ? p.filter(x => x !== t) : [...p, t]))
 
-  const reset = () => { setStep(1); setDocTypes([]); setFormats(['markdown']); setRequireReview(false); };
+  const minutes = picked.reduce((s, t) => s + docTypeMeta(t).estMinutes, 0)
 
-  const toggleDocType = (t: DocType) => setDocTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-  const toggleFormat = (f: OutputFormat) => setFormats(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-
-  const handleStart = async () => {
-    setLoading(true);
+  const start = async () => {
+    if (!picked.length || !formats.length) return
+    setBusy(true)
+    setError(null)
     try {
-      const job = await apiPost<Job>(`/api/v1/projects/${projectId}/jobs`, {
-        config: { doc_types: docTypes, output_formats: formats, requires_human_review: requireReview }
-      });
-      toast.success('Job started!');
-      onCreated(job);
-      setOpen(false);
-      reset();
-      navigate(`/app/projects/${projectId}/jobs/${job.id}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start job');
-    } finally {
-      setLoading(false);
+      const job = await api.compose(project.id, {
+        doc_types: picked,
+        output_formats: formats,
+        human_review: review,
+        kb_id: kb.knowledge_base.id,
+      })
+      onStarted(job)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not start composition.')
+      setBusy(false)
     }
-  };
+  }
+
+  const card = (t: DocType, confidence?: number, reason?: string) => {
+    const meta = docTypeMeta(t)
+    const on = picked.includes(t)
+    return (
+      <button
+        key={t}
+        onClick={() => toggle(t)}
+        aria-pressed={on}
+        className={`plate plate-lift flex flex-col text-left ${on ? 'plate-hot' : ''}`}
+      >
+        <span className="flex items-center gap-2 border-b border-rule px-2.5 py-1.5">
+          <span
+            className={`block size-[9px] shrink-0 rotate-45 border ${
+              on ? 'border-hot bg-hot' : 'border-ink-dim bg-transparent'
+            }`}
+          />
+          <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-ink">
+            {meta.title}
+          </span>
+          {confidence != null && (
+            <span className="tag shrink-0 text-ink-dim">{confidenceLabel(confidence)}</span>
+          )}
+        </span>
+        <span className="flex-1 px-2.5 py-2">
+          <span className="block font-sans text-[11.5px] leading-relaxed text-ink-mid">
+            {reason || meta.blurb}
+          </span>
+          <span className="mt-1.5 flex flex-wrap gap-1">
+            {meta.contains.map(c => (
+              <span key={c} className="tag border border-rule px-1 py-px text-ink-dim">
+                {c}
+              </span>
+            ))}
+          </span>
+        </span>
+        {confidence != null && (
+          <span className="border-t border-rule px-2.5 py-1.5">
+            <Meter pct={confidence * 100} segments={16} />
+          </span>
+        )}
+      </button>
+    )
+  }
 
   return (
-    <Dialog.Root open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
-      <Dialog.Trigger asChild>
-        <button className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-          <Play size={15} /> Run Documentation Job
-        </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <Dialog.Title className="text-foreground" style={{ fontSize: '1rem', fontWeight: 600 }}>
-              {step === 1 ? 'Select Doc Types' : step === 2 ? 'Output Formats' : 'Review Options'}
-            </Dialog.Title>
-            <div className="flex gap-1.5">
-              {[1,2,3].map(s => (
-                <div key={s} className={`h-1.5 rounded-full transition-all ${s <= step ? 'w-8 bg-primary' : 'w-5 bg-border'}`} />
+    <Panel
+      title="Compose documentation"
+      action={<span className="tag text-ink-dim">{countLabel(picked.length, 'doc')} selected</span>}
+    >
+      <div className="p-3">
+        {error && <ErrorState message={error} compact />}
+
+        {suggested.length > 0 && (
+          <>
+            <Eyebrow>Suggested by the analysis</Eyebrow>
+            <div className="mt-2 mb-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+              {suggested.map(s => card(s.doc_type, s.confidence, s.reason))}
+            </div>
+          </>
+        )}
+
+        {others.length > 0 && (
+          <>
+            <Eyebrow>Also available</Eyebrow>
+            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+              {others.map(t => card(t))}
+            </div>
+          </>
+        )}
+
+        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-rule pt-3 sm:grid-cols-2">
+          <div>
+            <Eyebrow>Output formats</Eyebrow>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {OUTPUT_FORMATS.map(f => (
+                <Chip
+                  key={f.value}
+                  active={formats.includes(f.value)}
+                  title={f.note}
+                  onClick={() =>
+                    setFormats(p =>
+                      p.includes(f.value) ? p.filter(x => x !== f.value) : [...p, f.value],
+                    )
+                  }
+                >
+                  {f.label}
+                </Chip>
               ))}
             </div>
           </div>
+          <div>
+            <Eyebrow>Before publishing</Eyebrow>
+            <label className="mt-1.5 flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                checked={review}
+                onChange={e => setReview(e.target.checked)}
+                className="mt-[3px] size-3 accent-[var(--hot)]"
+              />
+              <span className="font-sans text-[11.5px] leading-relaxed text-ink-mid">
+                Pause for human review.{' '}
+                <span className="text-warn">
+                  A paused job cannot be resumed from here yet — it will sit at
+                  awaiting review.
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
 
-          {step === 1 && (
-            <div>
-              <p className="text-muted-foreground mb-4" style={{ fontSize: '0.875rem' }}>Choose what types of documentation to generate (select at least one).</p>
-              <div className="grid grid-cols-2 gap-2 mb-5">
-                {DOC_TYPES.map(t => (
-                  <button key={t} onClick={() => toggleDocType(t)}
-                    className={`flex items-center gap-2 p-3 rounded-lg border transition-all text-left ${docTypes.includes(t) ? 'border-primary bg-primary/5 text-foreground' : 'border-border text-muted-foreground hover:border-foreground/30'}`}>
-                    <span>{DOC_TYPE_ICONS[t]}</span>
-                    <span style={{ fontSize: '0.875rem', fontWeight: docTypes.includes(t) ? 500 : 400, textTransform: 'capitalize' }}>
-                      {t.replace(/_/g, ' ')}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-end">
-                <button onClick={() => docTypes.length > 0 && setStep(2)} disabled={docTypes.length === 0}
-                  className="px-5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-                  style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div>
-              <p className="text-muted-foreground mb-4" style={{ fontSize: '0.875rem' }}>Select output formats (Markdown is always included).</p>
-              <div className="flex flex-wrap gap-2 mb-5">
-                {OUTPUT_FORMATS.map(f => (
-                  <button key={f} onClick={() => f !== 'markdown' && toggleFormat(f)}
-                    className={`px-4 py-2 rounded-lg border capitalize transition-all ${formats.includes(f) ? 'border-primary bg-primary/5 text-foreground' : 'border-border text-muted-foreground hover:border-foreground/30'} ${f === 'markdown' ? 'opacity-70 cursor-default' : ''}`}
-                    style={{ fontSize: '0.875rem' }}>
-                    {f}
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-between">
-                <button onClick={() => setStep(1)} className="px-4 py-2 border border-border rounded-lg text-foreground hover:bg-secondary transition-colors" style={{ fontSize: '0.875rem' }}>← Back</button>
-                <button onClick={() => setStep(3)} className="px-5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors" style={{ fontSize: '0.875rem', fontWeight: 500 }}>Next →</button>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div>
-              <div className="space-y-3 mb-5">
-                <div className="p-4 rounded-lg border border-border bg-secondary/30">
-                  <p className="text-foreground mb-1" style={{ fontSize: '0.875rem', fontWeight: 500 }}>Summary</p>
-                  <p className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>
-                    Doc types: {docTypes.map(t => t.replace(/_/g, ' ')).join(', ')}
-                  </p>
-                  <p className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>
-                    Formats: {formats.join(', ')}
-                  </p>
-                </div>
-                <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border border-border hover:bg-secondary/30 transition-colors">
-                  <input type="checkbox" checked={requireReview} onChange={e => setRequireReview(e.target.checked)} className="mt-0.5 accent-primary" />
-                  <div>
-                    <p className="text-foreground" style={{ fontSize: '0.875rem', fontWeight: 500 }}>Require human review</p>
-                    <p className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>Pause before publishing for manual review and approval.</p>
-                  </div>
-                </label>
-              </div>
-              <div className="flex justify-between">
-                <button onClick={() => setStep(2)} className="px-4 py-2 border border-border rounded-lg text-foreground hover:bg-secondary transition-colors" style={{ fontSize: '0.875rem' }}>← Back</button>
-                <button onClick={handleStart} disabled={loading}
-                  className="px-5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center gap-2"
-                  style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-                  {loading ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Starting...</> : <><Play size={14} /> Generate Documentation</>}
-                </button>
-              </div>
-            </div>
-          )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
+      <footer className="flex flex-wrap items-center gap-2 border-t border-rule bg-sunk/60 px-3 py-2.5">
+        <span className="tag text-ink-dim">
+          {picked.length ? `about ${minutes} min on a local model` : 'pick at least one document'}
+        </span>
+        <Button
+          variant="hot"
+          className="ml-auto"
+          disabled={!picked.length || !formats.length || busy}
+          onClick={start}
+        >
+          {busy ? 'starting…' : 'Compose →'}
+        </Button>
+      </footer>
+    </Panel>
+  )
 }
-
-const TABS = ['Overview', 'Sources', 'Jobs', 'Documents'] as const;
 
 export default function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('Overview');
-  const [loading, setLoading] = useState(true);
+  const { projectId } = useParams()
+  const id = Number(projectId)
+  const navigate = useNavigate()
+  const { can } = useAuth()
+  const { track } = useRunningJobs()
 
-  useEffect(() => {
-    if (!id) return;
-    Promise.allSettled([
-      apiGet<Project>(`/api/v1/projects/${id}`),
-      apiGet<Job[] | { items: Job[] }>(`/api/v1/projects/${id}/jobs`).catch(() => ({ items: [] as Job[] })),
-      apiGet<Document[] | { items: Document[] }>(`/api/v1/documents?project_id=${id}&limit=50`).catch(() => ({ items: [] as Document[] })),
-    ]).then(([p, j, d]) => {
-      if (p.status === 'fulfilled') setProject(p.value);
-      if (j.status === 'fulfilled') {
-        const jv = j.value as Job[] | { items: Job[] };
-        setJobs(Array.isArray(jv) ? jv : jv.items || []);
-      }
-      if (d.status === 'fulfilled') {
-        const dv = d.value as Document[] | { items: Document[] };
-        setDocuments(Array.isArray(dv) ? dv : dv.items || []);
-      }
-      setLoading(false);
-    });
-  }, [id]);
+  const project = useAsync(() => api.project(id), [id])
+  const kb = useAsync(s => api.knowledgeBase(id, s), [id])
+  const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
 
-  if (loading) return <div className="flex items-center justify-center p-20"><Spinner size="lg" className="text-muted-foreground" /></div>;
-  if (!project) return <div className="p-6 text-muted-foreground">Project not found</div>;
+  const [analysing, setAnalysing] = useState(false)
+  const [analyseError, setAnalyseError] = useState<string | null>(null)
 
-  return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/app/projects" className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-foreground" style={{ fontSize: '1.375rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{project.name}</h1>
-          {project.description && <p className="text-muted-foreground" style={{ fontSize: '0.875rem' }}>{project.description}</p>}
-        </div>
-        {/* The single-shot "run everything" job is superseded by the two-phase flow on
-            the Overview tab (analyse, then choose). The legacy endpoint still exists for
-            API clients; competing buttons here just muddied the flow. */}
-        <ConfirmDialog
-          trigger={<button className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"><Trash2 size={17} /></button>}
-          title="Delete project"
-          description={`Delete "${project.name}"? This cannot be undone.`}
-          confirmLabel="Delete"
-          variant="danger"
-          onConfirm={async () => {
-            await apiDelete(`/api/v1/projects/${id}`);
-            toast.success('Project deleted');
-            navigate('/app/projects');
-          }}
-        />
-      </div>
+  const canRun = can('manager')
 
-      {/* Tabs */}
-      <div className="flex border-b border-border mb-6 gap-0">
-        {TABS.map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 transition-colors border-b-2 -mb-px ${
-              activeTab === tab ? 'border-foreground text-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-            style={{ fontSize: '0.875rem' }}>
-            {tab}
-            {tab === 'Jobs' && jobs.length > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground" style={{ fontSize: '0.7rem' }}>{jobs.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === 'Overview' && (
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            {/* Phase 1 then Phase 2 — the doc-type picker stays gated until a
-                knowledge base exists, which is the flow the split exists for. */}
-            <KnowledgeBasePanel
-              projectId={id!}
-              hasSources={(project.sources?.length ?? project.stats?.source_count ?? 0) > 0}
-              onJobStarted={j => setJobs(prev => [j, ...prev])}
-            />
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h2 className="text-foreground mb-4" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>Project Details</h2>
-              <dl className="space-y-3">
-                <div className="flex"><dt className="w-32 text-muted-foreground" style={{ fontSize: '0.875rem' }}>Name</dt><dd className="text-foreground" style={{ fontSize: '0.875rem' }}>{project.name}</dd></div>
-                {project.description && <div className="flex"><dt className="w-32 text-muted-foreground" style={{ fontSize: '0.875rem' }}>Description</dt><dd className="text-foreground" style={{ fontSize: '0.875rem' }}>{project.description}</dd></div>}
-                <div className="flex"><dt className="w-32 text-muted-foreground" style={{ fontSize: '0.875rem' }}>Created</dt><dd className="text-foreground" style={{ fontSize: '0.875rem' }}>{project.created_at ? formatDistanceToNow(new Date(project.created_at), { addSuffix: true }) : '—'}</dd></div>
-                <div className="flex"><dt className="w-32 text-muted-foreground" style={{ fontSize: '0.875rem' }}>Sources</dt><dd className="text-foreground" style={{ fontSize: '0.875rem' }}>{project.stats?.source_count || 0}</dd></div>
-              </dl>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h2 className="text-foreground mb-3" style={{ fontSize: '0.875rem', fontWeight: 600 }}>Quick Stats</h2>
-              {[
-                { label: 'Jobs', value: project.stats?.job_count || jobs.length || 0 },
-                { label: 'Documents', value: project.stats?.doc_count || documents.length || 0 },
-                { label: 'Sources', value: project.stats?.source_count || 0 },
-              ].map(s => (
-                <div key={s.label} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <span className="text-muted-foreground" style={{ fontSize: '0.875rem' }}>{s.label}</span>
-                  <span className="text-foreground" style={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{s.value}</span>
-                </div>
-              ))}
-            </div>
-            {project.latest_job && (
-              <div className="bg-card border border-border rounded-xl p-5">
-                <h2 className="text-foreground mb-3" style={{ fontSize: '0.875rem', fontWeight: 600 }}>Latest Job</h2>
-                <StatusBadge status={project.latest_job.status} />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'Sources' && (
-        <SourcesTab
-          project={project}
-          projectId={id!}
-          onProjectUpdated={setProject}
-        />
-      )}
-
-      {activeTab === 'Jobs' && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <h2 className="text-foreground" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>Jobs</h2>
-            <button
-              onClick={() => setActiveTab('Overview')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              style={{ fontSize: '0.8125rem' }}
-            >
-              <Play size={13} /> New job
-            </button>
-          </div>
-          {jobs.length === 0 ? (
-            <EmptyState icon={<Play size={32} />} title="No jobs yet" description="Run your first documentation job to get started." />
-          ) : (
-            <table className="w-full">
-              <thead><tr className="border-b border-border">
-                {['#', 'Phase', 'Status', 'Produces', 'Started', 'Took', ''].map(h => (
-                  <th key={h} className="px-5 py-3 text-left text-muted-foreground" style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody className="divide-y divide-border">
-                {jobs.map(job => {
-                  const analysis = job.job_type === 'analysis';
-                  return (
-                    <tr key={job.id} className="hover:bg-secondary/30">
-                      <td className="px-5 py-3"><span className="text-muted-foreground font-mono" style={{ fontSize: '0.8125rem' }}>#{job.id}</span></td>
-                      <td className="px-5 py-3">
-                        <Badge tone={analysis ? 'brand' : 'neutral'}>
-                          {analysis ? 'Analysis' : 'Composition'}
-                        </Badge>
-                      </td>
-                      <td className="px-5 py-3"><StatusPill status={job.status} /></td>
-                      <td className="px-5 py-3">
-                        <span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>
-                          {analysis
-                            ? 'knowledge base'
-                            : (job.doc_types?.map(humanize).join(', ') || '—')}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3"><span className="text-muted-foreground" style={{ fontSize: '0.8125rem' }}>{job.started_at ? formatDistanceToNow(new Date(job.started_at), { addSuffix: true }) : '—'}</span></td>
-                      <td className="px-5 py-3">
-                        <span className="text-muted-foreground tabular-nums" style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)' }}>
-                          {formatDuration(elapsedSeconds(job.started_at, job.completed_at))}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <Link to={`/app/projects/${id}/jobs/${job.id}`}
-                          className="inline-flex items-center gap-1.5 text-brand hover:underline" style={{ fontSize: '0.8125rem' }}>
-                          <Eye size={13} /> View
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'Documents' && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {documents.length === 0 ? (
-            <div className="col-span-3"><EmptyState icon={<FileTextIcon />} title="No documents yet" description="Run a job to generate documentation." /></div>
-          ) : documents.map(doc => (
-            <Link key={doc.id} to={`/app/documents/${doc.id}`}
-              className="bg-card border border-border rounded-xl p-5 hover:border-foreground/20 hover:shadow-sm transition-all">
-              <div className="flex items-center gap-2 mb-3">
-                <span style={{ fontSize: '1.25rem' }}>{DOC_TYPE_ICONS[doc.doc_type] || '📄'}</span>
-                <StatusBadge status={doc.status} size="sm" />
-              </div>
-              <h3 className="text-foreground mb-1 line-clamp-2" style={{ fontSize: '0.9rem', fontWeight: 600 }}>{doc.title}</h3>
-              {doc.word_count && <p className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>{doc.word_count.toLocaleString()} words</p>}
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FileTextIcon() { return <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>; }
-
-// ── Source type helpers ───────────────────────────────────────────────────────
-
-type SourceKind = 'github' | 'gitlab' | 'bitbucket' | 'local' | string;
-
-const SOURCE_META: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
-  github:    { label: 'GitHub',    color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', Icon: Github },
-  gitlab:    { label: 'GitLab',    color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  Icon: Globe },
-  bitbucket: { label: 'Bitbucket', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)',  Icon: Globe },
-  local:     { label: 'Upload',    color: '#94a3b8', bg: 'rgba(148,163,184,0.1)',  Icon: Upload },
-};
-
-function getSourceMeta(kind: SourceKind) {
-  return SOURCE_META[kind] ?? { label: kind, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', Icon: HardDrive };
-}
-
-function sourceDisplayName(s: { url_or_path: string; config_json?: { original_filename?: string } }): string {
-  if (s.config_json?.original_filename) return s.config_json.original_filename;
-  const path = s.url_or_path;
-  // For git URLs strip protocol and trailing .git
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path.replace(/^https?:\/\//, '').replace(/\.git$/, '');
-  }
-  // For local paths show just the last two segments
-  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.slice(-2).join('/') || path;
-}
-
-// ── SourceRow ─────────────────────────────────────────────────────────────────
-
-function SourceRow({ source, onDelete }: {
-  source: import('../../lib/types').Source;
-  onDelete: (id: string) => void;
-}) {
-  const kind: SourceKind = (source.source_type || source.type || 'local') as SourceKind;
-  const isGit = ['github', 'gitlab', 'bitbucket'].includes(kind);
-  const meta = getSourceMeta(kind);
-  const { Icon } = meta;
-  const displayName = sourceDisplayName(source);
-
-  return (
-    <div className="flex items-center gap-4 px-5 py-4 border-b border-border last:border-0 hover:bg-secondary/20 transition-colors group">
-      {/* Icon */}
-      <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: meta.bg }}>
-        <Icon size={16} style={{ color: meta.color }} />
-      </div>
-
-      {/* Main info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-foreground truncate" style={{ fontSize: '0.8125rem', maxWidth: '38rem' }} title={source.url_or_path}>
-            {displayName}
-          </span>
-          {/* Type badge */}
-          <span className="flex-shrink-0 px-2 py-0.5 rounded-full" style={{ fontSize: '0.6875rem', fontWeight: 600, color: meta.color, background: meta.bg, letterSpacing: '0.02em' }}>
-            {meta.label}
-          </span>
-          {/* Branch badge — only for git sources */}
-          {isGit && source.branch && (
-            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-muted-foreground" style={{ fontSize: '0.6875rem' }}>
-              <GitBranch size={10} /> {source.branch}
-            </span>
-          )}
-        </div>
-        <p className="text-muted-foreground mt-0.5" style={{ fontSize: '0.75rem' }}>
-          Added {source.created_at ? formatDistanceToNow(new Date(source.created_at), { addSuffix: true }) : '—'}
-        </p>
-      </div>
-
-      {/* Delete */}
-      <ConfirmDialog
-        trigger={
-          <button
-            className="flex-shrink-0 p-1.5 rounded-lg text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
-            title="Remove source"
-          >
-            <Trash2 size={15} />
-          </button>
-        }
-        title="Remove source"
-        description={`Remove "${displayName}" from this project? The source will be deleted but existing documents won't be affected.`}
-        confirmLabel="Remove"
-        variant="danger"
-        onConfirm={() => onDelete(source.id)}
-      />
-    </div>
-  );
-}
-
-// ── SourcesTab ────────────────────────────────────────────────────────────────
-
-function SourcesTab({ project, projectId, onProjectUpdated }: {
-  project: import('../../lib/types').Project;
-  projectId: string;
-  onProjectUpdated: (p: import('../../lib/types').Project) => void;
-}) {
-  const sources = project.sources || [];
-
-  const refreshProject = async () => {
-    const updated = await apiGet<import('../../lib/types').Project>(`/api/v1/projects/${projectId}`);
-    onProjectUpdated(updated);
-  };
-
-  const handleDelete = async (sourceId: string) => {
+  const startAnalysis = async (force: boolean) => {
+    setAnalysing(true)
+    setAnalyseError(null)
     try {
-      await apiDelete(`/api/v1/projects/${projectId}/sources/${sourceId}`);
-      toast.success('Source removed');
-      await refreshProject();
-    } catch {
-      toast.error('Failed to remove source');
+      const job = await api.analyze(id, force)
+      track(job, project.data?.name)
+      navigate(`/app/projects/${id}/jobs/${job.id}`)
+    } catch (e) {
+      setAnalyseError(e instanceof ApiError ? e.message : 'Could not start analysis.')
+      setAnalysing(false)
     }
-  };
+  }
+
+  if (project.loading) {
+    return (
+      <div className="mx-auto max-w-[1180px] p-5">
+        <SkeletonPanel rows={6} />
+      </div>
+    )
+  }
+
+  if (project.error || !project.data) {
+    return (
+      <div className="mx-auto max-w-[1180px] p-5">
+        <ErrorState message={project.error ?? 'Project not found.'} onRetry={project.reload} />
+      </div>
+    )
+  }
+
+  const p = project.data
+  const base = kb.data?.knowledge_base
+  const neverAnalysed = !kb.loading && !kb.error && !kb.data
+  const stale = base?.status === 'stale'
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-        <div>
-          <h2 className="text-foreground" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>Sources</h2>
-          {sources.length > 0 && (
-            <p className="text-muted-foreground" style={{ fontSize: '0.75rem' }}>{sources.length} source{sources.length !== 1 ? 's' : ''}</p>
+    <div className="mx-auto max-w-[1180px] p-5">
+      <PageHead
+        index={String(p.id).padStart(2, '0')}
+        title={p.name}
+        sub={p.description || 'No description.'}
+        right={
+          canRun ? (
+            <div className="flex gap-2">
+              {!neverAnalysed && (
+                <Button variant="ghost" onClick={() => startAnalysis(true)} disabled={analysing}>
+                  ↻ Re-analyse
+                </Button>
+              )}
+              {neverAnalysed && (
+                <Button variant="hot" onClick={() => startAnalysis(false)} disabled={analysing}>
+                  {analysing ? 'starting…' : 'Analyse repository →'}
+                </Button>
+              )}
+            </div>
+          ) : null
+        }
+      />
+
+      {analyseError && <ErrorState message={analyseError} compact />}
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_320px]">
+        <div className="flex min-w-0 flex-col gap-3">
+          {kb.loading && <SkeletonPanel rows={5} />}
+
+          {kb.error && <ErrorState message={kb.error} onRetry={kb.reload} />}
+
+          {neverAnalysed && (
+            <EmptyState
+              title="This repository has not been read yet"
+              body="Analysis clones the source, walks every file, extracts modules, routes, dependencies and environment variables, then builds the knowledge base that every document is written from. Nothing is generated until you choose what to write."
+              action={
+                canRun ? (
+                  <Button variant="hot" onClick={() => startAnalysis(false)} disabled={analysing}>
+                    {analysing ? 'starting…' : 'Analyse repository →'}
+                  </Button>
+                ) : (
+                  <span className="tag text-ink-dim">the manager role can start an analysis</span>
+                )
+              }
+            />
+          )}
+
+          {kb.data && base && (
+            <>
+              {stale && (
+                <div className="flex flex-wrap items-center gap-2 border border-warn/40 bg-warn-wash px-3 py-2">
+                  <span className="tag text-warn">knowledge base is stale</span>
+                  <span className="font-sans text-[11.5px] text-ink-mid">
+                    The repository moved on since {shortSha(base.commit_sha)}.
+                  </span>
+                  {canRun && (
+                    <Button variant="ghost" className="ml-auto" onClick={() => startAnalysis(true)}>
+                      ↻ Re-analyse
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {base.error_message && (
+                <div className="border border-bad/35 bg-bad-wash px-3 py-2.5">
+                  <span className="tag text-bad">analysis reported a problem</span>
+                  <p className="mt-1 font-sans text-[12px] text-ink">{base.error_message}</p>
+                </div>
+              )}
+
+              <Panel
+                title="Knowledge base"
+                action={<StatusBadge status={base.status} />}
+              >
+                <div className="grid grid-cols-2 gap-px bg-rule sm:grid-cols-4">
+                  <Stat k="modules" v={kb.data.module_count} hot />
+                  <Stat k="entities" v={kb.data.entity_count} />
+                  <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '—'} />
+                  <Stat k="commit" v={shortSha(base.commit_sha)} />
+                </div>
+                <div className="border-t border-rule">
+                  <KnowledgeMap kb={kb.data} />
+                </div>
+              </Panel>
+
+              {(kb.data.sample_routes?.length ||
+                kb.data.key_dependencies?.length ||
+                kb.data.entrypoints?.length) && (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {kb.data.entrypoints?.length ? (
+                    <Panel title="Entrypoints">
+                      <ul className="p-2.5">
+                        {kb.data.entrypoints.slice(0, 8).map(e => (
+                          <li key={e} className="truncate py-[3px] text-[11.5px] text-ink-mid">
+                            <span className="text-hot-ink">→</span> {e}
+                          </li>
+                        ))}
+                      </ul>
+                    </Panel>
+                  ) : null}
+
+                  {kb.data.key_dependencies?.length ? (
+                    <Panel title="Key dependencies">
+                      <div className="flex flex-wrap gap-1 p-2.5">
+                        {kb.data.key_dependencies.slice(0, 24).map(d => (
+                          <span
+                            key={d}
+                            className="tag border border-rule bg-sunk/60 px-1.5 py-0.5 text-ink-mid"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    </Panel>
+                  ) : null}
+
+                  {kb.data.sample_routes?.length ? (
+                    <Panel title="Surface" action={<span className="tag text-ink-dim">sample</span>}>
+                      <ul className="divide-y divide-rule">
+                        {kb.data.sample_routes.slice(0, 10).map((r, i) => (
+                          <li key={`${r.name}-${i}`} className="flex gap-2 px-2.5 py-1.5">
+                            <span className="tag w-[74px] shrink-0 text-ink-dim">
+                              {humanize(r.kind)}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">
+                              {r.name}
+                            </span>
+                            {r.detail && (
+                              <span className="hidden truncate text-[11px] text-ink-dim sm:block">
+                                {r.detail}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </Panel>
+                  ) : null}
+
+                  {kb.data.narrative_topics?.length ? (
+                    <Panel title="What this codebase talks about">
+                      <div className="flex flex-wrap gap-1 p-2.5">
+                        {kb.data.narrative_topics.slice(0, 20).map(t => (
+                          <span key={t} className="tag border border-hot-edge bg-hot-wash px-1.5 py-0.5 text-hot-ink">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    </Panel>
+                  ) : null}
+                </div>
+              )}
+
+              {canRun && base.status !== 'failed' && (
+                <ComposePanel
+                  project={p}
+                  kb={kb.data}
+                  onStarted={job => {
+                    track(job, p.name)
+                    navigate(`/app/projects/${p.id}/jobs/${job.id}`)
+                  }}
+                />
+              )}
+            </>
           )}
         </div>
-        <AddSourceModal projectId={projectId} onAdded={refreshProject} />
-      </div>
 
-      {sources.length === 0 ? (
-        <EmptyState
-          icon={<Upload size={32} />}
-          title="No sources yet"
-          description="Add a GitHub/GitLab/Bitbucket repo or upload files to get started."
-        />
-      ) : (
-        <div>
-          {sources.map(s => (
-            <SourceRow key={s.id} source={s} onDelete={handleDelete} />
-          ))}
+        {/* rail */}
+        <div className="flex flex-col gap-3">
+          <SourcePanel project={p} />
+
+          <Panel
+            title="Recent jobs"
+            action={<span className="tag text-ink-dim">{p.stats?.job_count ?? 0} total</span>}
+          >
+            {jobs.loading && <SkeletonPanel rows={3} />}
+            {!jobs.loading && !jobs.data?.length && (
+              <p className="px-3 py-3 text-[11.5px] text-ink-dim">Nothing has run yet.</p>
+            )}
+            <ul className="divide-y divide-rule">
+              {(jobs.data ?? []).map(j => (
+                <li key={j.id}>
+                  <Link
+                    to={`/app/projects/${p.id}/jobs/${j.id}`}
+                    className="flex items-center gap-2 px-3 py-2 transition-colors hover:bg-hot-wash/60"
+                  >
+                    <span className="tag w-8 shrink-0 text-ink-dim">#{j.id}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11.5px] font-semibold text-ink">
+                        {humanize(j.job_type)}
+                      </span>
+                      <span className="tag block text-ink-dim">{relativeTime(j.created_at)}</span>
+                    </span>
+                    <StatusBadge status={j.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+
+          <Panel
+            title="Documents"
+            action={
+              <Link to="/app/documents" className="tag text-hot-ink hover:underline">
+                all →
+              </Link>
+            }
+          >
+            <div className="px-3 py-3">
+              <span className="block text-[22px] leading-none font-bold text-ink">
+                {p.stats?.doc_count ?? 0}
+              </span>
+              <span className="tag mt-1 block text-ink-dim">written for this project</span>
+            </div>
+          </Panel>
         </div>
-      )}
+      </div>
     </div>
-  );
+  )
 }
