@@ -36,17 +36,53 @@
 - `coordinator_agent` and `diagram_agent` now have tracer spans — all 12 agents fully traced
 - `generation_tasks.py` logs `runs_dir` at both job start and completion
 
+## Phase 3 — Analyse / Compose rearchitecture ✅
+
+Split the single-shot pipeline into two phases so the document type is chosen *after* the
+codebase is understood. Full tracker in [.dev/PLAN.md](.dev/PLAN.md) and
+[.dev/PROGRESS.md](.dev/PROGRESS.md).
+
+- **A** — Knowledge base data model (`kb`, `kb_modules`, `kb_entities`, `kb_narratives`),
+  keyed by project + commit SHA; `app/db/repositories/knowledge/`
+- **A0** — `app/languages/`: `LanguageProvider` + neutral taxonomy, so adding a language
+  means adding one provider and touching neither agents nor schema
+- **B** — `analysis_workflow.py`: 7 agents, `repo_analyzer → … → kb_persister`
+- **C** — `composition_workflow.py`: retrieve-then-write per section; the per-section
+  ReAct loop is gone
+- **D** — `POST /projects/{id}/analyze`, `GET /{id}/knowledge-base`, `POST /{id}/compose`,
+  plus the two-step UI flow
+- **E1** — real model tiering (`LLM_FAST_MODEL`); module summaries 445s → 7.8s
+- Result: analysis 571s → **172s**, and a second document type costs only its composition
+
+## Phase 4 — Studio UX overhaul ✅
+
+Tracker in [.dev/UX_PLAN.md](.dev/UX_PLAN.md) / [.dev/UX_PROGRESS.md](.dev/UX_PROGRESS.md).
+
+- Design system: interaction tokens, `Row`/`ClickableCard`/`IconButton`/`Skeleton`
+- **Real cancellation** — `app/core/cancellation.py`, streaming LLM calls, Celery revoke.
+  Cancel used to only flip a DB column while the model kept generating
+- Stage tree with narration derived from each step's output, not agent names
+- Knowledge base card shows the evidence found; doc-type picker explains each option
+- Project creation probes the source *before* creating anything
+- Real Markdown rendering (tables, fenced code), single reading column, origin-aware back
+
 ---
 
 ## Known Issues / Next Up
 
-- **Ingestion pipeline** (`repo_analyzer`, `code_understanding`) not fully wired to sandbox scratch dir — repo still cloned to `REPO_SCRATCH_DIR` (/tmp/repos); needs to clone into `sandbox.scratch/repo/`
-- **ReAct agents** (`architecture`, `writer`, `validator`) need MCP filesystem server installed: `npm install -g @modelcontextprotocol/server-filesystem`
-- **Neo4j** code graph population not yet called from the workflow
-- **PDF/DOCX/MkDocs/Docusaurus** formatters stubbed but not fully implemented
-- **Phase 3**: Neo4j graph ingestion, richer code parsers
-- **Phase 4**: PDF/MkDocs/Docusaurus output, OAuth2, full RBAC audit log
-- **Phase 5**: OTEL exporter, Prometheus dashboards, K8s manifests, CI/CD
+- **PDF** — no formatter exists; `/documents/{id}/export` advertises it and raises
+- **Standalone export** only implements Markdown; DOCX/MkDocs/Docusaurus work through a
+  generation job's `output_formats` but not through the export endpoint
+- **Neo4j** is populated but never queried — fold the useful edges into `kb_entities` or
+  drop the service (Phase E3)
+- **Human-review gate** returns `END` with no checkpointer, so approval cannot resume the
+  graph; needs a LangGraph interrupt (Phase E4)
+- **`diagram`** should be opt-in per doc type — 15% of run 18 (Phase E2)
+- **Languages** — only Python has a provider; other files are indexed for retrieval but
+  contribute no extracted symbols
+- **Legacy pipeline** — `documentation_workflow.py` and the agents it owns
+  (`coordinator`, `code_understanding`, `react_mixin`) exist only for the old
+  `POST /projects/{id}/jobs` endpoint
 
 ---
 

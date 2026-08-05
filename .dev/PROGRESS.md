@@ -13,7 +13,11 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked · ⏭️
 | B | Analysis workflow (Phase 1 of the product) | ✅ |
 | C | Composition workflow (Phase 2 of the product) | ✅ |
 | D | API + UI two-step flow | ✅ |
-| E | Performance + cleanup | ⬜ |
+| E | Performance + cleanup | 🟨 E1 and E5 done; E2–E4 open |
+
+A separate UX overhaul (U1–U7) ran after Phase D and is complete — see
+[UX_PLAN.md](UX_PLAN.md) / [UX_PROGRESS.md](UX_PROGRESS.md). It also landed real
+cancellation, which is a backend change this tracker did not plan for.
 
 ## Phase A — Data model and persistence ✅
 
@@ -293,15 +297,15 @@ The existing pages were functional but rough, so alongside D5–D7:
 **Worth checking:** the loaded context length for `qwen/qwen3.5-9b` in LM Studio. If it is
 4096, every quality-tier call is tighter than the config implies.
 
-## Phase E — Performance and cleanup
+## Phase E — Performance and cleanup 🟨
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| E1 | Real `LLM_FAST_MODEL` | ⬜ | tiering is a no-op today |
+| E1 | Real `LLM_FAST_MODEL` | ✅ | `liquid/lfm2.5-1.2b`; module summaries 445s → 7.8s. `plan` had to move to the quality tier — see the A/B above |
 | E2 | `diagram` opt-in per doc type | ⬜ | 64s / 15% of run 18 |
 | E3 | Neo4j decision (fold into KB or drop) | ⬜ | built every run, queried never |
 | E4 | Human-review gate resumption via interrupt | ⬜ | currently `END`, cannot resume |
-| E5 | Remove `react_mixin` from the writer path | ⬜ | after C5 |
+| E5 | Remove `react_mixin` from the writer path | ✅ | done by C5. `ReActMixin` now only serves `documentation_workflow`'s legacy `writer` and `architecture` agents |
 
 ## Baseline to beat
 
@@ -320,8 +324,18 @@ Measured on **run 18** (1 architecture doc, 16,608 chars, 430s wall):
 Tool calls in that run: `read_text_file` × 21, `search_codebase` × **0**,
 `query_code_graph` × **0**. 127s (30%) elapsed before the first word was written.
 
-Re-measure after Phase C and record here. The target is not just "faster" — it is that a
-*second* doc type costs only its composition, because analysis is already done.
+### After Phases B–C + E1
+
+| Stage | Before | After |
+|---|---|---|
+| Analysis (whole phase) | 571s | **171.9s** |
+| — module summaries | 445s | **7.8s** (fast tier + concurrency) |
+| — embedding | 30.7s | **8.5s** (batched) |
+| Composition, 2 doc types, 7 sections each | — | ~440s |
+| Second doc type on an existing KB | full re-analysis | **composition only** |
+
+The last row is the one that mattered. The target was never just "faster" — it was that a
+*second* doc type costs only its composition, because analysis is already done. It does.
 
 ## Decision log
 

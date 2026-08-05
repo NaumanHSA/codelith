@@ -61,3 +61,10 @@ docker-compose.infra.local.yml
 
 # Phase run artifacts (large, regenerable)
 .dev/runs/
+
+# Pre-redesign studio, kept for reference until the new UI settles.
+ui_backup/
+
+# Local scratch, not part of the project
+test.ipynb
+.openclaude-profile.json

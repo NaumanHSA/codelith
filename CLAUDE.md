@@ -2,7 +2,18 @@
 
 ## What This Is
 
-AI Documentation Generation Platform. Ingests repos/files, runs a multi-agent LangGraph workflow, produces structured documentation in Markdown/PDF/DOCX/MkDocs/Docusaurus.
+Open-source documentation generation platform. Ingests repos/files, runs multi-agent
+LangGraph workflows, produces structured documentation in Markdown/DOCX/MkDocs/Docusaurus.
+
+**Two phases, and the split drives most of the design:**
+
+1. **Analyse** (`app/workflows/analysis_workflow.py`) — build a knowledge base from the
+   code, once per commit SHA. Takes no document type.
+2. **Compose** (`app/workflows/composition_workflow.py`) — write the requested documents
+   from the stored KB, retrieve-then-write per section. Never re-reads the repository.
+
+`documentation_workflow.py` is the legacy single-shot pipeline, kept working for the
+`POST /projects/{id}/jobs` endpoint. New work goes in the two-phase graphs.
 
 ## Stack
 
@@ -16,7 +27,7 @@ AI Documentation Generation Platform. Ingests repos/files, runs a multi-agent La
 - **LLM**: `openai.AsyncOpenAI` pointed at LM Studio (`http://localhost:1234/v1`) — swap `LLM_BASE_URL` to use any OpenAI-compatible endpoint
 - **Storage**: MinIO (S3-compatible) via boto3
 - **Logging**: structlog (JSON in prod, colored in dev)
-- **UI**: React 18 + Vite 6 + Tailwind 4 + shadcn/Radix, in `ui/` (same repo — there is no separate UI repository)
+- **UI**: React 19 + Vite 8 + Tailwind 4, in `ui/` (same repo — there is no separate UI repository). **Needs Node ≥ 20.19**; the studio is a pnpm project
 
 ## Running Locally
 
@@ -26,7 +37,7 @@ make dev                   # starts Docker infra + hot-reload API on :8000
 make migrate               # apply DB migrations
 make worker                # start Celery worker in another terminal
 
-cd ui && npm install && npm run dev   # studio on :5173
+cd ui && pnpm install && pnpm dev      # studio on :5173 — needs Node >= 20.19
 ```
 
 ## Key Conventions
@@ -34,9 +45,20 @@ cd ui && npm install && npm run dev   # studio on :5173
 - All DB access goes through `app/db/repositories/` — never query SQLAlchemy directly from routes or services
 - Business logic lives in `app/services/` — routes are thin (validate input, call service, return schema)
 - Every agent inherits from `app.agents.base.BaseAgent` and implements `async def run(state) -> state`
-- LangGraph workflow state is a `TypedDict` defined in `app/workflows/states.py`
+- LangGraph workflow state is a `TypedDict` — `analysis_states.py`, `composition_states.py`, `states.py` (legacy)
 - All config is `pydantic-settings` in `app/config.py` — no hardcoded values anywhere
 - LLM calls go through `app.llm.client.get_llm_client()` — never instantiate `openai.AsyncOpenAI` directly
+- **No language-specific code outside `app/languages/`.** Python's `ast`, file extensions,
+  framework idioms — all of it lives behind `LanguageProvider`. Agents and the KB speak
+  the neutral vocabulary in `app/languages/taxonomy.py` and `app/knowledge/constants.py`.
+  Adding a language must mean adding one provider, not touching agents or schema
+- Model tier is picked by task type in `app/llm/router.py` (`select_model`), not by the
+  caller. `write`/`review`/`validate`/`architecture`/`plan` → quality; `classify`/
+  `extract`/`diagram`/`summarize` → fast
+- Long-running work must stay cancellable: never swallow `JobCancelled` in a broad
+  `except Exception`, and never retry it. See `app/core/cancellation.py`
+- A concurrent phase must not share one `AsyncSession` — fetch what you need before
+  `asyncio.gather`, and avoid `return_exceptions=True` unless you log the exception
 
 ## Project Layout
 
@@ -46,31 +68,56 @@ app/
   config.py        All settings (env-driven)
   api/v1/          Route handlers (thin)
   core/            Security, logging, exceptions, middleware
+    cancellation.py  Redis-backed CancellationToken + JobCancelled
   db/              SQLAlchemy session + repositories
   models/          ORM models
   schemas/         Pydantic v2 request/response
-  services/        Business logic
-  agents/          11 specialized agents
-  workflows/       LangGraph graphs + states
+  services/        Business logic (incl. knowledge_service, source_service)
+  knowledge/       KB vocabulary, builder, retrieval, doc-type roles
+  languages/       Language abstraction — taxonomy, LanguageProvider, registry
+    providers/       python.py (the only provider today)
+  agents/
+    analysis/        7 analysis agents (repo_analyzer → kb_persister)
+    composition/     4 composition agents (kb_loader, strategy, planner, writer)
+    *.py             Shared + legacy agents (diagram, qa, formatter, publisher, …)
+  workflows/       analysis_workflow, composition_workflow, documentation_workflow (legacy)
   ingestion/       Repo cloning + file parsers
   memory/          Short/long-term, pgvector, Neo4j
-  llm/             LLM client + prompt templates
+  llm/             LLM client, model router, prompt templates
   tools/           Agent tools (file, git, search, diagram)
+  tracing/         Per-job trace artifacts under ./runs/{job_id}/
   formatters/      Markdown, DOCX, MkDocs, Docusaurus
   storage/         S3/MinIO client
   workers/         Celery app + task definitions
   observability/   OpenTelemetry + Prometheus
 
 ui/                React studio (Vite) — see ui/README.md
+.dev/              Plans + progress logs (PLAN/PROGRESS, UX_PLAN/UX_PROGRESS)
 ```
 
 ## UI Conventions
 
-- **Dark theme only** — no light mode, no toggle. `index.html` puts `class="dark"` on `<html>`.
-  Style with the theme tokens in `ui/src/styles/theme.css` (`bg-background`, `text-brand`, …),
-  never hardcoded Tailwind colors like `bg-white`
+The studio was rebuilt in August 2026 — light theme, orange accent, blueprint/terminal
+character. The previous dark-only build is parked at `ui_backup/` and is not wired to
+anything; delete it once nothing is being cross-referenced.
+
+- **Light theme.** Tokens live in `ui/src/styles/theme.css` and are named for the design
+  (`--paper`, `--ink`, `--hot`, `--rule`, `--sunk`, `--panel`), surfaced as Tailwind
+  utilities (`bg-panel`, `text-ink-dim`, `border-rule`, `text-hot-ink`). Never hardcode a
+  Tailwind colour like `bg-white` or `text-slate-600`. A dark variant is not built yet;
+  the tokens are structured so it can be added without touching components
+- Everything under `ui/src/app/` is the application. `lib/` holds the API client, types,
+  formatters and the stage-narration table; `components/` and `pages/` the rest
 - API base URL comes from `VITE_API_URL` (set in `ui/.env.local`), defaulting to `:8000`
-- All HTTP goes through `ui/src/app/lib/api.ts` — it attaches the JWT and refreshes on 401
+- All HTTP goes through `ui/src/app/lib/api.ts` — it attaches the JWT, refreshes once on
+  401, retries, and only then bounces to sign-in
+- **IDs from the API are integers.** Type them as `number`
+- Job progress: poll `GET /jobs/{id}`; the SSE stream carries logs only and times out
+  after 10 minutes. Expected stages per job type live in `lib/narrate.ts` — `gate` is in
+  the graph but never reports a step, so it is excluded from progress maths via
+  `progressStages()`
+- No external network at runtime: fonts are bundled in `src/assets/fonts`, and nothing
+  may load from a CDN. The product's claim is that nothing leaves the machine
 
 ## Testing
 
