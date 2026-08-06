@@ -23,6 +23,8 @@ class CompositionState(TypedDict, total=False):
     kb_id: int
     kb_status: str
     kb_stats: dict
+    #: Persisted by analysis, read back here. Diagrams are drawn from it.
+    architecture_map: dict
 
     # ── What the user asked for ───────────────────────────────────────────────
     doc_types: list[str]

@@ -40,7 +40,6 @@ COMPOSITION_STRATEGY = PromptTemplate(
         "be pitched, given what this codebase actually is.\n\n"
         "Respond ONLY with valid JSON — no markdown fences, no prose:\n"
         '{"audiences":[{"doc_type":str,"audience":str,"tone":str}],'
-        '"priorities":[str],'
         '"generate_diagrams":bool}\n\n'
         "Set generate_diagrams true only when there are real components or flows worth "
         "drawing — multiple services, a request pipeline, async processing. Set it false "

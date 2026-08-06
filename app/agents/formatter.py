@@ -33,8 +33,12 @@ class FormatterAgent(BaseAgent):
             formatted_docs = []
             for doc in generated_docs:
                 content = doc.get("content_markdown", "")
-                if doc.get("doc_type") == "architecture" and diagrams:
-                    content = self._inject_diagrams(content, diagrams)
+                # Diagrams carry the doc_type they were drawn for. Injecting only into
+                # `architecture` meant every diagram generated for an API or deployment
+                # document was produced and then silently discarded.
+                mine = [d for d in diagrams if d.get("doc_type") == doc.get("doc_type")]
+                if mine:
+                    content = self._inject_diagrams(content, mine)
                 if "mkdocs" in output_formats or "docusaurus" in output_formats:
                     content = self._add_frontmatter(doc, content)
                 formatted_docs.append({**doc, "content_markdown": content})
@@ -56,6 +60,7 @@ class FormatterAgent(BaseAgent):
                 {
                     "formats": list(output_formats),
                     "export_keys": export_keys,
+                    "diagrams_injected": self._diagram_count(diagrams),
                     "documents": [
                         {
                             "doc_type": d.get("doc_type"),
@@ -119,6 +124,14 @@ class FormatterAgent(BaseAgent):
         for d in diagrams:
             section += f"\n### {d['name']}\n\n```mermaid\n{d['content']}\n```\n"
         return content + section
+
+    @staticmethod
+    def _diagram_count(diagrams: list[dict]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for d in diagrams:
+            key = d.get("doc_type") or "unknown"
+            counts[key] = counts.get(key, 0) + 1
+        return counts
 
     def _add_frontmatter(self, doc: dict, content: str) -> str:
         title = doc.get("title", "Documentation")

@@ -15,6 +15,7 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
+from app.knowledge.narratives import topics_for_doc_type
 from app.llm.prompts.composition_prompts import SECTION_PLAN
 from app.tracing.artifacts import save_artifact, save_input_artifact
 
@@ -54,14 +55,21 @@ class CompositionPlannerAgent(BaseAgent):
             strategy: dict = state.get("strategy") or {}
             repos = KnowledgeRepositories.for_session(self.db)
 
-            overview = await repos.narratives.get(kb_id, NarrativeTopic.OVERVIEW)
+            # The narratives this document type actually reads, at full length — the
+            # planner used to see the overview alone, truncated to 1,800 chars.
+            overview = await self._narratives(repos, kb_id, doc_types)
             facts = await self._facts(repos, kb_id)
+            # Every file the KB knows about, tests included. `key_files` is validated
+            # against this rather than against the role-filtered slice we display —
+            # otherwise a correct path is discarded as a hallucination merely because
+            # its module was filtered out of the prompt.
+            known_files = await self._known_files(repos, kb_id)
 
             plans: dict[str, dict] = {}
             for doc_type in doc_types:
                 modules = await self._modules_for(repos, kb_id, doc_type)
                 plans[doc_type] = await self._plan(
-                    doc_type, project, overview, modules, facts, strategy
+                    doc_type, project, overview, modules, facts, strategy, known_files
                 )
 
             save_artifact("planner.documentation_plan", plans)
@@ -77,7 +85,9 @@ class CompositionPlannerAgent(BaseAgent):
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
-    async def _plan(self, doc_type, project, overview, modules, facts, strategy) -> dict:
+    async def _plan(
+        self, doc_type, project, overview, modules, facts, strategy, known_files: set[str]
+    ) -> dict:
         audience = next(
             (
                 a.get("audience", "developers")
@@ -90,7 +100,7 @@ class CompositionPlannerAgent(BaseAgent):
             project_name=project.name,
             doc_type=doc_type,
             audience=audience,
-            overview=(overview.content_md[:1800] if overview else "(none available)"),
+            overview=overview or "(none available)",
             module_inventory=self._inventory(modules),
             facts=facts,
         )
@@ -101,7 +111,7 @@ class CompositionPlannerAgent(BaseAgent):
         # Saved before validation so a dropped `key_files` path is visible as a diff
         # against the stored plan, not just as a missing entry.
         save_artifact(f"planner.{doc_type}.raw_response", plan)
-        sections = self._validate(plan, modules) if plan else []
+        sections = self._validate(plan, known_files) if plan else []
         if not sections:
             await self._emit_log(
                 "warning", f"Planner produced no usable sections for {doc_type} — using defaults"
@@ -129,17 +139,16 @@ class CompositionPlannerAgent(BaseAgent):
         return raw
 
     @staticmethod
-    def _validate(plan: dict, modules) -> list[dict]:
+    def _validate(plan: dict, known: set[str]) -> list[dict]:
         """
-        Keep only sections whose `key_files` exist.
+        Keep only sections whose `key_files` exist **in the knowledge base**.
 
-        A hallucinated path would produce an empty retrieval and a section written from
-        nothing, so unknown paths are dropped rather than passed on.
+        A hallucinated path retrieves nothing and yields a section written from thin
+        air, so unknown paths are dropped. `known` must be the whole KB: validating
+        against the role-filtered subset shown to the planner cost run 2 two of the
+        three anchor files for its opening section — both real, both dropped, leaving
+        that section 15 lines of source to work from.
         """
-        known: set[str] = set()
-        for module in modules:
-            known.update(module.files_json or [])
-
         sections: list[dict] = []
         for raw in plan.get("sections") or []:
             name = (raw.get("name") or "").strip()
@@ -164,6 +173,29 @@ class CompositionPlannerAgent(BaseAgent):
         return [
             {"name": n, "focus": n, "key_files": top_files[:4]} for n in names
         ]
+
+    @staticmethod
+    async def _narratives(repos, kb_id: int, doc_types: list[str]) -> str:
+        """Prior analysis relevant to what is being planned, full length."""
+        wanted: list[NarrativeTopic] = []
+        for doc_type in doc_types:
+            for topic in topics_for_doc_type(doc_type):
+                if topic not in wanted:
+                    wanted.append(topic)
+
+        blocks: list[str] = []
+        for topic in wanted:
+            if narrative := await repos.narratives.get(kb_id, topic):
+                blocks.append(f"### {topic}\n{narrative.content_md}")
+        return "\n\n".join(blocks)
+
+    @staticmethod
+    async def _known_files(repos, kb_id: int) -> set[str]:
+        """Every file path in the KB, tests included — this is an existence check."""
+        known: set[str] = set()
+        for module in await repos.modules.list_by_kb(kb_id, include_tests=True, limit=1000):
+            known.update(module.files_json or [])
+        return known
 
     @staticmethod
     async def _modules_for(repos, kb_id: int, doc_type: str):

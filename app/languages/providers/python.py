@@ -34,6 +34,14 @@ _ENTRYPOINT_FILENAMES = frozenset({
     "main.py", "__main__.py", "manage.py", "wsgi.py", "asgi.py", "app.py", "cli.py",
 })
 
+#: Directories whose `__main__` blocks are demos, one-off utilities or teaching
+#: material rather than ways into the system. A conventional entrypoint *filename*
+#: still counts anywhere — this only gates the `__name__ == "__main__"` heuristic.
+_NON_ENTRYPOINT_DIRS = frozenset({
+    "scripts", "script", "examples", "example", "samples", "tutorials", "tutorial",
+    "docs", "benchmarks", "bench", "demo", "demos", "tools", "notebooks",
+})
+
 _PROPERTY_DECORATORS = frozenset({"property", "cached_property", "functools.cached_property"})
 
 
@@ -213,8 +221,23 @@ class PythonProvider(LanguageProvider):
         return any(part in ("tests", "test", "testing") for part in p.parts)
 
     def is_entrypoint(self, relative_path: str, source: str) -> bool:
-        if PurePosixPath(relative_path).name in _ENTRYPOINT_FILENAMES:
+        """
+        Whether this file is a way *into the system*.
+
+        A bare `if __name__ == "__main__"` is not enough on its own. Run 1 recorded 10
+        entrypoints for neurosurfer, of which five were noise — `tests/test_mcp_client.py`,
+        two one-off SVG scripts and two tutorial files — and every one of them was then
+        echoed into the architecture map and the diagram prompt as a fact about the
+        system. Tests, examples and scratch scripts are excluded; a conventional
+        entrypoint filename still qualifies wherever it lives.
+        """
+        path = PurePosixPath(relative_path)
+        if self.is_test_file(relative_path):
+            return False
+        if path.name in _ENTRYPOINT_FILENAMES:
             return True
+        if any(part in _NON_ENTRYPOINT_DIRS for part in path.parts):
+            return False
         return '__name__ == "__main__"' in source or "__name__ == '__main__'" in source
 
     # ── Entity detection ──────────────────────────────────────────────────────

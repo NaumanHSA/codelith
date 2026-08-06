@@ -90,7 +90,22 @@ class ArtifactWriter:
         settings = get_settings()
         limit = settings.ARTIFACTS_MAX_CHARS
         if limit and len(body) > limit:
-            body = body[:limit] + f"\n\n… truncated at ARTIFACTS_MAX_CHARS={limit}\n"
+            if ext == "json":
+                # Cutting JSON at a character count leaves a file that no longer parses
+                # — `json.load()` fails mid-string, which is exactly when you most want
+                # to read it. Replace it with a valid envelope instead.
+                body = json.dumps(
+                    {
+                        "_truncated": True,
+                        "_original_chars": len(body),
+                        "_limit": limit,
+                        "_note": "raise ARTIFACTS_MAX_CHARS to capture this payload whole",
+                        "preview": body[: max(0, limit - 400)],
+                    },
+                    indent=2,
+                )
+            else:
+                body = body[:limit] + f"\n\n… truncated at ARTIFACTS_MAX_CHARS={limit}\n"
 
         with self._lock:
             self._seq += 1

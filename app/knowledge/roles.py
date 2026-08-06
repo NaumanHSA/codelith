@@ -1,70 +1,173 @@
 """
 Inferring what a module is *for*.
 
-Role drives section planning during composition — an API reference cares about `api`
-and `schema` modules, a deployment guide about `infra`. Inference is by path
-convention, which is broadly shared across ecosystems (`controllers/`, `handlers/`,
-`models/`, `migrations/`), so this stays language-neutral. A language whose community
-uses different names can be handled by extending `_ROLE_HINTS`.
+Role is not cosmetic. It decides which narratives get written (`_ROLE_TRIGGERS`),
+which modules the planner is shown per document type (`_ROLE_FOCUS`), and how the
+deterministic architecture fallback groups the codebase. A module that infers to
+`unknown` is invisible to all three, so `unknown` has to mean "genuinely
+undecidable", not "our word list was short".
+
+Measured on run 1 (neurosurfer, 45 modules) the previous path-only matcher put 23
+modules — 13,770 LOC, more than every other role combined — on `unknown`. Three
+things caused it, and each is addressed here:
+
+  * **Singular/plural mismatch.** The hint list held `workflows` but the module was
+    `neurosurfer/graph/workflow`. Segments and hints are now compared in a
+    normalised singular form, which removes the whole class of near-misses.
+  * **No use of the evidence we already extracted.** A module whose files define
+    HTTP routes *is* the API layer whatever its directory is called. Detected
+    entities now outrank path convention.
+  * **`unknown` as the fallback.** A module full of public symbols that matched no
+    keyword is a service we failed to name, not an unknowable. It now falls back to
+    `service`, leaving `unknown` for modules with nothing to go on.
+
+Inference stays language-neutral: path convention plus entity kinds, both of which
+are shared across ecosystems. A language whose community uses different names is
+handled by extending `_ROLE_HINTS`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import PurePosixPath
 
-from app.knowledge.constants import ModuleRole
+from app.knowledge.constants import EntityKind, ModuleRole
 
 #: Ordered most-specific first — the first hint found in the path segments wins.
+#: Written in singular form; `_normalise` folds plurals onto it, so `route` also
+#: matches `routes` and `workflow` also matches `workflows`.
 _ROLE_HINTS: tuple[tuple[ModuleRole, tuple[str, ...]], ...] = (
-    (ModuleRole.TEST, ("test", "tests", "testing", "spec", "specs", "__tests__")),
-    (ModuleRole.API, ("api", "routes", "routers", "controllers", "handlers",
-                      "endpoints", "views", "resources")),
-    (ModuleRole.SCHEMA, ("schemas", "schema", "dto", "dtos", "serializers",
-                         "types", "contracts")),
-    (ModuleRole.MODEL, ("models", "entities", "domain", "orm")),
-    (ModuleRole.DATA_ACCESS, ("repositories", "repository", "dao", "store", "stores",
-                              "db", "database", "migrations", "queries", "memory")),
-    (ModuleRole.SERVICE, ("services", "service", "usecases", "use_cases", "application",
-                          "core", "business", "agents", "workflows", "ingestion",
-                          "pipeline", "pipelines")),
-    (ModuleRole.WORKER, ("workers", "worker", "tasks", "jobs", "queue",
-                         "consumers", "celery")),
-    (ModuleRole.UI, ("ui", "components", "pages", "views", "screens", "frontend", "client", "web")),
-    (ModuleRole.CLI, ("cli", "commands", "cmd", "console", "bin", "scripts")),
-    (ModuleRole.CONFIG, ("config", "configuration", "settings", "conf")),
+    (ModuleRole.TEST, ("test", "testing", "spec", "__tests__", "e2e", "fixture")),
+    (ModuleRole.API, ("api", "route", "router", "controller", "handler", "endpoint",
+                      "resource", "rest", "graphql", "grpc", "rpc", "server", "http")),
+    (ModuleRole.SCHEMA, ("schema", "dto", "serializer", "type", "contract",
+                         "protocol", "interface", "proto")),
+    (ModuleRole.MODEL, ("model", "entity", "domain", "orm", "record")),
+    (ModuleRole.DATA_ACCESS, ("repository", "repo", "dao", "store", "vectorstore",
+                              "db", "database", "migration", "query", "memory",
+                              "cache", "persistence", "storage", "index")),
+    (ModuleRole.WORKER, ("worker", "task", "job", "queue", "consumer", "celery",
+                         "scheduler", "cron")),
+    (ModuleRole.SERVICE, ("service", "usecase", "use_case", "application", "core",
+                          "business", "agent", "workflow", "orchestration",
+                          "orchestrator", "engine", "runtime", "graph", "pipeline",
+                          "ingestion", "processing", "manager", "provider", "backend",
+                          "adapter", "client", "integration", "plugin", "tool",
+                          "llm", "rag", "mcp")),
+    (ModuleRole.UI, ("ui", "component", "page", "view", "screen", "frontend",
+                     "widget", "layout")),
+    (ModuleRole.CLI, ("cli", "command", "cmd", "console", "bin", "script", "shell")),
+    (ModuleRole.CONFIG, ("config", "configuration", "setting", "conf", "env",
+                         "prompt", "template")),
     (ModuleRole.INFRA, ("infra", "infrastructure", "deploy", "deployment", "k8s",
-                        "kubernetes", "terraform", "helm", "docker", "ops")),
-    (ModuleRole.UTILITY, ("utils", "util", "helpers", "common", "shared", "lib",
-                          "internal", "observability", "tracing", "telemetry",
-                          "monitoring", "parsers", "formatters")),
+                        "kubernetes", "terraform", "helm", "docker", "ops",
+                        "provisioning")),
+    (ModuleRole.UTILITY, ("util", "helper", "common", "shared", "lib", "internal",
+                          "observability", "tracing", "telemetry", "monitoring",
+                          "metric", "logging", "parser", "formatter", "exporter",
+                          "tutorial", "example", "sample", "demo")),
 )
 
-#: Filenames that identify a module's role regardless of directory.
+#: Filenames that identify a module's role regardless of directory. Applied only when
+#: they *dominate* the module — one `config.py` among thirteen files says nothing
+#: about the module, and used to relabel a whole RAG package as `config`.
 _FILENAME_HINTS: tuple[tuple[ModuleRole, tuple[str, ...]], ...] = (
     (ModuleRole.INFRA, ("dockerfile", "docker-compose.yml", "docker-compose.yaml")),
     (ModuleRole.CONFIG, ("settings.py", "config.py", "conf.py")),
 )
 
+#: Detected entity kind → what owning one says about the module. This outranks path
+#: convention: it is observed fact rather than naming convention.
+_ENTITY_ROLES: tuple[tuple[EntityKind, ModuleRole], ...] = (
+    (EntityKind.ROUTE, ModuleRole.API),
+    (EntityKind.INFRA_RESOURCE, ModuleRole.INFRA),
+)
 
-def infer_role(module_path: str, file_paths: list[str], is_test: bool = False) -> ModuleRole:
+#: Below this, a module is too small to call anything but utility when nothing matched.
+_MIN_SYMBOLS_FOR_SERVICE = 1
+
+
+def _plurals(word: str) -> set[str]:
     """
-    Best-effort role for a module.
+    A hint and the plural spellings that mean the same thing.
+
+    Expanding the *hints* rather than stemming the *segments* avoids inventing stems:
+    a stemmer turned `vectorstores` into `vectorstor`, which matched nothing.
+    """
+    forms = {word, f"{word}s", f"{word}es"}
+    if word.endswith("y"):
+        forms.add(f"{word[:-1]}ies")  # repository → repositories
+    return forms
+
+
+#: Hints pre-expanded once, in declaration order, so lookup is a plain set test.
+_EXPANDED_HINTS: tuple[tuple[ModuleRole, frozenset[str]], ...] = tuple(
+    (role, frozenset().union(*(_plurals(h) for h in hints)))
+    for role, hints in _ROLE_HINTS
+)
+
+
+def _terms(segment: str) -> set[str]:
+    """One path segment as the terms it could match, including compound pieces."""
+    seg = segment.lower().strip("_-")
+    terms = {seg}
+    # `web_search` should also offer `search`; `agentic_loop` also `loop`.
+    terms.update(p for p in seg.replace("-", "_").split("_") if p)
+    return terms
+
+
+def _match(terms: set[str]) -> ModuleRole | None:
+    for role, hints in _EXPANDED_HINTS:
+        if terms & hints:
+            return role
+    return None
+
+
+def infer_role(
+    module_path: str,
+    file_paths: list[str],
+    is_test: bool = False,
+    *,
+    entity_kinds: Iterable[str] = (),
+    symbol_count: int = 0,
+) -> ModuleRole:
+    """
+    Best-effort role for a module, strongest evidence first.
 
     `is_test` wins outright — a test module is a test module whatever it exercises.
+    Then detected entities, then path convention, then dominant filenames, and
+    finally a shape-based default so that real code is never left `unknown`.
     """
     if is_test:
         return ModuleRole.TEST
 
-    segments = {s.lower() for s in PurePosixPath(module_path).parts}
-    for role, hints in _ROLE_HINTS:
-        if segments & set(hints):
+    owned = {str(k) for k in entity_kinds}
+    for kind, role in _ENTITY_ROLES:
+        if str(kind) in owned:
             return role
 
-    names = {PurePosixPath(p).name.lower() for p in file_paths}
+    parts = PurePosixPath(module_path).parts
+    # The leaf names the module; ancestors only describe where it lives. Checking the
+    # leaf first stops `app/server/schemas` being called an API because of `server`.
+    if parts and (role := _match(_terms(parts[-1]))):
+        return role
+    ancestors: set[str] = set()
+    for raw in parts[:-1]:
+        ancestors |= _terms(raw)
+    if role := _match(ancestors):
+        return role
+
+    names = [PurePosixPath(p).name.lower() for p in file_paths]
     for role, hints in _FILENAME_HINTS:
-        if names & set(hints):
+        matched = sum(1 for n in names if n in hints)
+        # Dominant means "most of the module", or "the module is one or two files".
+        if matched and (len(names) <= 2 or matched * 2 >= len(names)):
             return role
 
+    # Nothing matched. Code that exposes symbols is a service we failed to name;
+    # `unknown` is reserved for modules with nothing to go on at all.
+    if symbol_count >= _MIN_SYMBOLS_FOR_SERVICE:
+        return ModuleRole.SERVICE
     return ModuleRole.UNKNOWN
 
 
@@ -76,8 +179,6 @@ def suggest_doc_types(entity_kinds: dict[str, int], roles: dict[str, int]) -> li
     evidence-backed rather than a fixed menu. Returns dicts matching
     `app.schemas.knowledge.DocTypeSuggestion`.
     """
-    from app.knowledge.constants import EntityKind
-
     routes = entity_kinds.get(EntityKind.ROUTE, 0)
     infra = entity_kinds.get(EntityKind.INFRA_RESOURCE, 0)
     deps = entity_kinds.get(EntityKind.DEPENDENCY, 0)

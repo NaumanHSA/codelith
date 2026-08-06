@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     ANALYSIS_MAX_SUMMARISED_MODULES: int = 40
     # Source characters shown to the summarizer per module.
     ANALYSIS_MODULE_CONTEXT_CHARS: int = 6000
+    # Ceiling on narratives written per knowledge base. The floor of evidence-justified
+    # topics comes first, then whatever the selection call adds, up to this many. Each
+    # is a quality-tier call, so this is the cost control for the stage.
+    ANALYSIS_MAX_NARRATIVES: int = 12
     # Concurrent LLM calls in the summarizer and narrative writer. Narratives are the
     # binding constraint: 5 topics at 4-way concurrency is two serial batches. Tune to
     # what the endpoint sustains — too high and requests queue inside LM Studio.

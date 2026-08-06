@@ -14,6 +14,7 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import NarrativeTopic
+from app.knowledge.narratives import topics_for_doc_type
 from app.llm.prompts.composition_prompts import COMPOSITION_STRATEGY
 from app.tracing.artifacts import save_artifact, save_input_artifact
 
@@ -37,14 +38,17 @@ class CompositionStrategyAgent(BaseAgent):
             stats: dict = state.get("kb_stats") or {}
             repos = KnowledgeRepositories.for_session(self.db)
 
+            # Narratives for what was actually requested. Hardcoding overview +
+            # architecture meant an API document's strategy call never saw an endpoint:
+            # the routes were in the request_lifecycle narrative, which was not passed.
             overview = await repos.narratives.get(kb_id, NarrativeTopic.OVERVIEW)
-            architecture = await repos.narratives.get(kb_id, NarrativeTopic.ARCHITECTURE)
+            relevant = await self._narratives(repos, kb_id, doc_types)
 
             messages = COMPOSITION_STRATEGY.render(
                 project_name=project.name,
                 doc_types=", ".join(doc_types),
-                overview=(overview.content_md[:1500] if overview else "(none)"),
-                architecture=(architecture.content_md[:1500] if architecture else "(none)"),
+                overview=(overview.content_md if overview else "(none)"),
+                architecture=relevant or "(none)",
                 roles=json.dumps(stats.get("roles", {})),
                 facts=json.dumps(stats.get("entity_kinds", {})),
             )
@@ -66,15 +70,39 @@ class CompositionStrategyAgent(BaseAgent):
             return {"strategy": strategy}
 
     @staticmethod
+    async def _narratives(repos, kb_id: int, doc_types: list[str]) -> str:
+        """
+        Every narrative the requested document types read, at full length.
+
+        This is one call per composition job. All narratives together are roughly
+        4,600 tokens, so the old flat 1,500-character cut — which discarded 71% of the
+        architecture narrative mid-word — bought nothing.
+        """
+        wanted: list[NarrativeTopic] = []
+        for doc_type in doc_types:
+            for topic in topics_for_doc_type(doc_type):
+                if topic not in wanted:
+                    wanted.append(topic)
+
+        blocks: list[str] = []
+        for topic in wanted:
+            if narrative := await repos.narratives.get(kb_id, topic):
+                blocks.append(f"### {topic}\n{narrative.content_md}")
+        return "\n\n".join(blocks)
+
+    @staticmethod
     def _default(doc_types: list[str], stats: dict) -> dict:
         roles = stats.get("roles", {})
         # Diagrams only pay off when there is real structure to draw.
         worth_drawing = len(roles) >= 3 or stats.get("entity_kinds", {}).get("route", 0) > 0
         return {
+            # `priorities` used to be here and in the response schema. Nothing ever read
+            # it — the model spent tokens filling a field with no consumer, and in run 2
+            # returned section titles where the fallback implies an ordered doc-type
+            # list. Removed rather than wired: fan-out order is not a strategy decision.
             "audiences": [
                 {"doc_type": dt, "audience": "developers", "tone": "technical"}
                 for dt in doc_types
             ],
-            "priorities": doc_types,
             "generate_diagrams": bool(worth_drawing),
         }

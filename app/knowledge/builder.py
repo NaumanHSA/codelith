@@ -107,8 +107,26 @@ def build_modules(files: list[SourceFile]) -> BuildResult:
         for detected in provider.detect_entities(file.path, file.content, symbols):
             _collect(detected, file.path, entities, seen_entities)
 
+    # Entity kinds owned per file, so role inference can use what was actually
+    # detected — a module defining HTTP routes is the API layer whatever it is called.
+    kinds_by_file: dict[str, set[str]] = defaultdict(set)
+    for entity in entities:
+        if path := entity.get("source_path"):
+            kinds_by_file[path].add(entity["kind"])
+
     for bucket in grouped.values():
-        bucket["role"] = str(infer_role(bucket["path"], bucket["files_json"], bucket["is_test"]))
+        owned: set[str] = set()
+        for path in bucket["files_json"]:
+            owned |= kinds_by_file.get(path, set())
+        bucket["role"] = str(
+            infer_role(
+                bucket["path"],
+                bucket["files_json"],
+                bucket["is_test"],
+                entity_kinds=owned,
+                symbol_count=len(bucket["symbols_json"]),
+            )
+        )
         result.modules.append(bucket)
 
     result.modules.sort(key=lambda m: m["loc"], reverse=True)
@@ -209,16 +227,29 @@ def merge_entities(*groups: list[dict]) -> list[dict]:
 
 
 def chunk_files(
-    files: list[SourceFile], chunk_lines: int = 40, overlap: int = 5, max_chars: int = 1500
+    files: list[SourceFile],
+    chunk_lines: int = 40,
+    overlap: int = 5,
+    max_chars: int = 4000,
 ) -> list[dict]:
     """
-    Split files into overlapping chunks ready for embedding.
+    Split files into chunks ready for embedding, on symbol boundaries where possible.
 
-    Returns dicts shaped for `CodeChunk`, minus the embedding, so the caller can
-    embed them in batches.
+    The provider has already extracted every declaration with its line span, so a
+    chunk can be a whole function or class instead of an arbitrary 40-line window.
+    Files no provider claims — and the gaps between declarations — fall back to line
+    windows.
+
+    Two properties matter and are tested:
+
+      * **`start_line`/`end_line` describe the text that is actually stored.** The
+        previous version cut a window to 1,500 chars while still reporting the full
+        40-line span; 34% of run 1's chunks were affected, and the retrieval layer
+        labelled every one of them `path:start-end` as though it were complete.
+      * **Oversized units are split, not truncated.** A 900-line class becomes several
+        chunks with honest spans rather than one chunk holding its first 1,500 chars.
     """
     chunks: list[dict] = []
-    step = max(1, chunk_lines - overlap)
 
     for file in files:
         if registry.should_skip(file.path):
@@ -228,24 +259,144 @@ def chunk_files(
         if not lines:
             continue
 
-        for start in range(0, len(lines), step):
-            end = min(start + chunk_lines, len(lines))
-            text = "\n".join(lines[start:end])
-            if not text.strip():
+        language = provider.language if provider else file.language
+        spans = _symbol_spans(provider, file, len(lines))
+        if not spans:
+            spans = _window_spans(len(lines), chunk_lines, overlap)
+        spans = _merge_small(spans, lines, max_chars)
+
+        for start, end in spans:
+            chunks.extend(
+                _emit(file.path, language, lines, start, end, max_chars, chunk_lines)
+            )
+    return chunks
+
+
+def _symbol_spans(provider, file: SourceFile, total_lines: int) -> list[tuple[int, int]]:
+    """
+    Line spans covering a file: one per top-level declaration, plus the gaps between.
+
+    Gaps matter — imports, module-level constants and dispatch code live there, and a
+    symbol-only scheme would leave them unembedded and therefore unretrievable.
+    """
+    if provider is None:
+        return []
+    try:
+        symbols = provider.extract_symbols(file.content, file.path)
+    except Exception:
+        return []
+
+    units = sorted(
+        (
+            (s.line, s.end_line or s.line)
+            for s in symbols
+            if not s.parent and s.line and s.line <= total_lines
+        ),
+    )
+    if not units:
+        return []
+
+    spans: list[tuple[int, int]] = []
+    cursor = 1
+    for start, end in units:
+        if start > cursor:
+            spans.append((cursor, start - 1))          # the gap before this declaration
+        spans.append((start, min(end, total_lines)))
+        cursor = max(cursor, min(end, total_lines) + 1)
+    if cursor <= total_lines:
+        spans.append((cursor, total_lines))
+    return spans
+
+
+#: A chunk below this is not worth an embedding of its own — a lone `MAX_RETRIES = 3`
+#: retrieves nothing useful and costs a row. Small neighbours are merged up to it.
+_MIN_CHUNK_CHARS = 400
+
+
+def _merge_small(
+    spans: list[tuple[int, int]], lines: list[str], max_chars: int
+) -> list[tuple[int, int]]:
+    """Coalesce adjacent spans until each is worth embedding, without exceeding budget."""
+    merged: list[tuple[int, int]] = []
+    for start, end in spans:
+        if merged:
+            prev_start, prev_end = merged[-1]
+            prev_size = sum(len(line) + 1 for line in lines[prev_start - 1:prev_end])
+            this_size = sum(len(line) + 1 for line in lines[start - 1:end])
+            if prev_size < _MIN_CHUNK_CHARS and prev_size + this_size <= max_chars:
+                merged[-1] = (prev_start, end)
                 continue
-            chunks.append(
+        merged.append((start, end))
+    return merged
+
+
+def _window_spans(total_lines: int, chunk_lines: int, overlap: int) -> list[tuple[int, int]]:
+    """Fixed overlapping windows — the fallback for files with no extractable symbols."""
+    step = max(1, chunk_lines - overlap)
+    spans: list[tuple[int, int]] = []
+    for start in range(0, total_lines, step):
+        end = min(start + chunk_lines, total_lines)
+        spans.append((start + 1, end))
+        if end >= total_lines:
+            break
+    return spans
+
+
+def _emit(
+    path: str,
+    language: str | None,
+    lines: list[str],
+    start: int,
+    end: int,
+    max_chars: int,
+    chunk_lines: int,
+) -> list[dict]:
+    """
+    One span → one or more chunks, each reporting the lines it really contains.
+
+    A span longer than the character budget is split at a line boundary rather than
+    truncated, so no source silently disappears from the index.
+    """
+    out: list[dict] = []
+    cursor = start
+    while cursor <= end:
+        stop = cursor
+        size = 0
+        while stop <= end:
+            line_len = len(lines[stop - 1]) + 1
+            if size + line_len > max_chars and stop > cursor:
+                break
+            size += line_len
+            stop += 1
+            if stop - cursor >= chunk_lines * 4:  # keep any one chunk sane
+                break
+
+        body = lines[cursor - 1:stop - 1]
+        # Trim blank edges and move the reported span with them. Trailing blanks vanish
+        # on any splitlines() round-trip, so keeping them would make the metadata stop
+        # describing the stored text; leading blanks would make a chunk that begins at a
+        # declaration look like it begins two lines earlier.
+        offset = 0
+        while body and not body[0].strip():
+            body.pop(0)
+            offset += 1
+        while body and not body[-1].strip():
+            body.pop()
+
+        if body:
+            first = cursor + offset
+            out.append(
                 {
-                    "source_path": file.path,
-                    "language": provider.language if provider else file.language,
+                    "source_path": path,
+                    "language": language,
                     "chunk_type": "code",
-                    "content": text[:max_chars],
-                    "start_line": start + 1,
-                    "end_line": end,
+                    "content": "\n".join(body),
+                    "start_line": first,
+                    "end_line": first + len(body) - 1,
                 }
             )
-            if end >= len(lines):
-                break
-    return chunks
+        cursor = stop
+    return out
 
 
 def read_manifest_files(root, max_depth: int = 2) -> list[SourceFile]:

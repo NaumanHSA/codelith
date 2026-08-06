@@ -66,6 +66,9 @@ class KBPersisterAgent(BaseAgent):
                 kb_id,
                 status=status,
                 stats=stats,
+                # Carried out of workflow state and onto the row: composition has no
+                # other way to reach it, and without it every diagram is guesswork.
+                architecture=state.get("architecture_map") or {},
                 error="; ".join(reasons) if reasons else None,
             )
             await self.db.commit()

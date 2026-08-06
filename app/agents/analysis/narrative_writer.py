@@ -5,14 +5,23 @@ Prose that is true of the codebase regardless of which document the user eventua
 asks for — an overview, how a request flows, how auth works. Written once here and
 reused by every composition, which is the whole point of splitting analysis out.
 
-Topics are chosen from the evidence: there is no reason to spend a call writing about
-authentication in a project that has none.
+Topic choice is two-part. `app.knowledge.narratives.required_topics()` supplies a
+floor of topics the extracted facts plainly justify, and one cheap selection call on
+the fast tier proposes anything further the evidence supports. The floor wins ties:
+24 env vars mean this project has a configuration story whether or not a model
+thought to mention it, and a bad selection call must cost quality rather than
+silently drop a topic the facts demand.
+
+Choosing before writing is also the cheaper order. Previously every heuristically
+triggered topic was written on the quality tier and *then* possibly declined with
+NOT_APPLICABLE — paying the expensive call to find out it was not wanted.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+from collections import Counter
 from typing import Any
 
 from app.agents.base import BaseAgent
@@ -20,36 +29,15 @@ from app.config import get_settings
 from app.core.cancellation import JobCancelled
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
-from app.llm.prompts.analysis_prompts import NARRATIVE, TOPIC_GUIDANCE
-from app.tracing.artifacts import save_text_artifact
+from app.knowledge.narratives import ROLE_TRIGGERS, coerce_topics, required_topics
+from app.llm.prompts.analysis_prompts import NARRATIVE, TOPIC_GUIDANCE, TOPIC_SELECTION
+from app.tracing.artifacts import save_artifact, save_text_artifact
 
 #: Sentinel the prompt asks for when a topic does not apply to this codebase.
 _NOT_APPLICABLE = "NOT_APPLICABLE"
 
 #: How much of each module summary survives into a downstream prompt.
 _SUMMARY_CHARS = 400
-
-#: Topics always attempted — every codebase can be described and structured.
-_ALWAYS = (NarrativeTopic.OVERVIEW, NarrativeTopic.ARCHITECTURE)
-
-#: Topic → module roles that make it worth writing.
-_ROLE_TRIGGERS: dict[NarrativeTopic, set[ModuleRole]] = {
-    NarrativeTopic.REQUEST_LIFECYCLE: {ModuleRole.API, ModuleRole.SERVICE, ModuleRole.WORKER},
-    NarrativeTopic.DATA_MODEL: {ModuleRole.MODEL, ModuleRole.DATA_ACCESS, ModuleRole.SCHEMA},
-    NarrativeTopic.CONFIGURATION: {ModuleRole.CONFIG},
-    NarrativeTopic.TESTING: {ModuleRole.TEST},
-    NarrativeTopic.DEPLOYMENT: {ModuleRole.INFRA},
-}
-
-#: Topic → entity kinds that make it worth writing.
-_ENTITY_TRIGGERS: dict[NarrativeTopic, set[EntityKind]] = {
-    NarrativeTopic.DEPLOYMENT: {EntityKind.INFRA_RESOURCE},
-    NarrativeTopic.CONFIGURATION: {EntityKind.ENV_VAR},
-    NarrativeTopic.INTEGRATIONS: {EntityKind.EXTERNAL_API},
-}
-
-#: Substrings in module names that suggest an auth story worth telling.
-_AUTH_HINTS = ("auth", "security", "permission", "rbac", "identity", "login", "token")
 
 
 class NarrativeWriterAgent(BaseAgent):
@@ -72,7 +60,9 @@ class NarrativeWriterAgent(BaseAgent):
 
             modules = await repos.modules.list_by_kb(kb_id, include_tests=True)
             entity_kinds = await repos.entities.kind_breakdown(kb_id)
-            topics = self._select_topics(modules, entity_kinds)
+            topics = await self._choose_topics(
+                project, architecture_map, modules, entity_kinds
+            )
 
             await self._emit_log(
                 "info", f"Writing {len(topics)} narratives", topics=[str(x) for x in topics]
@@ -138,24 +128,73 @@ class NarrativeWriterAgent(BaseAgent):
 
     # ── Topic selection ───────────────────────────────────────────────────────
 
-    def _select_topics(self, modules, entity_kinds: dict[str, int]) -> list[NarrativeTopic]:
-        roles = {ModuleRole(m.role) for m in modules if m.role in {str(r) for r in ModuleRole}}
-        present_kinds = {k for k, count in entity_kinds.items() if count}
+    async def _choose_topics(
+        self, project, architecture_map: dict, modules, entity_kinds: dict[str, int]
+    ) -> list[NarrativeTopic]:
+        """
+        Floor first, then whatever the selector can justify on top of it.
 
-        topics = list(_ALWAYS)
-        for topic, triggers in _ROLE_TRIGGERS.items():
-            if roles & triggers:
-                topics.append(topic)
-        for topic, kinds in _ENTITY_TRIGGERS.items():
-            if present_kinds & {str(k) for k in kinds} and topic not in topics:
-                topics.append(topic)
+        The floor is deterministic and non-negotiable. The selection call is allowed to
+        *add* topics — it is the part that spots a plugin system or a concurrency story
+        no keyword table anticipated — and its output is coerced onto the enum, so a
+        model that invents a topic name simply has it dropped rather than writing a
+        narrative no consumer will ever look up.
+        """
+        settings = get_settings()
+        roles = [m.role for m in modules]
+        present_kinds = [k for k, count in entity_kinds.items() if count]
 
-        names = " ".join(m.name.lower() for m in modules)
-        if any(hint in names for hint in _AUTH_HINTS):
-            topics.append(NarrativeTopic.AUTH)
+        floor = required_topics(roles, present_kinds, [m.name for m in modules])
+        proposed = await self._propose_topics(
+            project, architecture_map, modules, roles, entity_kinds
+        )
 
-        # Preserve declaration order while de-duplicating.
-        return list(dict.fromkeys(topics))
+        extra = [t for t in proposed if t not in floor]
+        topics = (floor + extra)[: settings.ANALYSIS_MAX_NARRATIVES]
+
+        save_artifact(
+            "narrative_writer.topic_selection",
+            {
+                "floor": [str(t) for t in floor],
+                "proposed": [str(t) for t in proposed],
+                "written": [str(t) for t in topics],
+                "cap": settings.ANALYSIS_MAX_NARRATIVES,
+            },
+        )
+        return topics
+
+    async def _propose_topics(
+        self, project, architecture_map: dict, modules, roles: list[str], entity_kinds: dict
+    ) -> list[NarrativeTopic]:
+        """One fast-tier call. A failure here costs nothing — the floor still stands."""
+        catalogue = "\n".join(
+            f"  {topic} — {TOPIC_GUIDANCE.get(str(topic), '').split('.')[0]}."
+            for topic in NarrativeTopic
+        )
+        messages = TOPIC_SELECTION.render(
+            project_name=project.name,
+            topics=catalogue,
+            architecture_json=json.dumps(architecture_map, indent=2)[:2000],
+            roles=json.dumps(dict(Counter(roles))),
+            facts=json.dumps(entity_kinds),
+            module_inventory=self._inventory(modules[:30]),
+        )
+        try:
+            response = await self._call_llm_json(messages, task_type="classify")
+        except JobCancelled:
+            raise
+        except Exception as exc:
+            await self._emit_log("warning", f"Topic selection failed, using floor only: {exc}")
+            return []
+
+        if not isinstance(response, dict):
+            return []
+        chosen = [
+            entry.get("topic")
+            for entry in response.get("topics") or []
+            if isinstance(entry, dict) and float(entry.get("confidence", 1.0) or 0) >= 0.5
+        ]
+        return coerce_topics(chosen)
 
     # ── Writing ───────────────────────────────────────────────────────────────
 
@@ -184,7 +223,7 @@ class NarrativeWriterAgent(BaseAgent):
 
     @staticmethod
     def _relevant_modules(topic, modules, limit: int = 25):
-        triggers = _ROLE_TRIGGERS.get(topic)
+        triggers = ROLE_TRIGGERS.get(topic)
         if not triggers:
             return [m for m in modules if m.role != str(ModuleRole.TEST)][:limit]
         wanted = {str(r) for r in triggers}

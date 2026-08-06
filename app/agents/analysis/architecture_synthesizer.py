@@ -138,4 +138,7 @@ class ArchitectureSynthesizerAgent(BaseAgent):
             "entry_points": [e.name for e in entrypoints[:10]],
             "external_dependencies": [d.name for d in deps[:30]],
             "layers": [{"name": role, "modules": names[:20]} for role, names in by_role.items()],
+            # No edges can be derived from role grouping alone. An empty list is the
+            # honest answer; the diagram stage treats it as "nothing to draw".
+            "relations": [],
         }

@@ -115,12 +115,14 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
         *,
         status: KBStatus = KBStatus.READY,
         stats: dict | None = None,
+        architecture: dict | None = None,
         error: str | None = None,
     ) -> KnowledgeBase | None:
         kb = await self.update(
             kb_id,
             status=status,
             stats_json=stats or {},
+            architecture_json=architecture or {},
             error_message=error,
             completed_at=datetime.now(UTC),
         )

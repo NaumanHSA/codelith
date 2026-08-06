@@ -273,3 +273,60 @@ class TestDocTypeSuggestions:
 
         out = suggest_doc_types({"route": 40, "infra_resource": 2}, {"service": 5})
         assert out == sorted(out, key=lambda s: s["confidence"], reverse=True)
+
+
+class TestChunkingMetadata:
+    """
+    Chunk line spans must describe the text actually stored.
+
+    Run 1: 34% of chunks hit the old 1,500-char cap and then reported a 40-line span
+    while holding ~36 lines, and `SectionContextBuilder._format()` labelled each one
+    `path:start-end` as though it were complete.
+    """
+
+    @staticmethod
+    def _chunk(source: str):
+        from app.knowledge.builder import SourceFile, chunk_files
+
+        return chunk_files([SourceFile(path="pkg/mod.py", content=source, language="python")])
+
+    def test_line_span_matches_stored_content(self) -> None:
+        source = "\n".join(
+            line
+            for i in range(40)
+            for line in (f"def f{i}():", f'    """doc {i}"""', f"    return {i}", "")
+        )
+        for chunk in self._chunk(source):
+            stored = len(chunk["content"].splitlines())
+            claimed = chunk["end_line"] - chunk["start_line"] + 1
+            assert stored == claimed, chunk["content"][:80]
+
+    def test_a_long_unit_is_split_rather_than_truncated(self) -> None:
+        """No band of source may end up in no chunk at all."""
+        body = "\n".join(f"    x{i} = {i} * 1000000" for i in range(400))
+        source = f"def enormous():\n{body}\n"
+        chunks = self._chunk(source)
+        covered: set[int] = set()
+        for chunk in chunks:
+            covered |= set(range(chunk["start_line"], chunk["end_line"] + 1))
+        real = {i for i, line in enumerate(source.splitlines(), start=1) if line.strip()}
+        assert real - covered == set()
+
+    def test_files_with_no_symbols_still_chunk(self) -> None:
+        assert self._chunk("\n".join(f"VALUE_{i} = {i}" for i in range(200)))
+
+    def test_chunks_start_at_declarations_where_possible(self) -> None:
+        """
+        Functions become their own chunks instead of arbitrary 40-line windows. Bodies
+        are padded past the merge threshold — a small file is deliberately kept whole
+        rather than shattered into fragments too small to retrieve.
+        """
+        def fn(name: str) -> str:
+            body = "\n".join(f"    {name}_{i} = {i} * 12345" for i in range(30))
+            return f"def {name}():\n{body}\n"
+
+        source = '"""Module docstring."""\n\nimport os\n\n\n' + "\n\n".join(
+            fn(n) for n in ("alpha", "beta", "gamma")
+        )
+        starts = {c["content"].splitlines()[0].strip() for c in self._chunk(source)}
+        assert sum(1 for s in starts if s.startswith("def ")) >= 2, starts

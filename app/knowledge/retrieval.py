@@ -22,9 +22,23 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.knowledge import KnowledgeRepositories
+from app.knowledge.narratives import topics_for_doc_type
 from app.llm.client import create_embedding
 from app.llm.context_manager import count_text_tokens
 from app.memory.vector_store import VectorStore
+
+#: Chunks fetched per section. Over-fetched on purpose: one embedding call produces
+#: all of them, and the fill step decides how many actually fit.
+_RETRIEVAL_CANDIDATES = 24
+
+#: Per-narrative ceiling inside a section bundle. Section context competes with
+#: verbatim source for the same budget, so narratives stay bounded here even though
+#: strategy and the planner now read them whole.
+_NARRATIVE_CHARS_IN_SECTION = 2000
+
+#: Ceiling on module summaries in one bundle. They are the densest context we hold,
+#: but they must not crowd out the verbatim source a section is written from.
+_MAX_MODULE_SUMMARIES = 10
 
 
 @dataclass(slots=True)
@@ -87,41 +101,68 @@ class SectionContextBuilder:
         self,
         section: dict,
         doc_type: str,
-        semantic_limit: int = 6,
+        semantic_limit: int = _RETRIEVAL_CANDIDATES,
     ) -> SectionContext:
+        """
+        Pack one section's context, filling toward the budget rather than to a constant.
+
+        Measured on run 2, the old version left sections starved rather than trimmed:
+        the opening section of an API document used 1,930 of 6,000 tokens — 32% — while
+        44 module summaries and the rest of the index sat unused. Retrieval is now
+        over-fetched once and admitted block by block until the budget is genuinely
+        spent, and module summaries cover the files that were actually retrieved, not
+        only the files the planner happened to name.
+        """
         name = section.get("name") or "Section"
         focus = section.get("focus") or name
         key_files = [f for f in (section.get("key_files") or []) if f][:8]
 
         context = SectionContext(section_name=name, key_files=key_files)
 
-        # 1. Modules that own the planned files — their summaries are the cheapest,
-        #    densest context we have, and were paid for during analysis.
-        modules = (
-            await self.repos.modules.find_for_files(self.kb_id, key_files)
-            if key_files
-            else await self.repos.modules.list_by_kb(self.kb_id, limit=6)
+        # 1. Narratives relevant to this document type — prior analysis, densest first.
+        for narrative in await self._narratives_for(doc_type):
+            context.narratives.append(narrative)
+
+        # 2. Verbatim source for the planned files.
+        for chunk in await self.store.get_by_paths(self.kb_id, key_files):
+            context.source_blocks.append(self._format(chunk))
+
+        # 3. One semantic lookup, over-fetched. Extra candidates cost a little DB time,
+        #    not another embedding call, and give the fill step something to work with.
+        candidates = await self._search_chunks(
+            f"{name}. {focus}", limit=semantic_limit, exclude=key_files
         )
-        for module in modules[:6]:
+
+        # 4. Module summaries: the files the planner named *and* the files retrieval
+        #    surfaced. These were paid for during analysis and are the cheapest context
+        #    per token we own — scoping them to key files alone wasted most of them.
+        related_paths = list(dict.fromkeys(key_files + [c.source_path for c in candidates]))
+        modules = (
+            await self.repos.modules.find_for_files(self.kb_id, related_paths)
+            if related_paths
+            else await self.repos.modules.list_by_kb(self.kb_id, limit=_MAX_MODULE_SUMMARIES)
+        )
+        for module in modules[:_MAX_MODULE_SUMMARIES]:
             if module.summary:
                 context.module_summaries.append(
                     f"- **{module.name}** ({module.role}): {module.summary}"
                 )
 
-        # 2. Narratives relevant to this document type.
-        for narrative in await self._narratives_for(doc_type):
-            context.narratives.append(narrative)
-
-        # 3. Verbatim source for the planned files.
-        for chunk in await self.store.get_by_paths(self.kb_id, key_files):
-            context.source_blocks.append(self._format(chunk))
-
-        # 4. Semantic search to cover what the plan did not name.
-        retrieved = await self.search(f"{name}. {focus}", limit=semantic_limit, exclude=key_files)
-        context.retrieved_blocks.extend(retrieved)
+        # 5. Admit retrieved blocks while there is room for them.
+        self._fill(context, [self._format(c) for c in candidates])
 
         self._trim(context)
         return context
+
+    def _fill(self, context: SectionContext, blocks: list[str]) -> None:
+        """Add blocks one at a time, stopping at the budget instead of at a count."""
+        context.tokens = count_text_tokens(context.render())
+        for block in blocks:
+            projected = context.tokens + count_text_tokens(block)
+            if projected > self.token_budget:
+                break
+            context.retrieved_blocks.append(block)
+            context.tokens = projected
 
     async def search(
         self, query: str, limit: int = 6, exclude: list[str] | None = None
@@ -132,37 +173,38 @@ class SectionContextBuilder:
         Also the write-time escape hatch: when a section's packed context turns out to
         be insufficient, the writer asks for exactly one more query through here.
         """
+        return [self._format(c) for c in await self._search_chunks(query, limit, exclude)]
+
+    async def _search_chunks(
+        self, query: str, limit: int, exclude: list[str] | None = None
+    ) -> list:
+        """Raw chunks, so callers can look at `source_path` before formatting."""
         embedding = await create_embedding(query)
         if embedding is None:
             return []
-        chunks = await self.store.search(
+        return await self.store.search(
             project_id=self.project_id,
             query_embedding=embedding,
             limit=limit,
             kb_id=self.kb_id,
             exclude_paths=exclude or None,
         )
-        return [self._format(c) for c in chunks]
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
     async def _narratives_for(self, doc_type: str) -> list[str]:
-        """Narratives worth including, chosen by what is being written."""
-        from app.knowledge.constants import NarrativeTopic
+        """
+        Narratives worth including, chosen by what is being written.
 
-        wanted: dict[str, tuple[NarrativeTopic, ...]] = {
-            "architecture": (NarrativeTopic.ARCHITECTURE, NarrativeTopic.OVERVIEW),
-            "api": (NarrativeTopic.REQUEST_LIFECYCLE, NarrativeTopic.AUTH),
-            "deployment": (NarrativeTopic.DEPLOYMENT, NarrativeTopic.CONFIGURATION),
-            "getting_started": (NarrativeTopic.OVERVIEW, NarrativeTopic.CONFIGURATION),
-            "modules": (NarrativeTopic.ARCHITECTURE,),
-        }.get(doc_type, (NarrativeTopic.OVERVIEW,))
-
+        Section context is the one place the token budget is genuinely contested, so
+        this is the consumer that still truncates. Strategy and the planner take the
+        full text.
+        """
         out: list[str] = []
-        for topic in wanted:
+        for topic in topics_for_doc_type(doc_type):
             narrative = await self.repos.narratives.get(self.kb_id, topic)
             if narrative:
-                out.append(f"### {topic}\n{narrative.content_md[:1500]}")
+                out.append(f"### {topic}\n{narrative.content_md[:_NARRATIVE_CHARS_IN_SECTION]}")
         return out
 
     @staticmethod

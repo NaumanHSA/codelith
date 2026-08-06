@@ -66,6 +66,11 @@ class KnowledgeBase(Base, TimestampMixin):
 
     #: Aggregate counts and timings — module/entity/narrative totals, languages seen.
     stats_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    #: The architecture map synthesised during analysis: services, layers, tech stack
+    #: and the relations between components. Persisted because composition needs it —
+    #: it used to live only in analysis workflow state, so every diagram drawn in phase
+    #: two was drawn from an empty map and invented its own components.
+    architecture_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     #: Why a build ended up DEGRADED or FAILED.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

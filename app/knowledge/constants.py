@@ -74,6 +74,15 @@ class NarrativeTopic(StrEnum):
     TESTING = "testing"
     ERROR_HANDLING = "error_handling"
     INTEGRATIONS = "integrations"
+    # The ten above assume a request/response service. These cover the shapes that
+    # assumption misses — CLIs, libraries, frontends, pipelines and frameworks.
+    CONCURRENCY = "concurrency"
+    EXTENSIBILITY = "extensibility"
+    CLI_USAGE = "cli_usage"
+    OBSERVABILITY = "observability"
+    BUILD_AND_RELEASE = "build_and_release"
+    STATE_MANAGEMENT = "state_management"
+    PERFORMANCE = "performance"
 
 
 class ModuleRole(StrEnum):
