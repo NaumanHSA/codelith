@@ -3,21 +3,25 @@ from functools import lru_cache
 from langchain_openai import ChatOpenAI
 
 from app.config import get_settings
+from app.llm.providers import FAST, QUALITY, spec_for_tier
 
 
 @lru_cache
 def get_langchain_llm(task_type: str = "default") -> ChatOpenAI:
     """
-    Return a LangChain ChatOpenAI instance pointing at LM Studio.
-    Used by ReAct agents (create_react_agent requires a LangChain model).
-    task_type controls model selection: 'fast' or anything else → quality model.
+    A LangChain model for whichever endpoint the tier resolves to.
+
+    `create_react_agent` requires a LangChain model, so this mirrors
+    `app/llm/client.py` rather than replacing it. Both read the same specs, so the
+    two tiers can sit on different providers here too — a ReAct agent on the fast
+    tier keeps talking to the local endpoint when the quality tier moves to OpenAI.
     """
     settings = get_settings()
-    model = settings.LLM_FAST_MODEL if task_type == "fast" else settings.LLM_QUALITY_MODEL
+    spec = spec_for_tier(FAST if task_type == "fast" else QUALITY)
     return ChatOpenAI(
-        base_url=settings.LLM_BASE_URL,
-        api_key=settings.LLM_API_KEY,
-        model=model,
+        base_url=spec.base_url,
+        api_key=spec.api_key,
+        model=spec.model,
         temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
     )

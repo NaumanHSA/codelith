@@ -117,7 +117,7 @@ class TestStreamingIsInterruptible:
         class FakeClient:
             chat = type("Chat", (), {"completions": FakeCompletions()})()
 
-        monkeypatch.setattr("app.llm.client.get_llm_client", lambda: FakeClient())
+        monkeypatch.setattr("app.llm.client.get_llm_client", lambda *a, **k: FakeClient())
 
         from app.llm.client import chat_completion
 
@@ -159,7 +159,7 @@ class TestStreamingIsInterruptible:
         class FakeClient:
             chat = type("Chat", (), {"completions": FakeCompletions()})()
 
-        monkeypatch.setattr("app.llm.client.get_llm_client", lambda: FakeClient())
+        monkeypatch.setattr("app.llm.client.get_llm_client", lambda *a, **k: FakeClient())
 
         from app.llm.client import chat_completion
 

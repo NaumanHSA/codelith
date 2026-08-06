@@ -20,7 +20,7 @@ from app.config import get_settings
 from app.core.cancellation import JobCancelled
 from app.llm.client import chat_completion
 from app.llm.context_manager import count_tokens, trim_to_limit
-from app.llm.router import select_model
+from app.llm.router import select_spec
 from app.observability.metrics import llm_call_duration, llm_calls_total, record_llm_tokens
 from app.tracing.runtime import get_tracer
 
@@ -63,9 +63,17 @@ class BaseAgent(ABC):
         settings = get_settings()
         messages = trim_to_limit(messages, settings.REACT_CONTEXT_WINDOW_LIMIT)
 
-        selected_model = model or select_model(task_type)
+        spec = select_spec(task_type)
+        selected_model = model or spec.model
         token_count = count_tokens(messages)
-        self.log.debug("llm_call", model=selected_model, task_type=task_type, tokens=token_count)
+        self.log.debug(
+            "llm_call",
+            model=selected_model,
+            provider=spec.provider,
+            tier=spec.tier,
+            task_type=task_type,
+            tokens=token_count,
+        )
         record_llm_tokens(selected_model, prompt_tokens=token_count)
 
         tracer = self._tracer()
@@ -74,11 +82,17 @@ class BaseAgent(ABC):
             kind="llm",
             agent_id=self.name,
             label=f"llm.{task_type}",
-            start_message=f"LLM [{task_type}] ~{token_count} tokens",
-            inputs={"task_type": task_type, "tokens": token_count, "messages": messages},
+            start_message=f"LLM [{task_type}] {spec} ~{token_count} tokens",
+            inputs={
+                "task_type": task_type,
+                "provider": spec.provider,
+                "model": selected_model,
+                "tokens": token_count,
+                "messages": messages,
+            },
         ) as t:
             try:
-                result = await self._chat_with_retry(messages, selected_model)
+                result = await self._chat_with_retry(messages, selected_model, spec)
                 llm_calls_total.labels(
                     model=selected_model, task_type=task_type, status="success"
                 ).inc()
@@ -103,8 +117,8 @@ class BaseAgent(ABC):
         retry=retry_if_exception_type(Exception) & retry_if_not_exception_type(JobCancelled),
         reraise=True,
     )
-    async def _chat_with_retry(self, messages: list[dict], model: str) -> str:
-        result = await chat_completion(messages, model=model)
+    async def _chat_with_retry(self, messages: list[dict], model: str, spec=None) -> str:
+        result = await chat_completion(messages, model=model, spec=spec)
         if not (result or "").strip():
             # An empty completion is never a valid answer, and it is not an error the
             # transport reports: observed on job 8, where a reasoning model spent its

@@ -1,10 +1,8 @@
-from app.config import get_settings
+from app.llm.providers import FAST, QUALITY, ModelSpec, spec_for_tier
 
 
-def select_model(task_type: str) -> str:
-    """Return the appropriate model name based on task requirements."""
-    settings = get_settings()
-
+def select_tier(task_type: str) -> str:
+    """Return the tier a task type belongs to."""
     # `plan` is quality work despite producing short output: it fixes the document's
     # structure *and* the `key_files` every section's retrieval is anchored on.
     # Measured on a 1.2b model it returned architecture-shaped sections for an API doc
@@ -21,7 +19,26 @@ def select_model(task_type: str) -> str:
     fast_tasks = {"classify", "extract", "summarize"}
 
     if task_type in quality_tasks:
-        return settings.LLM_QUALITY_MODEL
-    elif task_type in fast_tasks:
-        return settings.LLM_FAST_MODEL
-    return settings.LLM_DEFAULT_MODEL
+        return QUALITY
+    if task_type in fast_tasks:
+        return FAST
+    # Anything unclassified degrades in cost, not in output.
+    return QUALITY
+
+
+def select_spec(task_type: str) -> ModelSpec:
+    """
+    The endpoint this task should be sent to — provider, model, URL and key.
+
+    Callers take a whole spec rather than a model name because the two tiers may sit
+    on different providers, and a name alone no longer says where to send the request.
+    """
+    return spec_for_tier(select_tier(task_type))
+
+
+def select_model(task_type: str) -> str:
+    """The model name for a task type. Prefer `select_spec` where the endpoint matters."""
+    return select_spec(task_type).model
+
+
+__all__ = ["select_tier", "select_spec", "select_model"]

@@ -34,7 +34,11 @@ def _load_env() -> dict:
             continue
         if "=" in line:
             k, _, v = line.partition("=")
-            env[k.strip()] = v.strip()
+            # Strip trailing inline comments the way python-dotenv does, or the URL and
+            # model name arrive with the .env's explanatory comment glued to them and
+            # every request fails for a reason that has nothing to do with the endpoint.
+            v = v.split(" #", 1)[0].split("\t#", 1)[0]
+            env[k.strip()] = v.strip().strip("\"'")
     return env
 
 
@@ -50,10 +54,18 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 async def main() -> None:
     env = _load_env()
 
-    base_url = env.get("LLM_BASE_URL", "http://localhost:1234/v1")
-    api_key = env.get("LLM_API_KEY", "lm-studio")
-    model = env.get("EMBEDDING_MODEL", "text-embedding-bge-m3")
+    # Embeddings have their own provider — they do not follow the quality tier, because
+    # VECTOR_DIMENSIONS is baked into the database. See app/llm/providers.py.
+    provider = env.get("EMBEDDING_PROVIDER", "local").strip().lower()
+    if provider == "openai":
+        base_url = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        api_key = env.get("OPENAI_API_KEY", "")
+    else:
+        base_url = env.get("LLM_LOCAL_BASE_URL", "http://localhost:1234/v1")
+        api_key = env.get("LLM_LOCAL_API_KEY", "not-needed")
+    model = env.get("EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5")
     expected_dims = int(env.get("VECTOR_DIMENSIONS", "1536"))
+    print(f"  Provider : {provider}")
 
     print(f"  Base URL : {base_url}")
     print(f"  Model    : {model}")

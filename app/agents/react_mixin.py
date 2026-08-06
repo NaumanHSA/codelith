@@ -17,6 +17,7 @@ from langgraph.prebuilt import (
 from app.config import get_settings
 from app.llm.context_manager import count_tokens_lc, split_for_compaction
 from app.llm.langchain_client import get_langchain_llm
+from app.llm.providers import QUALITY, spec_for_tier
 
 logger = structlog.get_logger(__name__)
 
@@ -154,7 +155,12 @@ class ReActMixin:
                 compacted = [summary_msg, *recent]
                 # Last-resort guard: drop oldest recent groups if still over the window,
                 # always skipping orphaned ToolMessages to keep tool_calls/results paired.
-                while count_tokens_lc(compacted) > settings.LLM_CONTEXT_WINDOW and len(recent) > 1:
+                # The window belongs to the endpoint this ReAct loop is talking to, not
+                # to the application: a local 9b served at 21k and a hosted model at
+                # 128k need very different cut-offs, and compacting to the smaller one
+                # throws away context the larger would have accepted.
+                window = spec_for_tier(QUALITY).context_window
+                while count_tokens_lc(compacted) > window and len(recent) > 1:
                     recent = recent[1:]
                     while recent and type(recent[0]).__name__ == "ToolMessage":
                         recent = recent[1:]

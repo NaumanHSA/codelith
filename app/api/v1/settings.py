@@ -10,11 +10,37 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
 class LlmConfig(BaseModel):
-    base_url: str = "http://localhost:1234/v1"
-    api_key: str = "lm-studio"
-    default_model: str = "local-model"
-    quality_model: str = "local-model"
-    fast_model: str = "local-model"
+    """
+    What the two tiers are pointed at.
+
+    Shaped around the choice that is actually made — *per tier, local or hosted* —
+    rather than around one endpoint, which is what it assumed when both tiers had to
+    share a base URL. The local fields are shared by whichever tiers are set to
+    `local`; the OpenAI ones by whichever are set to `openai`.
+
+    `api_key` is deliberately never returned: this endpoint is admin-only, but a
+    secret that is echoed back ends up in browser history, screenshots and bug
+    reports. `openai_key_set` says whether one is configured, which is the only thing
+    the settings page needs to render.
+    """
+
+    quality_provider: str = "local"   # local | openai
+    fast_provider: str = "local"
+
+    local_base_url: str = "http://localhost:1234/v1"
+    local_quality_model: str = "local-model"
+    local_fast_model: str = "local-model"
+    local_context_window: int = 21000
+
+    openai_quality_model: str = "gpt-4o-mini"
+    openai_fast_model: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_context_window: int = 128_000
+    openai_key_set: bool = False
+
+    embedding_provider: str = "local"
+    embedding_model: str = ""
+
     temperature: float = 0.2
     max_tokens: int = 4096
     max_react_iterations: int = 20
@@ -55,11 +81,19 @@ async def get_llm_config(db: DbSession, _: AdminUser) -> LlmConfig:
     from app.config import get_settings
     s = get_settings()
     return LlmConfig(
-        base_url=s.LLM_BASE_URL,
-        api_key=s.LLM_API_KEY,
-        default_model=s.LLM_DEFAULT_MODEL,
-        quality_model=s.LLM_QUALITY_MODEL,
-        fast_model=s.LLM_FAST_MODEL,
+        quality_provider=s.LLM_QUALITY_PROVIDER,
+        fast_provider=s.LLM_FAST_PROVIDER,
+        local_base_url=s.LLM_LOCAL_BASE_URL,
+        local_quality_model=s.LLM_LOCAL_QUALITY_MODEL,
+        local_fast_model=s.LLM_LOCAL_FAST_MODEL,
+        local_context_window=s.LLM_LOCAL_CONTEXT_WINDOW,
+        openai_quality_model=s.OPENAI_QUALITY_MODEL,
+        openai_fast_model=s.OPENAI_FAST_MODEL,
+        openai_base_url=s.OPENAI_BASE_URL,
+        openai_context_window=s.OPENAI_CONTEXT_WINDOW,
+        openai_key_set=bool(s.OPENAI_API_KEY.strip()),
+        embedding_provider=s.EMBEDDING_PROVIDER,
+        embedding_model=s.EMBEDDING_MODEL,
         temperature=s.LLM_TEMPERATURE,
         max_tokens=s.LLM_MAX_TOKENS,
         max_react_iterations=s.REACT_MAX_ITERATIONS,
