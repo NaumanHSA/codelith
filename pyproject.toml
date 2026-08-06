@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "document-anything"
 version = "0.1.0"
 description = "AI-Powered Documentation Generation Platform"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     # Web framework
     "fastapi>=0.115.0",
@@ -101,7 +101,7 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
@@ -109,7 +109,7 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = ["B008"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 ignore_missing_imports = true
 
