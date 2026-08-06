@@ -218,6 +218,19 @@ to re-enable. A better strategy for diagrams is still worth designing.
 
 ---
 
+## Next: documentation sites
+
+The output model changes from *a document per job* to **one living documentation site
+per project**, grown a section at a time — top-level sections, real `.md` pages beneath
+them, headings inside each page. The site map is decided during analysis, so a section
+generated months later slots into a navigation that already expected it.
+
+Full phased plan in [.dev/SITE_PLAN.md](.dev/SITE_PLAN.md). Decisions taken: our own UI
+and theme (MkDocs and Docusaurus stay export targets), the map is analysis-driven, and
+it is built in stages with the current single-document path working throughout.
+
+---
+
 ## Known Issues / Next Up
 
 - **PDF** — no formatter exists; `/documents/{id}/export` advertises it and raises
