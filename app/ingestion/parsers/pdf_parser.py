@@ -37,7 +37,7 @@ class PdfParser:
                 if not text.strip():
                     return None
                 return ParsedPdfDoc(
-                    path=str(path.relative_to(root)),
+                    path=path.relative_to(root).as_posix(),
                     text=text,
                     page_count=len(pdf.pages),
                 )

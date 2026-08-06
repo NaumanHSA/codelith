@@ -61,7 +61,7 @@ class InfraParser:
 
     def _try_parse(self, path: Path, root: Path) -> ParsedInfra | None:
         name = path.name.lower()
-        rel = str(path.relative_to(root))
+        rel = path.relative_to(root).as_posix()
 
         if name == "dockerfile" or name.startswith("dockerfile."):
             return self._parse_dockerfile(path, rel)

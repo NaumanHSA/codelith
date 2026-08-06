@@ -77,7 +77,7 @@ class CodeParser:
 
             symbols = self._extract_symbols(content, language, file_path)
             parsed = ParsedFile(
-                path=str(file_path.relative_to(root)),
+                path=file_path.relative_to(root).as_posix(),
                 language=language,
                 content=content,
                 size_bytes=size,

@@ -427,7 +427,7 @@ def read_manifest_files(root, max_depth: int = 2) -> list[SourceFile]:
             out.append(_read_manifest(path, root))
         for depth in range(1, max_depth + 1):
             for path in root.glob("/".join(["*"] * depth) + f"/{name}"):
-                if not registry.should_skip(str(path.relative_to(root))):
+                if not registry.should_skip(path.relative_to(root).as_posix()):
                     out.append(_read_manifest(path, root))
     return [f for f in out if f is not None]
 
@@ -435,7 +435,7 @@ def read_manifest_files(root, max_depth: int = 2) -> list[SourceFile]:
 def _read_manifest(path, root) -> SourceFile | None:
     try:
         return SourceFile(
-            path=str(path.relative_to(root)),
+            path=path.relative_to(root).as_posix(),
             content=path.read_text(encoding="utf-8", errors="ignore"),
         )
     except OSError:

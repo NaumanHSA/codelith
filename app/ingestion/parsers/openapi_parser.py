@@ -123,7 +123,7 @@ class OpenApiParser:
             desc = schema_def.get("description", "") if isinstance(schema_def, dict) else ""
             schemas[name] = desc
 
-        rel_path = str(path.relative_to(root))
+        rel_path = path.relative_to(root).as_posix()
         return ParsedApiSpec(
             source_path=rel_path,
             title=title,

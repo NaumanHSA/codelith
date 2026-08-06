@@ -76,8 +76,15 @@ class LanguageRegistry:
         return DEFAULT_IGNORED_DIRS | extra
 
     def should_skip(self, relative_path: str) -> bool:
+        # Callers are expected to hand over POSIX-style relative paths, and every one
+        # in the tree now does. Backslashes are still split here because the cost of
+        # being wrong is asymmetric and silent: `PurePosixPath("node_modules\\x.py")`
+        # has a single part, so one native path slipping through means a whole
+        # vendored tree is analysed, embedded and billed, with nothing to show that
+        # the filter did not fire.
         ignored = self.ignored_dirs()
-        return any(part in ignored for part in PurePosixPath(relative_path).parts)
+        parts = PurePosixPath(relative_path.replace("\\", "/")).parts
+        return any(part in ignored for part in parts)
 
 
 #: Process-wide registry. Populated on import of `app.languages`.

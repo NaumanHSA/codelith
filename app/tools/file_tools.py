@@ -19,7 +19,7 @@ def list_directory(path: str, extensions: list[str] | None = None) -> list[str]:
             continue
         if extensions and p.suffix not in extensions:
             continue
-        result.append(str(p.relative_to(root)))
+        result.append(p.relative_to(root).as_posix())
     return result
 
 
