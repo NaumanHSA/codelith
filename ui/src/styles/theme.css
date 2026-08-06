@@ -64,6 +64,25 @@
   --term-dim: #8a8178;
   --term-ok: #7fc79c;
 
+  /* code surfaces — a fenced block is a terminal surface, which is what makes it
+     read as a block rather than as oddly-coloured prose. Inline code stays light,
+     so the two are never confused. Token colours are warm on purpose: the palette
+     has one accent and syntax highlighting must not introduce a second. */
+  --code-bg: #14120f;
+  --code-rule: #2e2820;
+  --code-text: #ded5c8;
+  --code-gutter: #6f665d;
+
+  --code-keyword: #ff9d6e;
+  --code-string: #9ecf9e;
+  --code-number: #e6b566;
+  --code-comment: #857c72;
+  --code-title: #f3e8d8;
+  --code-attr: #c9b8a8;
+  --code-meta: #a89a8a;
+  --code-add: #7fc79c;
+  --code-del: #e08d84;
+
   --grid-line: rgba(20, 18, 15, 0.045);
   --hatch-line: rgba(20, 18, 15, 0.05);
   --scroll-thumb: #c3bdb4;

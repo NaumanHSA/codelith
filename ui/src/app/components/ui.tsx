@@ -180,8 +180,13 @@ export function PageHead({
   back?: { label: string; onClick: () => void }
   right?: ReactNode
 }) {
+  // Sticky, because the actions that live here — back, publish, export — were
+  // unreachable on a long document without scrolling all the way up again. The
+  // scroll container is the shell's main pane, so `top-0` pins to the top of the
+  // reading area. The negative top margin and matching padding let the surface
+  // cover content passing beneath it without adding a visible gap when unstuck.
   return (
-    <header className="mb-4 border-b border-rule pb-3">
+    <header className="sticky top-0 z-20 -mt-5 mb-4 border-b border-rule bg-paper pt-5 pb-3">
       {back && (
         <button
           onClick={back.onClick}

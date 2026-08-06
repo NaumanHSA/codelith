@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import 'highlight.js/styles/github.css'
 import { api, ApiError } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
@@ -163,7 +162,7 @@ export default function DocumentReaderPage() {
             ? 'mt-7 mb-2.5 border-b border-rule pb-1.5 text-[16px]'
             : 'mt-5 mb-2 text-[13.5px]'
       return (
-        <Tag id={slug(text)} className={`scroll-mt-20 font-bold tracking-tight text-ink ${size}`}>
+        <Tag id={slug(text)} className={`scroll-mt-28 font-bold tracking-tight text-ink ${size}`}>
           {children}
         </Tag>
       )
@@ -212,18 +211,29 @@ export default function DocumentReaderPage() {
               code({ className, children, ...props }) {
                 const text = String(children).replace(/\n$/, '')
                 if (className?.includes('language-mermaid')) return <Mermaid code={text} />
-                const block = className?.startsWith('language-')
-                if (!block) {
-                  return (
-                    <code className="border border-rule bg-sunk px-1 py-px text-[11.5px] text-hot-ink">
-                      {children}
-                    </code>
-                  )
-                }
+                // Inline and block code are both styled in the .doc layer; the
+                // distinction is made there by `:not(pre) > code`.
                 return (
                   <code className={className} {...props}>
                     {children}
                   </code>
+                )
+              },
+              pre({ children, ...props }) {
+                // A Mermaid block renders its own framed container, so it must not
+                // also be wrapped in a terminal surface.
+                const child = Array.isArray(children) ? children[0] : children
+                const inner = (child as { props?: { className?: string } } | null)?.props
+                if (inner?.className?.includes('language-mermaid')) return <>{children}</>
+                return <pre {...props}>{children}</pre>
+              },
+              table({ children, ...props }) {
+                // Wide tables scroll inside their own box rather than pushing the
+                // whole reading column sideways.
+                return (
+                  <div className="doc-table">
+                    <table {...props}>{children}</table>
+                  </div>
                 )
               },
             }}
@@ -234,7 +244,7 @@ export default function DocumentReaderPage() {
 
         {toc.length > 1 && (
           <nav className="hidden lg:block">
-            <div className="sticky top-5">
+            <div className="sticky top-24">
               <span className="tag mb-2 block text-ink-dim">On this page</span>
               <ul className="border-l border-rule">
                 {toc.map(h => (
