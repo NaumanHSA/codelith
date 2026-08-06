@@ -27,7 +27,7 @@ from app.config import get_settings
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
 from app.knowledge.narratives import topics_for_doc_type
-from app.llm.prompts.composition_prompts import PAGE_PLAN, SECTION_PLAN
+from app.llm.prompts.composition_prompts import PAGE_PLAN, SECTION_PAGE_PLAN, SECTION_PLAN
 from app.tracing.artifacts import save_artifact, save_input_artifact
 
 #: Module roles worth showing the planner, per document type.
@@ -80,11 +80,15 @@ class CompositionPlannerAgent(BaseAgent):
             plans: dict[str, dict] = {}
             if pages:
                 site_map: dict = state.get("site_map") or {}
-                for page in pages:
-                    modules = await self._modules_for(repos, kb_id, page["doc_type"])
-                    plans[page["address"]] = await self._plan_page(
-                        page, project, site_map, overview, modules,
-                        facts, strategy, known_files,
+                # One planning call per *section*, not per page. Pages planned
+                # independently cannot see each other's headings, so nothing stops
+                # two of them claiming the same material — which is what C1 measured.
+                for section_slug, group in self._by_section(pages).items():
+                    plans.update(
+                        await self._plan_section(
+                            section_slug, group, project, site_map, overview,
+                            repos, kb_id, facts, strategy, known_files,
+                        )
                     )
             else:
                 for doc_type in doc_types:
@@ -108,6 +112,134 @@ class CompositionPlannerAgent(BaseAgent):
             return {"documentation_plan": plans}
 
     # ── Page mode ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _by_section(pages: list[dict]) -> dict[str, list[dict]]:
+        """Pages grouped by their section, insertion order preserved."""
+        groups: dict[str, list[dict]] = {}
+        for page in pages:
+            groups.setdefault(page["section_slug"], []).append(page)
+        return groups
+
+    async def _plan_section(
+        self, section_slug, group, project, site_map, overview,
+        repos, kb_id, facts, strategy, known_files,
+    ) -> dict[str, dict]:
+        """
+        Headings for every page of one section, in one call.
+
+        Falls back to planning each page on its own. A section-wide call is a bigger
+        blast radius than a per-page one — one bad response costs a section's
+        structure rather than a page's — so the old path stays as the net, and any
+        page the model forgot is planned individually rather than left empty.
+        """
+        settings = get_settings()
+        # Pages within a section may carry different doc types ("Guides" built from
+        # getting_started and modules is legitimate), so the inventory is the union
+        # of what each type would have been shown.
+        modules = await self._modules_for_types(
+            repos, kb_id, {p["doc_type"] for p in group}
+        )
+        audience, _ = self._voice(strategy, group[0]["doc_type"])
+        addresses = [p["address"] for p in group]
+
+        plans: dict[str, dict] = {}
+        allocated: dict[str, list[dict]] = {}
+
+        # One page is not a section: the whole value here is cross-page allocation,
+        # and a single-page call is the per-page prompt with extra scaffolding.
+        if len(group) > 1:
+            messages = SECTION_PAGE_PLAN.render(
+                project_name=project.name,
+                section_title=self._section_title(site_map, section_slug),
+                audience=audience,
+                max_headings=str(settings.SITE_MAX_HEADINGS_PER_PAGE),
+                pages=self._render_pages(group, known_files),
+                site_map=self._render_site_map(site_map, exclude_section=section_slug),
+                overview=overview or "(none available)",
+                module_inventory=self._inventory(modules),
+                facts=facts,
+            )
+            save_input_artifact(f"planner.section.{section_slug}.prompt", messages)
+
+            raw = await self._call_llm_json(messages, task_type="plan")
+            save_artifact(f"planner.section.{section_slug}.raw_response", raw)
+            allocated = self._validate_section(raw, addresses, known_files, settings)
+
+            if not allocated:
+                await self._emit_log(
+                    "warning",
+                    f"Section planner returned nothing usable for '{section_slug}' — "
+                    "falling back to planning each page on its own",
+                )
+
+        for page in group:
+            sections = allocated.get(page["address"]) or []
+            if sections:
+                plans[page["address"]] = {
+                    "type": page["doc_type"],
+                    "title": page["title"],
+                    "page_id": page["id"],
+                    "address": page["address"],
+                    "sections": sections,
+                }
+            else:
+                page_modules = await self._modules_for(repos, kb_id, page["doc_type"])
+                plans[page["address"]] = await self._plan_page(
+                    page, project, site_map, overview, page_modules,
+                    facts, strategy, known_files,
+                )
+
+        return plans
+
+    @staticmethod
+    def _render_pages(group: list[dict], known_files: set[str]) -> str:
+        lines: list[str] = []
+        for page in group:
+            anchors = [f for f in page.get("key_files") or [] if f in known_files]
+            lines.append(f"  {page['address']} — {page['title']}")
+            lines.append(f"      purpose: {page.get('intent') or page['title']}")
+            lines.append(
+                "      anchor files: " + (", ".join(anchors[:8]) or "(none recorded)")
+            )
+        return "\n".join(lines)
+
+    def _validate_section(
+        self, raw: dict | None, addresses: list[str], known: set[str], settings
+    ) -> dict[str, list[dict]]:
+        """
+        Split a section-wide response into per-page section lists.
+
+        Unknown addresses are dropped rather than guessed at — a page the model
+        invented has no `page_id` to write to. Pages it omitted simply do not appear,
+        and the caller plans those individually.
+        """
+        if not raw:
+            return {}
+        wanted = set(addresses)
+        out: dict[str, list[dict]] = {}
+        for entry in raw.get("pages") or []:
+            if not isinstance(entry, dict):
+                continue
+            address = (entry.get("address") or "").strip()
+            if address not in wanted:
+                continue
+            sections = self._validate(
+                entry, known, limit=settings.SITE_MAX_HEADINGS_PER_PAGE
+            )
+            if sections:
+                out[address] = sections
+        return out
+
+    async def _modules_for_types(self, repos, kb_id: int, doc_types: set[str]):
+        seen: set[int] = set()
+        merged = []
+        for doc_type in sorted(doc_types):
+            for module in await self._modules_for(repos, kb_id, doc_type):
+                if module.id not in seen:
+                    seen.add(module.id)
+                    merged.append(module)
+        return merged
 
     async def _plan_page(
         self, page, project, site_map, overview, modules, facts, strategy, known_files
@@ -177,16 +309,24 @@ class CompositionPlannerAgent(BaseAgent):
         return section_slug
 
     @staticmethod
-    def _render_site_map(site_map: dict, *, exclude: str) -> str:
+    def _render_site_map(
+        site_map: dict, *, exclude: str | None = None, exclude_section: str | None = None
+    ) -> str:
         """
         The neighbouring pages and what each is for.
 
         Three pages explaining the same middleware is what makes generated
         documentation feel cheap, and it cannot be fixed after the fact — each page
         has to be told, while it is being planned, what the others already own.
+
+        `exclude` drops one page (planning that page); `exclude_section` drops a whole
+        section (planning all of it at once, where the section's own pages are listed
+        separately and in far more detail).
         """
         lines: list[str] = []
         for section in site_map.get("sections") or []:
+            if exclude_section is not None and section.get("slug") == exclude_section:
+                continue
             for page in section.get("pages") or []:
                 address = f"{section.get('slug')}/{page.get('slug')}"
                 if address == exclude:

@@ -105,6 +105,7 @@ class CompositionWriterAgent(BaseAgent):
                     address or doc_type, doc_type, sections, project, strategy,
                     builder, settings,
                     neighbours=self._neighbours(site_map, address) if address else "",
+                    page=target if address else None,
                 )
                 doc = {
                     "doc_type": doc_type,
@@ -170,6 +171,7 @@ class CompositionWriterAgent(BaseAgent):
     async def _write_doc(
         self, label, doc_type, sections, project, strategy, builder, settings,
         neighbours: str = "",
+        page: dict | None = None,
     ) -> str:
         audience, tone = self._voice(strategy, doc_type)
 
@@ -219,7 +221,7 @@ class CompositionWriterAgent(BaseAgent):
                 await check_cancelled()
                 return await self._write_section(
                     sections[index], contexts[index], doc_type, project,
-                    audience, tone, outline, builder, neighbours,
+                    audience, tone, outline, builder, neighbours, page, settings,
                 )
 
         results = await asyncio.gather(
@@ -251,9 +253,14 @@ class CompositionWriterAgent(BaseAgent):
     async def _write_section(
         self, section, context, doc_type, project, audience, tone, outline, builder,
         neighbours: str = "",
+        page: dict | None = None,
+        settings=None,
     ) -> str:
         name = section.get("name", "Section")
-        ask = (section, context, doc_type, project, audience, tone, outline, neighbours)
+        ask = (
+            section, context, doc_type, project, audience, tone, outline,
+            neighbours, page, settings,
+        )
         body = await self._ask(*ask)
 
         # Bounded escape hatch: one extra retrieval when the model says it lacks context.
@@ -278,7 +285,10 @@ class CompositionWriterAgent(BaseAgent):
     async def _ask(
         self, section, context, doc_type, project, audience, tone, outline,
         neighbours: str = "",
+        page: dict | None = None,
+        settings=None,
     ) -> str:
+        settings = settings or get_settings()
         name = section.get("name", "Section")
         others = [n for n in outline if n and n != name]
         already = ""
@@ -296,11 +306,23 @@ class CompositionWriterAgent(BaseAgent):
                 f"for each: {neighbours}. They are being written separately — link "
                 "to them, do not restate them.\n\n"
             )
+
+        # Doc-type mode has no page, so the heading is told it belongs to the document
+        # rather than being given a page identity it does not have.
+        page_title = (page or {}).get("title") or f"{doc_type.replace('_', ' ').title()}"
+        page_intent = (page or {}).get("intent") or "part of this documentation"
+
         messages = SECTION_WRITE.render(
             doc_type=doc_type,
             project_name=project.name,
+            page_title=page_title,
+            page_intent=page_intent,
             section_name=name,
             focus=section.get("focus") or name,
+            heading_count=str(len(outline) or 1),
+            word_budget=str(settings.SITE_WORDS_PER_HEADING),
+            max_subheadings=str(settings.SITE_MAX_SUBHEADINGS_PER_SECTION),
+            overview_steer=self._overview_steer(page),
             audience=audience,
             tone=tone,
             already_written=already,
@@ -313,6 +335,36 @@ class CompositionWriterAgent(BaseAgent):
         except Exception as exc:
             await self._emit_log("warning", f"Section '{name}' generation failed: {exc}")
             return ""
+
+    #: Slugs and titles that mean "this page is about the whole system".
+    _OVERVIEW_HINTS = ("overview", "introduction", "architecture", "index", "about")
+
+    @classmethod
+    def _overview_steer(cls, page: dict | None) -> str:
+        """
+        The extra rule for overview-shaped pages, and only for them.
+
+        This is the page type that goes wrong. C1 measured `architecture/overview`
+        planning four headings that each covered a different *other* section of the
+        site — with the anti-duplication paragraph rendering correctly. Being told not
+        to duplicate is not the same as being told what an overview is for, so this
+        says the second thing, and says it only where it applies: a rule this strong
+        on a reference page would make it refuse to explain anything.
+        """
+        if not page:
+            return ""
+        haystack = f"{page.get('slug', '')} {page.get('title', '')}".lower()
+        if not any(h in haystack for h in cls._OVERVIEW_HINTS):
+            return ""
+        return (
+            "  - **This is an overview page.** Its job is to explain how the parts "
+            "relate to each other and to send the reader to the page that documents "
+            "each one. Name a component, say what it is for and how it connects to "
+            "the others, then link to its page with `[[section/page]]` and move on. "
+            "Do not explain how any single component works internally — that is the "
+            "other page's job, it is being written separately, and a reader who meets "
+            "the same explanation twice trusts neither.\n"
+        )
 
     @staticmethod
     def _voice(strategy: dict, doc_type: str) -> tuple[str, str]:

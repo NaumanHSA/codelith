@@ -67,6 +67,54 @@ PAGE_PLAN = PromptTemplate(
     ),
 )
 
+SECTION_PAGE_PLAN = PromptTemplate(
+    system=(
+        "You are planning the headings for EVERY page of ONE section of a documentation "
+        "site, in a single pass. The pages already exist in the navigation and what each "
+        "is for has already been decided — your job is to decide which page covers what, "
+        "and then to break each one into headings.\n\n"
+        "Planning them together is the point. Done one at a time, two pages independently "
+        "decide they are the natural home for the same material and the reader meets it "
+        "twice, told slightly differently. You can see the whole section, so you can put "
+        "each topic in exactly one place.\n\n"
+        "Respond ONLY with valid JSON — no markdown fences, no prose:\n"
+        '{"pages":[{"address":str,"sections":[{"name":str,"focus":str,"key_files":[str]}]}]}\n\n'
+        "Rules:\n"
+        "  - Return an entry for EVERY page address listed below, using that exact "
+        "address string. Do not invent pages and do not omit any.\n"
+        "  - 2 to $max_headings headings per page. A page is a page because it can be "
+        "read in one sitting; if it needs more, plan fewer and go deeper.\n"
+        "  - **No topic may appear on two pages of this section.** If two pages both "
+        "want it, give it to the one whose stated purpose fits best and let the other "
+        "refer to it.\n"
+        "  - Respect each page's stated purpose. An overview page describes how the "
+        "parts relate and points at the pages that document them — it does not "
+        "re-explain them.\n"
+        "  - Other sections of the site are listed too. They are being written "
+        "separately; anything belonging to one of them is not yours to cover.\n"
+        "  - `focus` is one sentence saying what the heading must explain.\n"
+        "  - `key_files` should be paths copied from the anchor files or the module "
+        "inventory below. **Do not deliberate over whether a path is in the list** — "
+        "every path you return is checked against the knowledge base afterwards and "
+        "silently dropped if it is not there, so a wrong one costs nothing. Copy the "
+        "ones that look right and move on.\n"
+        "  - Do not plan an introduction or a conclusion — write the substance.\n\n"
+        "Answer in one pass. Decide, write the JSON, and stop — do not re-check your "
+        "own allocation or restate the headings back to yourself before answering."
+    ),
+    user=(
+        "Project: $project_name\n"
+        "Section: $section_title\n"
+        "Audience: $audience\n\n"
+        "The pages of this section, with what each is for and the anchor files chosen "
+        "when it was planned:\n$pages\n\n"
+        "The rest of the site — other sections, not yours to cover:\n$site_map\n\n"
+        "What we already know about this system:\n$overview\n\n"
+        "Module inventory (path — role — summary):\n$module_inventory\n\n"
+        "Known facts:\n$facts"
+    ),
+)
+
 COMPOSITION_STRATEGY = PromptTemplate(
     system=(
         "You are a documentation strategist. Decide how the requested documents should "
@@ -90,35 +138,59 @@ COMPOSITION_STRATEGY = PromptTemplate(
 
 SECTION_WRITE = PromptTemplate(
     system=(
-        "You are a senior technical writer. Write ONE section of $doc_type "
-        "documentation for '$project_name'.\n\n"
+        # The old opening — "write ONE section of $doc_type documentation" — told the
+        # model it was writing a document. It wrote like one: C1 measured 594 words per
+        # heading and 19 unasked-for subheadings per page. Naming the real unit is the
+        # first half of the fix; the word budget below is the other half.
+        "You are a senior technical writer working on '$project_name'. You are writing "
+        "ONE heading of ONE page of a documentation site — not a document, and not a "
+        "chapter. The page is '$page_title'; this heading is one of "
+        "$heading_count on it.\n\n"
         "Everything you need has been retrieved for you and appears below — module "
         "summaries, prior analysis, and verbatim source. Treat it as already read.\n\n"
+        "Length:\n"
+        "  - Aim for about $word_budget words. Going a little over is fine when the "
+        "material genuinely needs it; doubling it is not.\n"
+        "  - You may use '###' subheadings, but at most $max_subheadings, and only "
+        "where the material really splits. Breaking a section into more pieces is not "
+        "a way to fit more words into it.\n"
+        "  - Prefer being short and correct over long and padded. A heading that says "
+        "its one thing well and stops is finished.\n\n"
         "Rules:\n"
-        "  - Start with '## $section_name'. Write only this section.\n"
+        "  - Start with '## $section_name'. Write only this heading's content.\n"
         "  - Ground every statement in the supplied context. Never invent a function, "
         "flag, endpoint or file that does not appear there.\n"
         "  - Reference real paths and symbol names so a reader can verify you.\n"
         "  - Use fenced code blocks for examples, drawn from the source shown.\n"
         "  - Audience: $audience. Tone: $tone.\n"
-        "  - Prefer being short and correct over long and padded.\n"
         "  - Do not repeat content from sections already written.\n"
-        "  - To point at another page of this documentation site, write "
-        "`[[section-slug/page-slug]]`, or `[[section-slug/page-slug|link text]]` to "
-        "choose the wording. Never write a relative path or a URL for one: those "
-        "pages may not exist yet, and their addresses are resolved for you "
-        "afterwards. A reference to a page not listed below is dropped.\n"
-        "  - The `[[ ]]` syntax is ONLY for those pages. To mention a source file, "
-        "write its path in backticks like `app/config.py` — it is not a page and "
-        "wrapping it in `[[ ]]` just loses you the formatting.\n\n"
+        # Braced: bare `$overview_steer` abuts `Links` on the next line and parses as
+        # the single identifier `$overview_steerLinks` — the same failure that kept
+        # `$already_written` from ever rendering. `tests/unit/llm/test_prompt_templates.py`
+        # catches it, which is why that test exists.
+        "${overview_steer}"
+        "Links — there are exactly two kinds, and mixing them is the most common "
+        "mistake made here:\n"
+        "  - **Another page of this site** — write `[[section-slug/page-slug]]`, or "
+        "`[[section-slug/page-slug|link text]]` to choose the wording. Never write a "
+        "relative path or a URL for one: those pages may not exist yet, and their "
+        "addresses are resolved for you afterwards. A reference to a page not listed "
+        "below is dropped.\n"
+        "  - **A source file or symbol** — write it in backticks and nothing else: "
+        "`app/config.py`, `load_config()`. Never `[[app/config.py]]`, and never "
+        "`[text](app/config.py)`. A source path is not a URL and not a page; a "
+        "markdown link to one is a dead link in the published page, which is exactly "
+        "what happened the last time this was measured.\n"
+        "  - Write no other markdown links. Nothing else here has an address.\n\n"
         "If — and only if — the context genuinely does not contain what this section "
         "needs, reply with exactly one line and nothing else:\n"
         "NEED_CONTEXT: <a specific search query>\n"
         "Use this sparingly; you get one such request per section."
     ),
     user=(
-        "Section: $section_name\n"
-        "This section must explain: $focus\n\n"
+        "Page: $page_title — $page_intent\n"
+        "This heading: $section_name\n"
+        "It must explain: $focus\n\n"
         # Braced: bare `$already_written` abuts `Context` and parses as one
         # identifier, which no caller supplies — the instruction never rendered.
         "${already_written}"
@@ -126,4 +198,10 @@ SECTION_WRITE = PromptTemplate(
     ),
 )
 
-__all__ = ["SECTION_PLAN", "PAGE_PLAN", "COMPOSITION_STRATEGY", "SECTION_WRITE"]
+__all__ = [
+    "SECTION_PLAN",
+    "PAGE_PLAN",
+    "SECTION_PAGE_PLAN",
+    "COMPOSITION_STRATEGY",
+    "SECTION_WRITE",
+]

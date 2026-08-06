@@ -29,20 +29,52 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    # LLM — OpenAI-compatible (LM Studio by default)
-    LLM_BASE_URL: str = "http://localhost:1234/v1"
-    LLM_API_KEY: str = "lm-studio"
-    LLM_DEFAULT_MODEL: str = "local-model"
-    LLM_FAST_MODEL: str = "local-model"
-    LLM_QUALITY_MODEL: str = "local-model"
+    # ── LLM: one provider per tier ────────────────────────────────────────────
+    # There are two tiers, and `app/llm/router.py` picks between them by task type,
+    # never the caller. Each tier chooses its own provider independently, so the
+    # common setup — a cheap local model summarising 45 modules while a hosted one
+    # writes the prose — needs no code change, only these two values.
+    #
+    #   local  — any OpenAI-compatible endpoint: LM Studio, Ollama, vLLM, llama.cpp.
+    #            Needs a base URL, a model name and the context length it is served
+    #            with. The API key is ignored.
+    #   openai — needs an API key and a model name. The base URL and context window
+    #            have working defaults.
+    LLM_QUALITY_PROVIDER: str = "local"
+    LLM_FAST_PROVIDER: str = "local"
+
+    # Local endpoint, shared by whichever tiers are set to `local`.
+    LLM_LOCAL_BASE_URL: str = "http://localhost:1234/v1"
+    LLM_LOCAL_QUALITY_MODEL: str = "local-model"
+    LLM_LOCAL_FAST_MODEL: str = "local-model"
+    # The context length the model is actually *served* with, which is a property of
+    # how it was loaded, not of the model. Set it too high and requests 400 late in a
+    # long job; too low and context is trimmed that would have fitted.
+    LLM_LOCAL_CONTEXT_WINDOW: int = 21000
+    # Ignored by local endpoints, which authenticate nothing. Present because the
+    # OpenAI SDK requires a non-empty string.
+    LLM_LOCAL_API_KEY: str = "not-needed"
+
+    # OpenAI, or anything speaking its API at another base URL (Azure, a gateway).
+    OPENAI_API_KEY: str = ""
+    OPENAI_QUALITY_MODEL: str = "gpt-4o-mini"
+    OPENAI_FAST_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_CONTEXT_WINDOW: int = 128_000
+
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.2
     # Stream completions so a cancelled job can abandon generation mid-flight rather
     # than waiting for the model to finish. Disable only to debug the transport.
     LLM_STREAMING: bool = True
 
-    # Embeddings — uses the same LM Studio base URL as the LLM
-    # Set EMBEDDING_MODEL to the identifier shown in LM Studio for your embedding model
+    # ── Embeddings ────────────────────────────────────────────────────────────
+    # Deliberately its own provider rather than following the quality tier. The
+    # embedding model's output size is baked into `code_chunks.embedding` by the
+    # migrations (`VECTOR_DIMENSIONS`), so switching it means a migration that
+    # TRUNCATEs the table and a full re-ingest of every project. Moving the writing
+    # model to OpenAI must not drag the embedder along with it.
+    EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "text-embedding-ada-002"
     # Texts per embeddings request. Batching is what keeps ingestion off a
     # one-request-per-chunk path; lower it if the endpoint rejects large batches.
@@ -80,7 +112,23 @@ class Settings(BaseSettings):
     SITE_MAX_PAGES_PER_JOB: int = 8
     # Headings planned within one page. A page is a page because it is readable in
     # one sitting; more than this and it wanted to be two pages.
+    #
+    # Left at 6 deliberately. C1 proposed cutting it to 4 and then measured every page
+    # already planning exactly 4 against this cap — it is not the binding constraint,
+    # and lowering it would only bite on the pages that legitimately want more.
     SITE_MAX_HEADINGS_PER_PAGE: int = 6
+    # Words one heading should aim for, carried into the writer's prompt.
+    #
+    # This is the lever page length actually responds to. C1 measured 594 words per
+    # heading against 555 before the anti-duplication fix — a number that had never
+    # moved, and that multiplied by the heading count is the whole of page length.
+    # 350 puts a 4-heading page near 1,400 words rather than 2,400.
+    SITE_WORDS_PER_HEADING: int = 350
+    # `###` levels the writer may add inside one heading. C1 found 75 subheadings
+    # across four pages that nothing asked for — roughly 19 per page under 4 planned
+    # headings. A word budget answered by fragmenting into more sub-structure has not
+    # been obeyed, so the budget and this cap have to travel together.
+    SITE_MAX_SUBHEADINGS_PER_SECTION: int = 3
 
     # ── Composition (Phase 2: write docs from the knowledge base) ─────────────
     # Token ceiling for one section's retrieved context bundle.
@@ -165,7 +213,9 @@ class Settings(BaseSettings):
     REACT_CONTEXT_WINDOW_MAX: int = 8000
 
     # ReAct context compaction (intelligent LLM summarisation)
-    LLM_CONTEXT_WINDOW: int = 21000            # actual model context window
+    # (The model's real context window is a property of the endpoint, not a global —
+    #  see LLM_LOCAL_CONTEXT_WINDOW / OPENAI_CONTEXT_WINDOW, resolved per tier by
+    #  `app/llm/providers.py`.)
     REACT_TOOL_RESULT_MAX_CHARS: int = 4000    # cap one tool result (~1k tokens)
     REACT_COMPACT_THRESHOLD_TOKENS: int = 9000 # compact conversation when it grows past this
     REACT_COMPACT_KEEP_LAST: int = 8           # verbatim recent messages kept after a summary
@@ -177,6 +227,21 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"APP_ENV must be one of {allowed}")
         return v
+
+    @field_validator("LLM_QUALITY_PROVIDER", "LLM_FAST_PROVIDER", "EMBEDDING_PROVIDER")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        """
+        Fail at startup rather than at the first LLM call.
+
+        A typo here otherwise surfaces as a connection error deep inside a job, after
+        a repository has already been cloned and embedded.
+        """
+        provider = (v or "").strip().lower()
+        allowed = {"local", "openai"}
+        if provider not in allowed:
+            raise ValueError(f"provider must be one of {sorted(allowed)}, got {v!r}")
+        return provider
 
     @property
     def is_production(self) -> bool:

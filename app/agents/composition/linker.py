@@ -38,6 +38,18 @@ _ANCHOR_LINK = re.compile(r"\[([^\]]*)\]\(#([^)]+)\)")
 #: A markdown link pointing into this site by address rather than by wiki syntax.
 _PAGE_PATH = re.compile(r"\[([^\]]*)\]\(/app/projects/(\d+)/docs/([^)#]+)(#[^)]*)?\)")
 
+#: Any markdown link at all, so the ones that are none of the above can be caught.
+#: The lookbehind excludes `![alt](src)` — an image is an embed, not a reference, and
+#: a rendered diagram arrives as a `data:` URI that must survive untouched.
+_ANY_LINK = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)]*)\)")
+
+#: Hrefs that are legitimately addresses: a resolved page route, a heading anchor,
+#: somewhere off this machine, or an embedded asset.
+_REAL_HREF = re.compile(r"^(#|/app/projects/|https?://|mailto:|data:)")
+
+#: A symbol or path — no whitespace, and not obviously a sentence.
+_CODEISH = re.compile(r"^[\w./\\@:${}()\[\]-]+$")
+
 
 class LinkerAgent(BaseAgent):
     name = "linker_agent"
@@ -58,7 +70,7 @@ class LinkerAgent(BaseAgent):
             index = self._index(site_map)
 
             linked: list[dict] = []
-            resolved = broken = anchors = 0
+            resolved = broken = anchors = demoted = 0
             report: list[dict] = []
 
             for doc in docs:
@@ -71,16 +83,23 @@ class LinkerAgent(BaseAgent):
                 resolved += outcome["resolved"]
                 broken += len(outcome["unresolved"]) + len(outcome["dead_anchors"])
                 anchors += outcome["anchors"]
-                if outcome["unresolved"] or outcome["dead_anchors"]:
+                demoted += len(outcome["source_links"])
+                if outcome["unresolved"] or outcome["dead_anchors"] or outcome["source_links"]:
                     report.append({"page": doc_key(doc), **outcome})
                 linked.append({**doc, "content_markdown": content})
 
             save_artifact(
                 "linker.links",
-                {"resolved": resolved, "broken": broken, "anchors": anchors, "problems": report},
+                {
+                    "resolved": resolved,
+                    "broken": broken,
+                    "anchors": anchors,
+                    "source_links": demoted,
+                    "problems": report,
+                },
             )
 
-            if broken:
+            if broken or demoted:
                 # Named, not counted: "3 broken links" is not actionable, and the
                 # whole reason this stage is deterministic is that its failures can
                 # be pointed at precisely.
@@ -94,16 +113,32 @@ class LinkerAgent(BaseAgent):
                         await self._emit_log(
                             "warning", f"{entry['page']}: no heading matches #{anchor}"
                         )
+                    # Repaired rather than broken, so it is info: the reader sees a
+                    # backticked path instead of a dead link. Still logged, because a
+                    # page doing it twenty times is a prompt problem, not a typo.
+                    for href in entry["source_links"]:
+                        await self._emit_log(
+                            "info",
+                            f"{entry['page']}: link to source path '{href}' demoted to code",
+                        )
             await self._emit_log(
                 "info",
                 f"Resolved {resolved} cross-page link(s), checked {anchors} anchor(s)",
                 broken=broken,
+                source_links=demoted,
             )
 
-            t.outputs(resolved=resolved, broken=broken, anchors=anchors)
+            t.outputs(
+                resolved=resolved, broken=broken, anchors=anchors, source_links=demoted
+            )
             await self._update_step(
                 self.name, "completed",
-                {"resolved": resolved, "broken": broken, "anchors": anchors},
+                {
+                    "resolved": resolved,
+                    "broken": broken,
+                    "anchors": anchors,
+                    "source_links": demoted,
+                },
             )
 
             # `generated_docs` is a reduced key, so returning it here would append a
@@ -189,12 +224,51 @@ class LinkerAgent(BaseAgent):
                 lambda m: m.group(1) if m.group(2) in dead else m.group(0), content
             )
 
+        content, source_links = self._demote_source_links(content)
+
         return content, {
             "resolved": resolved,
             "unresolved": unresolved,
             "anchors": len(headings),
             "dead_anchors": dead,
+            "source_links": source_links,
         }
+
+    @staticmethod
+    def _demote_source_links(content: str) -> tuple[str, list[str]]:
+        """
+        A markdown link to a source path is a dead link. Demote it to code.
+
+        The prompt says to write a source file in backticks and never as a link, and
+        C1 measured one page in four ignoring that: `architecture/data-model` shipped
+        19 dead links out of 28, hrefs like `neurosurfer/tracing/config.py` and a few
+        carrying a stray backtick inside them. Wiki references and anchors were both
+        already checked; a plain relative-path link was checked by nothing, so it
+        reached the reader.
+
+        Runs last, after wiki links have become real routes — anything left whose href
+        is not a route, an anchor or an external URL has no address to point at.
+        `[`TracerConfig`](…)` becomes `` `TracerConfig` ``, which is what the writer
+        was asked for in the first place.
+        """
+        demoted: list[str] = []
+
+        def replace(match: re.Match[str]) -> str:
+            text, href = match.group(1), match.group(2).strip()
+            if not href or _REAL_HREF.match(href):
+                return match.group(0)
+            demoted.append(href.strip("`"))
+            label = text.strip()
+            if label.startswith("`") and label.endswith("`") and len(label) > 1:
+                return label  # already code — just drop the link around it
+            if label and _CODEISH.match(label):
+                return f"`{label}`"
+            # Prose link text: keep the words, lose the link, and name the file after
+            # it so the reference is not simply lost.
+            path = href.strip("`")
+            return f"{label} (`{path}`)" if label else f"`{path}`"
+
+        return _ANY_LINK.sub(replace, content), demoted
 
     @staticmethod
     def _headings(markdown: str) -> list[str]:
