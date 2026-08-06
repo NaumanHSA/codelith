@@ -108,6 +108,109 @@ def validate_mermaid(diagram: str) -> MermaidCheck:
     return MermaidCheck(True)
 
 
+#: Node/participant label forms across the diagram types we ask for.
+_LABEL_PATTERNS = (
+    re.compile(r"\[\[(?P<label>[^\]]+)\]\]"),           # ID[[Label]]
+    re.compile(r"\[\((?P<label>[^)]+)\)\]"),            # ID[(Label)]
+    re.compile(r"\{\{(?P<label>[^}]+)\}\}"),            # ID{{Label}}
+    re.compile(r"\(\((?P<label>[^)]+)\)\)"),            # ID((Label))
+    re.compile(r"\[(?P<label>[^\][]+)\]"),              # ID[Label]
+    re.compile(r"\{(?P<label>[^}{]+)\}"),               # ID{Label}
+    re.compile(r"^\s*class\s+(?P<label>[\w.]+)"),
+)
+
+#: Participant declarations are handled separately: the alias is the display name and
+#: the identifier is just a handle, so only the alias may be grounding-checked.
+_PARTICIPANT = re.compile(
+    r"^\s*(?:participant|actor)\s+(?P<id>[\w.\-]+)(?:\s+as\s+(?P<alias>.+?))?\s*$"
+)
+
+#: Sequence-diagram message lines name their participants inline. The endpoint class
+#: must exclude `-`, or it swallows the first dash of the arrow and reports `P4-` as a
+#: participant that does not exist.
+_SEQUENCE_EDGE = re.compile(r"^\s*(?P<from>[\w.]+)\s*-+>>?\+?\s*(?P<to>[\w.]+)\s*:")
+
+#: Actors a diagram may always name — they are the reader, not part of the codebase.
+_GENERIC = frozenset({
+    "client", "user", "browser", "caller", "consumer", "api", "system", "request",
+    "response", "start", "end", "database", "db",
+})
+
+
+def extract_labels(diagram: str) -> list[str]:
+    """
+    The *display* names a diagram uses — what a reader sees, not internal identifiers.
+
+    The distinction matters. `participant P_SERVER as app.server` is the correct form,
+    and the thing to check is `app.server`; `P_SERVER` is a handle chosen for syntax's
+    sake. Checking handles rejected diagrams that were doing exactly as they were told.
+    """
+    lines = (diagram or "").splitlines()
+
+    # Pass one: participant/actor declarations, so edges can be resolved through them.
+    aliases: dict[str, str] = {}
+    labels: list[str] = []
+    for line in lines:
+        if match := _PARTICIPANT.match(line):
+            ident = match.group("id").strip()
+            alias = (match.group("alias") or "").strip()
+            aliases[ident] = alias or ident
+            labels.append(alias or ident)
+
+    # Pass two: node labels and any edge endpoint that was never declared.
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("%%", "classDef", "linkStyle", "style ")):
+            continue
+        if _PARTICIPANT.match(line):
+            continue
+        for pattern in _LABEL_PATTERNS:
+            for match in pattern.finditer(line):
+                value = (match.group("label") or "").strip()
+                if value:
+                    labels.append(value)
+        if edge := _SEQUENCE_EDGE.match(line):
+            for endpoint in (edge.group("from"), edge.group("to")):
+                # A declared participant is already accounted for by its alias.
+                if endpoint not in aliases:
+                    labels.append(endpoint)
+    return list(dict.fromkeys(labels))
+
+
+def ungrounded_labels(diagram: str, allowed: list[str]) -> list[str]:
+    """
+    Labels that match nothing in the supplied vocabulary.
+
+    The prompt says a diagram may only name real services, modules and routes; this is
+    what makes that true rather than merely requested. Matching is loose in both
+    directions — a model may shorten `neurosurfer.app.server` to `app.server` and that
+    is still grounded — because the goal is catching invention, not enforcing spelling.
+    """
+    permitted = [_canonical(a) for a in allowed if a and a.strip()]
+    unknown: list[str] = []
+    for label in extract_labels(diagram):
+        if label.strip().lower() in _GENERIC:
+            continue
+        needle = _canonical(label)
+        if not needle:
+            continue
+        if any(needle in ok or ok in needle for ok in permitted):
+            continue
+        unknown.append(label)
+    return unknown
+
+
+def _canonical(value: str) -> str:
+    """
+    Fold the separators Mermaid forces a model to change.
+
+    `neurosurfer.vectorstores` cannot be a bare Mermaid identifier, so a well-behaved
+    model writes `neurosurfer_vectorstores` — the same component, and it was being
+    rejected as invented.
+    """
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+
+
 def _first_keyword(text: str) -> str | None:
     """The declared diagram type, if the text opens with one."""
     for line in text.strip().splitlines():
@@ -122,4 +225,10 @@ def _first_keyword(text: str) -> str | None:
     return None
 
 
-__all__ = ["MermaidCheck", "clean_mermaid", "validate_mermaid"]
+__all__ = [
+    "MermaidCheck",
+    "clean_mermaid",
+    "extract_labels",
+    "ungrounded_labels",
+    "validate_mermaid",
+]

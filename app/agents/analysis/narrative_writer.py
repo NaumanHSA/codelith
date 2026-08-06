@@ -180,7 +180,8 @@ class NarrativeWriterAgent(BaseAgent):
             module_inventory=self._inventory(modules[:30]),
         )
         try:
-            response = await self._call_llm_json(messages, task_type="classify")
+            # Quality tier: this is judgement about a codebase, not classification.
+            response = await self._call_llm_json(messages, task_type="select")
         except JobCancelled:
             raise
         except Exception as exc:

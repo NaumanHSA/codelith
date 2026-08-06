@@ -120,9 +120,28 @@ class FormatterAgent(BaseAgent):
     # ── Markdown enrichment ────────────────────────────────────────────────────
 
     def _inject_diagrams(self, content: str, diagrams: list[dict]) -> str:
+        """
+        Show the picture; keep the source.
+
+        A fenced ```mermaid block is only a diagram if the reader renders Mermaid, and
+        neither the studio's markdown pipeline nor a DOCX export does — so a generated
+        diagram reached the reader as a wall of `graph TD` text. The rendered PNG is
+        embedded as a data URI, which survives being copied into any export without
+        needing an asset server or a second request, and the Mermaid source follows it
+        in a collapsed block so it stays editable.
+        """
         section = "\n\n## Diagrams\n"
         for d in diagrams:
-            section += f"\n### {d['name']}\n\n```mermaid\n{d['content']}\n```\n"
+            section += f"\n### {d['name']}\n\n"
+            if png := d.get("png_base64"):
+                section += f"![{d['name']}](data:image/png;base64,{png})\n\n"
+                section += (
+                    "<details>\n<summary>Diagram source</summary>\n\n"
+                    f"```mermaid\n{d['content']}\n```\n\n</details>\n"
+                )
+            else:
+                # Nothing rendered it — the source is better than nothing.
+                section += f"```mermaid\n{d['content']}\n```\n"
         return content + section
 
     @staticmethod

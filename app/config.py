@@ -99,6 +99,25 @@ class Settings(BaseSettings):
     # Per-job sandbox
     JOB_SANDBOX_BASE_DIR: str = "/tmp/jobs"
 
+    # ── Diagrams ──────────────────────────────────────────────────────────────
+    # Off by default. The stage works — job 11 produced two grounded, rendered
+    # diagrams — but it costs a quality-tier call per diagram plus a browser render,
+    # and it is the least load-bearing thing composition does. Turn it on with
+    # DIAGRAMS_ENABLED=true; everything behind this flag (derivation, grounding
+    # checks, Mermaid validation, PNG rendering) stays in place and tested.
+    DIAGRAMS_ENABLED: bool = False
+    # Mermaid source only becomes a picture if the reader can render it, and neither
+    # the studio's markdown pipeline nor a DOCX export can. Diagrams are rendered to
+    # PNG locally via `node_modules/.bin/mmdc` (installed by the root package.json)
+    # and embedded in the document; the Mermaid source is kept alongside them.
+    DIAGRAM_RENDER_PNG: bool = True
+    # Empty means: use the local install, else `mmdc` on PATH.
+    MERMAID_CLI_PATH: str = ""
+    DIAGRAM_RENDER_TIMEOUT_SECONDS: int = 60
+    # Ceiling on one embedded image. Data URIs are copied with the document, so an
+    # enormous render is dropped in favour of publishing the source.
+    DIAGRAM_MAX_PNG_BYTES: int = 1_500_000
+
     # ── Step artifacts ────────────────────────────────────────────────────────
     # What each agent actually produced — architecture map, section plan, strategy,
     # narratives, the context a section was written from — dumped verbatim to

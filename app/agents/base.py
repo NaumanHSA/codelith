@@ -27,6 +27,14 @@ from app.tracing.runtime import get_tracer
 logger = structlog.get_logger(__name__)
 
 
+class EmptyCompletion(RuntimeError):
+    """The model returned nothing. Retryable — see `_chat_with_retry`."""
+
+    def __init__(self, model: str) -> None:
+        super().__init__(f"{model} returned an empty completion")
+        self.model = model
+
+
 class BaseAgent(ABC):
     name: str = "base_agent"
 
@@ -96,7 +104,14 @@ class BaseAgent(ABC):
         reraise=True,
     )
     async def _chat_with_retry(self, messages: list[dict], model: str) -> str:
-        return await chat_completion(messages, model=model)
+        result = await chat_completion(messages, model=model)
+        if not (result or "").strip():
+            # An empty completion is never a valid answer, and it is not an error the
+            # transport reports: observed on job 8, where a reasoning model spent its
+            # whole token budget thinking under concurrent load and returned nothing,
+            # twice, in 96 seconds. Raising makes the existing backoff cover it.
+            raise EmptyCompletion(model)
+        return result
 
     async def _call_llm_json(
         self,

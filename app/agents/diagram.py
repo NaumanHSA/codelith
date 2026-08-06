@@ -23,15 +23,18 @@ Three changes:
 
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass
 from typing import Any
 
 from app.agents.base import BaseAgent
+from app.config import get_settings
 from app.core.cancellation import JobCancelled
 from app.knowledge.constants import EntityKind
-from app.llm.prompts.diagram_prompts import DIAGRAM, DIAGRAM_REPAIR
-from app.tools.mermaid import clean_mermaid, validate_mermaid
+from app.llm.prompts.diagram_prompts import DIAGRAM, DIAGRAM_REPAIR, example_for
+from app.tools.mermaid import clean_mermaid, ungrounded_labels, validate_mermaid
+from app.tools.mermaid_render import render_png
 from app.tracing.artifacts import save_text_artifact
 
 
@@ -120,6 +123,12 @@ class DiagramAgent(BaseAgent):
         ) as t:
             await self._update_step(self.name, "running")
 
+            if not get_settings().DIAGRAMS_ENABLED:
+                await self._emit_log("info", "DiagramAgent: disabled (DIAGRAMS_ENABLED)")
+                t.outputs(diagrams=0, disabled=True)
+                await self._update_step(self.name, "completed", {"diagrams": 0, "disabled": True})
+                return {"diagrams": []}
+
             strategy: dict = state.get("strategy") or {}
             if not strategy.get("generate_diagrams", True):
                 await self._emit_log("info", "DiagramAgent: skipped (strategy: no diagrams)")
@@ -153,7 +162,11 @@ class DiagramAgent(BaseAgent):
             for d in diagrams:
                 save_text_artifact(f"diagram.{d['doc_type']}.{d['name']}", d["content"], ext="mmd")
 
-            t.outputs(diagrams=len(diagrams), kinds=[d["key"] for d in diagrams])
+            t.outputs(
+                diagrams=len(diagrams),
+                kinds=[d["key"] for d in diagrams],
+                rendered=sum(1 for d in diagrams if d.get("png_base64")),
+            )
             await self._update_step(self.name, "completed", {"diagrams": len(diagrams)})
             await self._emit_log("info", "Diagrams generated", count=len(diagrams))
             return {"diagrams": diagrams}
@@ -222,12 +235,67 @@ class DiagramAgent(BaseAgent):
     # ── Drawing ───────────────────────────────────────────────────────────────
 
     async def _draw(self, spec: DiagramSpec, project, vocab: dict, doc: dict) -> dict | None:
+        """
+        Draw, check, render — and drop rather than publish something broken.
+
+        Three gates, cheapest first: a structural check that rejects obvious garbage
+        without spawning a browser, a grounding check that rejects labels which are not
+        real components, and finally the renderer, which is the only true parser we
+        have. One repair attempt sits between the gates and the drop.
+        """
         allowed = self._allowed_nodes(spec, vocab)
         if not allowed:
             return None
 
+        content = await self._ask(spec, project, vocab, doc, allowed)
+        if not content:
+            # Never silent: job 8 produced nothing at all and the only trace of it was
+            # an absent file.
+            await self._emit_log("warning", f"Diagram '{spec.name}' dropped — no output")
+            return None
+
+        problem = self._inspect(content, allowed)
+        if problem:
+            await self._emit_log("info", f"Diagram '{spec.name}' rejected ({problem}) — repairing")
+            content = await self._repair(spec, content, problem, allowed)
+            problem = self._inspect(content, allowed) if content else "empty after repair"
+
+        if problem:
+            await self._emit_log("warning", f"Diagram '{spec.name}' dropped — {problem}")
+            return None
+
+        # The renderer is the real Mermaid parser; anything it refuses would have shipped
+        # as an error box. A dotted participant id (`neurosurfer.app.server`) passes every
+        # structural check and still fails here.
+        png = render_png(content)
+        if png is None:
+            await self._emit_log(
+                "info", f"Diagram '{spec.name}' failed to render — repairing"
+            )
+            content = await self._repair(
+                spec, content, "the diagram does not parse as Mermaid", allowed
+            )
+            if content and not self._inspect(content, allowed):
+                png = render_png(content)
+
+        if png is None:
+            await self._emit_log("warning", f"Diagram '{spec.name}' dropped — will not render")
+            return None
+
+        await self._emit_log("info", f"Rendered '{spec.name}'", bytes=len(png))
+        return {
+            "key": spec.key,
+            "name": spec.name,
+            "diagram_type": spec.mermaid_type.split()[0],
+            "doc_type": doc.get("doc_type") or "architecture",
+            "content": content,
+            "png_base64": base64.b64encode(png).decode("ascii"),
+        }
+
+    async def _ask(self, spec: DiagramSpec, project, vocab: dict, doc: dict, allowed) -> str:
         messages = DIAGRAM.render(
             mermaid_type=spec.mermaid_type,
+            example=example_for(spec.mermaid_type),
             project_name=project.name,
             purpose=spec.purpose,
             allowed_nodes="\n".join(f"  - {n}" for n in allowed),
@@ -239,45 +307,40 @@ class DiagramAgent(BaseAgent):
             doc_excerpt=(doc.get("content_markdown") or "")[:_DOC_EXCERPT_CHARS]
             or "(document is empty)",
         )
-
         try:
             raw = await self._call_llm(messages, task_type="diagram")
         except JobCancelled:
             raise
         except Exception as exc:
             await self._emit_log("warning", f"Diagram '{spec.name}' failed: {exc}")
-            return None
+            return ""
+        return clean_mermaid(raw or "")
 
-        content = clean_mermaid(raw or "")
+    @staticmethod
+    def _inspect(content: str, allowed: list[str]) -> str:
+        """Structural validity plus label grounding, as one reason string or empty."""
+        if not content:
+            return "empty response"
         check = validate_mermaid(content)
-
         if not check.ok:
-            await self._emit_log(
-                "info", f"Diagram '{spec.name}' invalid ({check.reason}) — repairing"
-            )
-            content = await self._repair(spec, content, check.reason)
-            check = validate_mermaid(content)
+            return check.reason
+        if unknown := ungrounded_labels(content, allowed):
+            # Live failure: given a worked example, a small model reproduced the
+            # example's *content* — LoginPage, Customer, P1 — instead of its syntax.
+            return "invented components not in the codebase: " + ", ".join(unknown[:5])
+        return ""
 
-        if not check.ok:
-            # Better no diagram than one that renders as an error box in the document.
-            await self._emit_log(
-                "warning", f"Diagram '{spec.name}' dropped — {check.reason}"
-            )
-            return None
-
-        return {
-            "key": spec.key,
-            "name": spec.name,
-            "diagram_type": spec.mermaid_type.split()[0],
-            "doc_type": doc.get("doc_type") or "architecture",
-            "content": content,
-        }
-
-    async def _repair(self, spec: DiagramSpec, diagram: str, reason: str) -> str:
+    async def _repair(
+        self, spec: DiagramSpec, diagram: str, reason: str, allowed: list[str]
+    ) -> str:
         try:
             raw = await self._call_llm(
                 DIAGRAM_REPAIR.render(
-                    mermaid_type=spec.mermaid_type, reason=reason, diagram=diagram
+                    mermaid_type=spec.mermaid_type,
+                    example=example_for(spec.mermaid_type),
+                    allowed_nodes="\n".join(f"  - {n}" for n in allowed),
+                    reason=reason,
+                    diagram=diagram,
                 ),
                 task_type="diagram",
             )
@@ -311,6 +374,7 @@ class DiagramAgent(BaseAgent):
 
     @staticmethod
     def _persist(diagrams: list[dict], sandbox) -> None:
+        """Source and picture side by side under runs/{job}/outputs/diagrams/."""
         if not sandbox or not diagrams:
             return
         try:
@@ -319,5 +383,9 @@ class DiagramAgent(BaseAgent):
             for d in diagrams:
                 safe = f"{d['doc_type']}_{d['name']}".lower().replace(" ", "_").replace("/", "-")
                 (diagrams_dir / f"{safe}.mmd").write_text(d["content"], encoding="utf-8")
+                if d.get("png_base64"):
+                    (diagrams_dir / f"{safe}.png").write_bytes(
+                        base64.b64decode(d["png_base64"])
+                    )
         except OSError:
             pass

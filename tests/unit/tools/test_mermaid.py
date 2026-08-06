@@ -7,7 +7,7 @@ them, and they were discarded for an unrelated reason. These are the exact failu
 
 from __future__ import annotations
 
-from app.tools.mermaid import clean_mermaid, validate_mermaid
+from app.tools.mermaid import clean_mermaid, ungrounded_labels, validate_mermaid
 
 
 class TestRealFailuresFromRun2:
@@ -95,3 +95,58 @@ class TestClassDiagramStrictness:
 
     def test_member_blocks_are_accepted(self) -> None:
         assert validate_mermaid("classDiagram\n  class Request {\n    +str model\n  }").ok
+
+
+class TestGrounding:
+    """
+    A diagram is read as fact, so it may only name real components. Each case here is
+    a live failure — half of them the gate wrongly rejecting correct output.
+    """
+
+    ALLOWED = [
+        "Client", "neurosurfer.app.server", "neurosurfer.llm",
+        "neurosurfer.vectorstores", "neurosurfer.cache",
+    ]
+
+    def test_copied_example_content_is_caught(self) -> None:
+        """Given a worked example, a model reproduced its names instead of its shape."""
+        diagram = (
+            "sequenceDiagram\n"
+            "  participant LoginPage as Log in page\n"
+            "  LoginPage ->> P1: Username and password"
+        )
+        assert ungrounded_labels(diagram, self.ALLOWED)
+
+    def test_participant_handles_are_not_labels(self) -> None:
+        """`participant P1 as real.name` is the requested form — P1 is not a claim."""
+        diagram = (
+            "sequenceDiagram\n"
+            "  participant P_SERVER as neurosurfer.app.server\n"
+            "  participant P_LLM as neurosurfer.llm\n"
+            "  P_SERVER ->> P_LLM: generate"
+        )
+        assert ungrounded_labels(diagram, self.ALLOWED) == []
+
+    def test_arrow_adjacent_ids_are_parsed_correctly(self) -> None:
+        """A greedy endpoint class read `P4->>P5` as a participant called `P4-`."""
+        diagram = (
+            "sequenceDiagram\n"
+            "  participant P3 as neurosurfer.app.server\n"
+            "  participant P4 as neurosurfer.llm\n"
+            "  P3->>P4: generate\n"
+            "  P4-->>P3: tokens"
+        )
+        assert ungrounded_labels(diagram, self.ALLOWED) == []
+
+    def test_mermaid_safe_spellings_are_grounded(self) -> None:
+        """A dotted name cannot be a bare Mermaid id; underscoring it is correct."""
+        diagram = (
+            "classDiagram\n"
+            "  class neurosurfer_vectorstores\n"
+            "  neurosurfer_vectorstores --> neurosurfer_cache"
+        )
+        assert ungrounded_labels(diagram, self.ALLOWED) == []
+
+    def test_generic_actors_are_always_allowed(self) -> None:
+        diagram = "sequenceDiagram\n  Client ->> Server: request"
+        assert "Client" not in ungrounded_labels(diagram, self.ALLOWED)

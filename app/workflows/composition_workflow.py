@@ -100,9 +100,14 @@ class CompositionWorkflow:
         # One writer per requested document type.
         graph.add_conditional_edges("planner", self._fan_out_writers, ["writer"])
 
+        # Diagram and QA used to run in parallel. Both call the same local model, and
+        # LM Studio serving two concurrent requests to one reasoning model returned
+        # empty completions for the diagram call — three retries each, twice, on job
+        # 10. Sequential costs wall time; concurrent cost every diagram in the
+        # document. `gate` stays as the join point.
         graph.add_edge("writer", "diagram")
-        graph.add_edge("writer", "qa")
-        graph.add_edge(["diagram", "qa"], "gate")
+        graph.add_edge("diagram", "qa")
+        graph.add_edge("qa", "gate")
 
         graph.add_conditional_edges(
             "gate",

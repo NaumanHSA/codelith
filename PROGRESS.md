@@ -163,6 +163,47 @@ nothing; try it on the quality tier before concluding it earns its keep.
   caught only after seeing job 4 produce one.
 - Diagrams are injected into the document they were drawn for, not only `architecture`.
 
+### Diagram rendering, and why the stage ships disabled
+
+Mermaid source in a fenced block is only a picture if the reader renders Mermaid, and
+neither the studio's markdown pipeline nor a DOCX export does — so diagrams arrived as
+walls of `graph TD` text. Diagrams are now rendered to PNG locally
+(`@mermaid-js/mermaid-cli` + headless Chrome, both installed by the root
+`package.json`, so no network at job time), embedded in the document as a data URI,
+and the Mermaid source is kept beneath in a collapsed block. Source and picture are
+also written side by side to `runs/{job}/outputs/diagrams/`.
+
+Getting there took five live runs and each one taught something:
+
+| run | outcome | cause |
+|---|---|---|
+| 5 | invented `LoginPage`, `Customer`, `P1` | the one-shot example was copied for its *content* |
+| 6 | both diagrams dropped | the fast tier cannot draw a grounded diagram |
+| 7 | dropped `P_SERVER` as invented | **our bug** — grounding-checked participant *handles*, not their aliases |
+| 9 | one rendered, one dropped as `P4-` | **our bug** — the edge regex ate the arrow's first dash |
+| 10 | both empty after 3 retries | `diagram` ran concurrently with `qa`; one local model, two requests |
+| 11 | **both rendered and embedded** | after serialising diagram → qa |
+
+Changes that came out of it, all kept:
+
+- `diagram` moved to the quality tier, alongside `plan` and `select`. Third time the
+  same lesson: **tier by whether the task needs judgement.**
+- Label grounding is enforced, not just requested: `ungrounded_labels()` rejects a
+  diagram naming anything outside the supplied vocabulary, with participant aliases
+  and Mermaid-safe spellings (`a_b` for `a.b`) understood.
+- The renderer is the final validator — it is the only true Mermaid parser we have,
+  and it catches what a structural check cannot (a dotted participant id parses fine
+  to us and not to Mermaid).
+- An empty completion is now a **retryable failure** in `BaseAgent._chat_with_retry`.
+  It is not an error the transport reports, and it silently produced nothing twice.
+- `diagram` and `qa` no longer run in parallel. The parallelism saved wall time and
+  cost every diagram in the document.
+
+**The stage is off by default** (`DIAGRAMS_ENABLED=false`). It works, but each diagram
+is a quality-tier call plus a browser render, and it is the least load-bearing thing
+composition does. Everything behind the flag is complete and tested; flip it to `true`
+to re-enable. A better strategy for diagrams is still worth designing.
+
 ### Also
 
 - `architecture_json` persisted on `knowledge_bases` (migration `b7c41a9f2e10`, written
