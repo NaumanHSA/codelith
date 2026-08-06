@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.analysis import KBPersisterAgent, SemanticIndexerAgent, StructuredExtractorAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
-from app.knowledge.constants import EntityKind, KBStatus, ModuleRole
+from app.knowledge.constants import EntityKind, KBStatus, ModuleRole, PageStatus
 from app.models.job import Job
 from app.models.organization import Organization
 from app.models.project import Project
@@ -144,9 +144,16 @@ class TestSemanticIndexer:
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
         calls: list[int] = []
 
+        from app.config import get_settings
+
+        dimensions = get_settings().VECTOR_DIMENSIONS
+
         async def fake_embeddings(texts, model=None, batch_size=None):
             calls.append(len(texts))
-            return [[0.1] * 1024 for _ in texts]
+            # Follows the configured dimension: `code_chunks.embedding` is built
+            # from VECTOR_DIMENSIONS, so a hardcoded width fails on any deployment
+            # whose embedding model differs from whoever wrote the test.
+            return [[0.1] * dimensions for _ in texts]
 
         monkeypatch.setattr(
             "app.agents.analysis.semantic_indexer.create_embeddings", fake_embeddings
@@ -217,7 +224,16 @@ class TestNarrativeWriter:
         topics = await repos.narratives.topics_present(extracted["kb_id"])
         assert "overview" in topics and "architecture" in topics
 
-    async def test_topics_are_chosen_from_evidence(self, db_session, job, state) -> None:
+    async def test_topics_are_chosen_from_evidence(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        """
+        The floor stands whatever the selection call returns.
+
+        A selector having a bad day must degrade quality, not silently drop a topic
+        the extracted facts demand — so this stubs it out entirely and checks what
+        survives.
+        """
         from app.agents.analysis import NarrativeWriterAgent
 
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
@@ -225,10 +241,18 @@ class TestNarrativeWriter:
         modules = await repos.modules.list_by_kb(extracted["kb_id"], include_tests=True)
         kinds = await repos.entities.kind_breakdown(extracted["kb_id"])
 
+        async def no_proposals(self, *args, **kwargs):
+            return []
+
+        monkeypatch.setattr(
+            "app.agents.analysis.narrative_writer.NarrativeWriterAgent._propose_topics",
+            no_proposals,
+        )
+
+        agent = NarrativeWriterAgent(db=db_session, job_id=job.id)
         topics = {
-            str(t) for t in NarrativeWriterAgent(db=db_session, job_id=job.id)._select_topics(
-                modules, kinds
-            )
+            str(t)
+            for t in await agent._choose_topics(job.project, {}, modules, kinds)
         }
 
         assert {"overview", "architecture"} <= topics       # always
@@ -286,6 +310,130 @@ class TestKBPersister:
         assert "semantic retrieval unavailable" in kb.error_message
 
 
+class TestSitePlanner:
+    """
+    The map analysis proposes, and the merge it drives.
+
+    The LLM is stubbed, so what is verified is the part that must hold whatever the
+    model says: `key_files` are real, slugs survive re-analysis, and a failed call
+    still leaves a usable site.
+    """
+
+    @staticmethod
+    def _proposal() -> dict:
+        return {
+            "title": "widgets",
+            "sections": [
+                {
+                    "slug": "api",
+                    "title": "API Reference",
+                    "pages": [
+                        {
+                            "slug": "endpoints",
+                            "title": "Endpoints",
+                            "doc_type": "api",
+                            "intent": "Every HTTP route and its shape.",
+                            # One real path, one invented — only the real one may survive.
+                            "key_files": ["app/api/routes.py", "app/api/invented.py"],
+                            "confidence": 0.9,
+                            "reason": "1 HTTP route detected",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    async def _plan(self, db_session, job, state, monkeypatch, response) -> dict:
+        from app.agents.analysis import SitePlannerAgent
+
+        extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
+
+        async def fake_llm_json(self, messages, task_type="plan", **kwargs):
+            return response
+
+        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_llm_json)
+        return await SitePlannerAgent(db=db_session, job_id=job.id).run(
+            {**state, "kb_id": extracted["kb_id"], "architecture_map": {"services": []}}
+        )
+
+    async def test_it_plans_a_site_and_merges_it(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        from app.services.site_service import SiteService
+
+        result = await self._plan(db_session, job, state, monkeypatch, self._proposal())
+
+        assert result["site_pages"] == 1
+        assert result["site_degraded"] is False
+
+        site = await SiteService(db_session).sites.get_with_pages(job.project_id)
+        page = site.pages[0]
+        assert (page.section_slug, page.slug) == ("api", "endpoints")
+        assert page.status == PageStatus.PLANNED
+
+    async def test_invented_key_files_are_discarded(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        """A path the KB has never seen retrieves nothing and must not be stored."""
+        from app.services.site_service import SiteService
+
+        await self._plan(db_session, job, state, monkeypatch, self._proposal())
+
+        site = await SiteService(db_session).sites.get_with_pages(job.project_id)
+        assert site.pages[0].key_files_json == ["app/api/routes.py"]
+
+    async def test_the_proposal_is_stored_on_the_knowledge_base(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        result = await self._plan(db_session, job, state, monkeypatch, self._proposal())
+
+        repos = KnowledgeRepositories.for_session(db_session)
+        kb = await repos.bases.get_by_id(result["site_map"]["kb_id"])
+        assert [s["slug"] for s in kb.site_map_json["sections"]] == ["api"]
+
+    async def test_re_analysing_twice_changes_nothing(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        """The done-when for this phase, end to end."""
+        from app.services.site_service import SiteService
+
+        await self._plan(db_session, job, state, monkeypatch, self._proposal())
+        site = await SiteService(db_session).sites.get_with_pages(job.project_id)
+        before = {(p.section_slug, p.slug): p.id for p in site.pages}
+
+        await self._plan(db_session, job, state, monkeypatch, self._proposal())
+
+        site = await SiteService(db_session).sites.get_with_pages(job.project_id)
+        after = {(p.section_slug, p.slug): p.id for p in site.pages}
+        assert after == before
+
+    async def test_a_failed_call_still_leaves_a_site(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        """A failed plan must cost site quality, not the site."""
+        from app.services.site_service import SiteService
+
+        result = await self._plan(db_session, job, state, monkeypatch, None)
+
+        assert result["site_degraded"] is True
+        assert result["site_pages"] > 0
+
+        site = await SiteService(db_session).sites.get_with_pages(job.project_id)
+        # Derived from the evidence-backed doc types, and still anchored on real files.
+        assert {p.doc_type for p in site.pages} <= {"architecture", "api", "getting_started"}
+        assert any(p.key_files_json for p in site.pages)
+
+    async def test_the_fallback_degrades_the_knowledge_base(
+        self, db_session, job, state, monkeypatch
+    ) -> None:
+        result = await self._plan(db_session, job, state, monkeypatch, None)
+        sealed = await KBPersisterAgent(db=db_session, job_id=job.id).run(
+            {**state, **result, "kb_id": result["site_map"]["kb_id"], "indexed_chunks": 5}
+        )
+
+        assert sealed["kb_status"] == KBStatus.DEGRADED
+
+
 class TestGraphShape:
     def test_analysis_graph_has_no_doc_type_dependency(self) -> None:
         """Phase 1 must be composable-agnostic: the state has no doc_types key."""
@@ -305,6 +453,16 @@ class TestGraphShape:
         for expected in (
             "repo_analyzer", "structured_extractor", "semantic_indexer",
             "module_summarizer", "architecture_synthesizer",
-            "narrative_writer", "kb_persister",
+            "narrative_writer", "site_planner", "kb_persister",
         ):
             assert expected in nodes
+
+    def test_the_ui_knows_every_analysis_stage(self) -> None:
+        """
+        A stage missing from `EXPECTED_STAGES` never appears in the progress bar and
+        skews the denominator, so the job reports 6/6 and then keeps running.
+        """
+        from pathlib import Path
+
+        narrate = Path("ui/src/app/lib/narrate.ts").read_text()
+        assert "'site_planner_agent'" in narrate

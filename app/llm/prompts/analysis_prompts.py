@@ -129,6 +129,55 @@ NARRATIVE = PromptTemplate(
     ),
 )
 
+SITE_PLAN = PromptTemplate(
+    system=(
+        "You are planning the *complete* documentation site for one codebase: the "
+        "sections in its navigation and the pages within each section. You are not "
+        "writing any of it. Later jobs write one section at a time into the map you "
+        "produce, possibly months apart, so the map must be right for the whole "
+        "project on the first attempt.\n\n"
+        "Respond ONLY with valid JSON — no markdown fences, no prose:\n"
+        '{"title":str,"sections":[{"slug":str,"title":str,"pages":[{"slug":str,'
+        '"title":str,"doc_type":str,"intent":str,"key_files":[str],'
+        '"confidence":float,"reason":str}]}]}\n\n'
+        "Rules:\n"
+        "  - `slug` is a URL and is permanent. Lowercase, hyphenated, no slashes, no "
+        "file extensions. Reuse an existing slug **exactly** when the existing map "
+        "below already has a page for that subject; renaming one breaks every link "
+        "and bookmark pointing at it.\n"
+        "  - `doc_type` MUST be one of: $doc_types. It decides what each page is "
+        "written from, so choose the closest fit rather than inventing a type.\n"
+        "  - A section is a nav entry, not a document type. One section may hold "
+        "pages of several types where that reads better.\n"
+        "  - `intent` is ONE sentence saying what the page covers and, where it "
+        "helps, what it deliberately leaves to another page. This is the entire "
+        "brief the writer gets, and it is what stops two pages explaining the same "
+        "middleware.\n"
+        "  - `key_files` are 1-5 real paths copied EXACTLY from the module inventory "
+        "below. A path that is not in the inventory is discarded, leaving that page "
+        "with nothing to be written from.\n"
+        "  - Propose a page only where the inventory can support a page of real "
+        "content. Six well-evidenced pages beat twenty thin ones, and every page "
+        "costs a generation run.\n"
+        "  - `reason` names the evidence — a module, a count, a role — in one short "
+        "sentence. `confidence` is 0.0-1.0.\n"
+        "  - Do not propose a home or index page: it is generated from the finished "
+        "map, not planned into it.\n"
+        "  - At most $max_sections sections and $max_pages pages in total."
+    ),
+    user=(
+        "Project: $project_name\n\n"
+        "Architecture map:\n$architecture_json\n\n"
+        "Module roles: $roles\n"
+        "Fact counts: $facts\n"
+        "Evidence-backed document types: $suggested_doc_types\n\n"
+        "What analysis already understands (narrative topics written): $topics\n\n"
+        "Module inventory (path — role — summary, then its files):\n$module_inventory\n\n"
+        "Existing site map — reuse these slugs exactly where the subject still "
+        "applies:\n$existing_map"
+    ),
+)
+
 #: Per-topic steer. Keys are `NarrativeTopic` values.
 TOPIC_GUIDANCE: dict[str, str] = {
     "overview": (
@@ -205,6 +254,7 @@ __all__ = [
     "ARCHITECTURE_SYNTHESIS",
     "MODULE_SUMMARY",
     "NARRATIVE",
+    "SITE_PLAN",
     "TOPIC_GUIDANCE",
     "TOPIC_SELECTION",
 ]

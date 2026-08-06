@@ -23,6 +23,7 @@ from app.agents.composition import (
     CompositionStrategyAgent,
     CompositionWriterAgent,
     KBLoaderAgent,
+    LinkerAgent,
 )
 from app.agents.diagram import DiagramAgent
 from app.agents.formatter import FormatterAgent
@@ -53,6 +54,7 @@ class CompositionWorkflow:
         final = await graph.ainvoke(initial)
         return {
             "saved_doc_ids": final.get("saved_doc_ids", []),
+            "saved_page_ids": final.get("saved_page_ids", []),
             "requires_review": final.get("requires_review", False),
             "kb_id": final.get("kb_id"),
             "error": final.get("error"),
@@ -86,6 +88,7 @@ class CompositionWorkflow:
         graph.add_node("strategy", make_node(CompositionStrategyAgent))
         graph.add_node("planner", make_node(CompositionPlannerAgent))
         graph.add_node("writer", make_node(CompositionWriterAgent))
+        graph.add_node("linker", make_node(LinkerAgent))
         graph.add_node("diagram", make_node(DiagramAgent))
         graph.add_node("qa", make_node(QAAgent))
         graph.add_node("gate", self._gate_node)
@@ -105,7 +108,11 @@ class CompositionWorkflow:
         # empty completions for the diagram call — three retries each, twice, on job
         # 10. Sequential costs wall time; concurrent cost every diagram in the
         # document. `gate` stays as the join point.
-        graph.add_edge("writer", "diagram")
+        # The linker is the join point for the writer fan-out: it is the first
+        # node that sees every page of the job at once, which is what resolving a
+        # cross-page reference requires.
+        graph.add_edge("writer", "linker")
+        graph.add_edge("linker", "diagram")
         graph.add_edge("diagram", "qa")
         graph.add_edge("qa", "gate")
 
@@ -125,8 +132,21 @@ class CompositionWorkflow:
         return {}
 
     def _fan_out_writers(self, state: CompositionState) -> list[Send]:
-        doc_types: list[str] = state.get("doc_types") or ["architecture"]
+        """
+        One writer per unit of work — a page when the job has a page scope, a
+        document type otherwise.
+
+        The fan-out is the only place the two modes differ structurally; everything
+        downstream of the writer reads `generated_docs` and does not care which
+        produced it.
+        """
         # generated_docs is reset per branch: the reducer merges them back on join.
+        if pages := state.get("pages"):
+            return [
+                Send("writer", {**state, "current_page": page, "generated_docs": []})
+                for page in pages
+            ]
+        doc_types: list[str] = state.get("doc_types") or ["architecture"]
         return [
             Send("writer", {**state, "current_doc_type": dt, "generated_docs": []})
             for dt in doc_types

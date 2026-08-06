@@ -6,6 +6,16 @@ one reads module summaries, roles and facts that analysis already produced, so i
 plans from understanding rather than from filenames — and crucially it emits
 `key_files` drawn from the real inventory, which is what makes retrieve-then-write
 possible downstream.
+
+**Page mode moves the whole thing down a level.** When the job writes site pages, the
+document's structure is no longer this stage's to invent: analysis already decided
+what pages exist and what each one is for, so the question becomes "what headings does
+*this* page need, given its intent and its anchor files". That is a smaller,
+better-defined and better-grounded job than "design a document about api" — and the
+site map goes into the prompt, so a page can be told what its neighbours cover and
+therefore what not to repeat.
+
+The two modes share `_validate` and the same `key_files`-against-the-whole-KB rule.
 """
 
 from __future__ import annotations
@@ -13,10 +23,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.base import BaseAgent
+from app.config import get_settings
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
 from app.knowledge.narratives import topics_for_doc_type
-from app.llm.prompts.composition_prompts import SECTION_PLAN
+from app.llm.prompts.composition_prompts import PAGE_PLAN, SECTION_PLAN
 from app.tracing.artifacts import save_artifact, save_input_artifact
 
 #: Module roles worth showing the planner, per document type.
@@ -52,6 +63,7 @@ class CompositionPlannerAgent(BaseAgent):
             project = state["project"]
             kb_id = state["kb_id"]
             doc_types: list[str] = state.get("doc_types") or ["architecture"]
+            pages: list[dict] = state.get("pages") or []
             strategy: dict = state.get("strategy") or {}
             repos = KnowledgeRepositories.for_session(self.db)
 
@@ -66,22 +78,131 @@ class CompositionPlannerAgent(BaseAgent):
             known_files = await self._known_files(repos, kb_id)
 
             plans: dict[str, dict] = {}
-            for doc_type in doc_types:
-                modules = await self._modules_for(repos, kb_id, doc_type)
-                plans[doc_type] = await self._plan(
-                    doc_type, project, overview, modules, facts, strategy, known_files
-                )
+            if pages:
+                site_map: dict = state.get("site_map") or {}
+                for page in pages:
+                    modules = await self._modules_for(repos, kb_id, page["doc_type"])
+                    plans[page["address"]] = await self._plan_page(
+                        page, project, site_map, overview, modules,
+                        facts, strategy, known_files,
+                    )
+            else:
+                for doc_type in doc_types:
+                    modules = await self._modules_for(repos, kb_id, doc_type)
+                    plans[doc_type] = await self._plan(
+                        doc_type, project, overview, modules, facts, strategy, known_files
+                    )
 
             save_artifact("planner.documentation_plan", plans)
 
             total = sum(len(p.get("sections", [])) for p in plans.values())
+            unit = "page" if pages else "document"
             await self._emit_log(
-                "info", f"Planned {total} sections across {len(plans)} document(s)"
+                "info", f"Planned {total} sections across {len(plans)} {unit}(s)"
             )
-            t.outputs(doc_types=doc_types, sections=total)
-            await self._update_step(self.name, "completed", {"sections": total})
+            t.outputs(doc_types=doc_types, pages=len(pages), sections=total)
+            await self._update_step(
+                self.name, "completed", {"sections": total, "pages": len(pages)}
+            )
 
             return {"documentation_plan": plans}
+
+    # ── Page mode ─────────────────────────────────────────────────────────────
+
+    async def _plan_page(
+        self, page, project, site_map, overview, modules, facts, strategy, known_files
+    ) -> dict:
+        """
+        Headings for one page whose purpose is already fixed.
+
+        Falls back to a single heading covering the page's own intent rather than to
+        a generic outline: the page was proposed with a specific job to do, and one
+        well-grounded heading is a better failure than five invented ones.
+        """
+        settings = get_settings()
+        doc_type = page["doc_type"]
+        audience, _ = self._voice(strategy, doc_type)
+        anchors = [f for f in page.get("key_files") or [] if f in known_files]
+
+        messages = PAGE_PLAN.render(
+            project_name=project.name,
+            page_title=page["title"],
+            section_title=self._section_title(site_map, page["section_slug"]),
+            doc_type=doc_type,
+            intent=page.get("intent") or page["title"],
+            audience=audience,
+            max_headings=str(settings.SITE_MAX_HEADINGS_PER_PAGE),
+            key_files="\n".join(f"  {f}" for f in anchors) or "  (none recorded)",
+            site_map=self._render_site_map(site_map, exclude=page["address"]),
+            overview=overview or "(none available)",
+            module_inventory=self._inventory(modules),
+            facts=facts,
+        )
+
+        save_input_artifact(f"planner.page.{page['slug']}.prompt", messages)
+
+        plan = await self._call_llm_json(messages, task_type="plan")
+        save_artifact(f"planner.page.{page['slug']}.raw_response", plan)
+
+        sections = self._validate(
+            plan, known_files, limit=settings.SITE_MAX_HEADINGS_PER_PAGE
+        ) if plan else []
+        if not sections:
+            await self._emit_log(
+                "warning",
+                f"Planner produced no usable headings for {page['address']} — "
+                "writing it as one section",
+            )
+            sections = [
+                {
+                    "name": page["title"],
+                    "focus": page.get("intent") or page["title"],
+                    "key_files": anchors[:5],
+                }
+            ]
+
+        return {
+            "type": doc_type,
+            "title": page["title"],
+            "page_id": page["id"],
+            "address": page["address"],
+            "sections": sections,
+        }
+
+    @staticmethod
+    def _section_title(site_map: dict, section_slug: str) -> str:
+        for section in site_map.get("sections") or []:
+            if section.get("slug") == section_slug:
+                return section.get("title") or section_slug
+        return section_slug
+
+    @staticmethod
+    def _render_site_map(site_map: dict, *, exclude: str) -> str:
+        """
+        The neighbouring pages and what each is for.
+
+        Three pages explaining the same middleware is what makes generated
+        documentation feel cheap, and it cannot be fixed after the fact — each page
+        has to be told, while it is being planned, what the others already own.
+        """
+        lines: list[str] = []
+        for section in site_map.get("sections") or []:
+            for page in section.get("pages") or []:
+                address = f"{section.get('slug')}/{page.get('slug')}"
+                if address == exclude:
+                    continue
+                intent = (page.get("intent") or "").strip()
+                lines.append(
+                    f"  {address} — {page.get('title')}" + (f": {intent}" if intent else "")
+                )
+        return "\n".join(lines) or "  (this is the only page)"
+
+    @staticmethod
+    def _voice(strategy: dict, doc_type: str) -> tuple[str, str]:
+        for entry in strategy.get("audiences") or []:
+            if entry.get("doc_type") == doc_type:
+                return entry.get("audience", "developers"), entry.get("tone", "technical")
+        return "developers", "technical"
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
@@ -139,7 +260,7 @@ class CompositionPlannerAgent(BaseAgent):
         return raw
 
     @staticmethod
-    def _validate(plan: dict, known: set[str]) -> list[dict]:
+    def _validate(plan: dict, known: set[str], limit: int = 8) -> list[dict]:
         """
         Keep only sections whose `key_files` exist **in the knowledge base**.
 
@@ -161,7 +282,7 @@ class CompositionPlannerAgent(BaseAgent):
                     "key_files": [f for f in (raw.get("key_files") or []) if f in known][:5],
                 }
             )
-        return sections[:8]
+        return sections[:limit]
 
     @staticmethod
     def _default_sections(doc_type: str, modules) -> list[dict]:

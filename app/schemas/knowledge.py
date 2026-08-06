@@ -129,11 +129,23 @@ class AnalyzeRequest(BaseModel):
 
 class ComposeRequest(BaseModel):
     """
-    Phase 2 trigger — this is where the document type is finally chosen, once the
+    Phase 2 trigger — this is where what to write is finally chosen, once the
     knowledge base exists and can tell the user what is worth writing.
+
+    Two scopes, and which one is used decides what the job produces:
+
+      * `page_slugs` — write pages into the project's documentation site. This is
+        the path the site is built on.
+      * `doc_types` — the original single-document-per-type path, kept working.
+
+    `page_slugs` wins when both are supplied.
     """
 
-    doc_types: list[str] = Field(default_factory=lambda: ["architecture"], min_length=1)
+    doc_types: list[str] = Field(default_factory=lambda: ["architecture"])
+    #: Page addresses (`"api/endpoints"`) or whole sections (`"api"`). A section
+    #: writes every page in it that analysis could anchor on real files; an explicit
+    #: page address is always honoured.
+    page_slugs: list[str] = Field(default_factory=list)
     output_formats: list[str] = Field(default_factory=lambda: ["markdown"])
     human_review: bool = False
     kb_id: int | None = Field(

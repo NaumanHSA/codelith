@@ -24,6 +24,7 @@ from app.agents.analysis import (
     ModuleSummarizerAgent,
     NarrativeWriterAgent,
     SemanticIndexerAgent,
+    SitePlannerAgent,
     StructuredExtractorAgent,
 )
 from app.agents.repo_analyzer import RepoAnalyzerAgent
@@ -86,6 +87,7 @@ class AnalysisWorkflow:
         graph.add_node("module_summarizer", make_node(ModuleSummarizerAgent))
         graph.add_node("architecture_synthesizer", make_node(ArchitectureSynthesizerAgent))
         graph.add_node("narrative_writer", make_node(NarrativeWriterAgent))
+        graph.add_node("site_planner", make_node(SitePlannerAgent))
         graph.add_node("kb_persister", make_node(KBPersisterAgent))
 
         graph.set_entry_point("repo_analyzer")
@@ -96,7 +98,11 @@ class AnalysisWorkflow:
         # Synthesis reads the summaries, so it must follow them.
         graph.add_edge("module_summarizer", "architecture_synthesizer")
         graph.add_edge("architecture_synthesizer", "narrative_writer")
-        graph.add_edge("narrative_writer", "kb_persister")
+        # Last before the seal: planning the site is the one stage that reads
+        # everything the others produced — summaries, architecture and narratives —
+        # and it is the only stage whose output outlives this knowledge base.
+        graph.add_edge("narrative_writer", "site_planner")
+        graph.add_edge("site_planner", "kb_persister")
         graph.add_edge("kb_persister", END)
 
         return graph.compile()

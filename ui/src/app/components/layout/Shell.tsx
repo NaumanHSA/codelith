@@ -11,6 +11,7 @@ const NAV = [
   { to: '/app', index: '01', label: 'Dashboard', end: true },
   { to: '/app/projects', index: '02', label: 'Projects' },
   { to: '/app/documents', index: '03', label: 'Documents' },
+  { to: '/app/jobs', index: '04', label: 'Jobs' },
 ]
 
 /** The banner that makes a running job reachable from every screen. */
@@ -155,7 +156,7 @@ export default function Shell() {
           {({ isActive }) => (
             <>
               {isActive && <span className="absolute top-0 left-0 h-full w-[3px] bg-hot" />}
-              <span className="tag text-ink-dim">04</span>
+              <span className="tag text-ink-dim">05</span>
               Settings
             </>
           )}

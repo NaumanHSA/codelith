@@ -71,6 +71,18 @@ class KnowledgeBase(Base, TimestampMixin):
     #: it used to live only in analysis workflow state, so every diagram drawn in phase
     #: two was drawn from an empty map and invented its own components.
     architecture_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    #: The site map *proposed* by this analysis: the sections and pages the evidence
+    #: says the project's documentation site should contain. Rebuilt on every
+    #: analysis and never the source of truth for what exists — `doc_pages` is that.
+    #: Kept here so a proposal can be inspected, diffed and re-merged without
+    #: re-running the planner.
+    site_map_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    #: Repo-relative path → content digest, for every file this build read. The only
+    #: thing that makes per-page staleness exact: on the next commit, a page is out
+    #: of date exactly when one of the files it was written from has a different
+    #: digest here. Deliberately not a git diff — uploads and local directories have
+    #: no commits, and this works for all of them.
+    file_hashes_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     #: Why a build ended up DEGRADED or FAILED.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

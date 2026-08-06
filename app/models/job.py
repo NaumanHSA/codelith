@@ -22,6 +22,12 @@ class Job(Base, TimestampMixin):
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     config_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    #: What this job was asked to do, in the reader's vocabulary rather than the
+    #: pipeline's: `{"kind", "sections": [...], "pages": [...], "labels": [...]}`.
+    #: Lets a job list say *"wrote API Reference (3 pages)"* instead of "completed".
+    #: Recorded at creation, so it is available before a single page exists and
+    #: survives a job that failed — which `doc_pages.job_id` alone would not give.
+    scope_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

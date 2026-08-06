@@ -2,7 +2,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Request, Response, UploadFile
 
 from app.config import get_settings
 from app.dependencies import CurrentUser, DbSession, ManagerUser
@@ -18,10 +18,18 @@ from app.schemas.project import (
     SourceProbeOut,
     SourceProbeRequest,
 )
+from app.schemas.site import (
+    EXPORT_FORMATS,
+    CreateVersionRequest,
+    SiteOut,
+    SitePageDetail,
+    SiteVersionOut,
+)
 from app.services.audit_service import AuditService
 from app.services.job_service import JobService
 from app.services.knowledge_service import KnowledgeService
 from app.services.project_service import ProjectService
+from app.services.site_service import SiteService
 from app.services.source_service import SourceService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -162,16 +170,113 @@ async def get_knowledge_base(project_id: int, db: DbSession, user: CurrentUser):
     return await KnowledgeService(db).get_summary(project_id, user)
 
 
+@router.get("/{project_id}/site", response_model=SiteOut | None)
+async def get_site(
+    project_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    version: str | None = Query(None, description="A version label. Omit for the live site."),
+):
+    """
+    The project's documentation site: the whole map, with per-page status.
+
+    Planned pages are returned alongside written ones — the nav doubles as the
+    roadmap for this project's documentation, so the UI can grey out what does not
+    exist yet and offer to generate it. Returns null before the first analysis.
+    """
+    return await SiteService(db).get_site(project_id, user, version)
+
+
+@router.get("/{project_id}/site/versions", response_model=list[SiteVersionOut])
+async def list_site_versions(project_id: int, db: DbSession, user: CurrentUser):
+    """Frozen snapshots of the site, newest first."""
+    return await SiteService(db).list_versions(project_id, user)
+
+
+@router.post("/{project_id}/site/versions", response_model=SiteVersionOut, status_code=201)
+async def create_site_version(
+    project_id: int, req: CreateVersionRequest, db: DbSession, user: ManagerUser
+):
+    """
+    Freeze the site as it stands, under a label.
+
+    Copies every written page rather than referencing it — the live pages keep
+    changing, which is the point of them, and a version that quietly followed them
+    would not be a version.
+    """
+    return await SiteService(db).create_version(project_id, req.label, user, req.notes)
+
+
+@router.get("/{project_id}/site/export")
+async def export_site(
+    project_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    format: str = Query("markdown", description=f"One of: {', '.join(EXPORT_FORMATS)}"),
+    version: str | None = Query(None, description="A version label. Omit for the live site."),
+):
+    """
+    The whole site as a downloadable archive.
+
+    `html` is our own theme as static files — no build step, no network, openable
+    with `file://`. `mkdocs` and `docusaurus` are projects a team can build and host.
+    `markdown` is the page tree as stored, for anyone who wants neither.
+
+    Built in memory and streamed back rather than stored: an export is a snapshot of
+    what you are looking at now, and a stored copy of a thing that regenerates itself
+    is stale the moment it is written.
+    """
+    data, filename, media_type = await SiteService(db).export(
+        project_id, format, user, version
+    )
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"content-disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{project_id}/site/pages/{section_slug}/{slug}", response_model=SitePageDetail)
+async def get_site_page(
+    project_id: int,
+    section_slug: str,
+    slug: str,
+    db: DbSession,
+    user: CurrentUser,
+    version: str | None = Query(None, description="A version label. Omit for the live site."),
+):
+    """
+    One page of the site, with its prose.
+
+    Separate from `/site` because the map is fetched on every nav render and a
+    thirty-page site's markdown is megabytes. A planned page resolves too, with no
+    content — the reader shows what it is going to cover instead.
+    """
+    return await SiteService(db).get_page(project_id, section_slug, slug, user, version)
+
+
 @router.post("/{project_id}/compose", response_model=JobOut, status_code=202)
 async def compose_documents(
     project_id: int, req: ComposeRequest, db: DbSession, user: ManagerUser, request: Request
 ):
-    """Phase 2 — write the requested documents from the existing knowledge base."""
+    """
+    Phase 2 — write from the existing knowledge base.
+
+    `page_slugs` writes pages into the project's documentation site; without it this
+    is the original one-document-per-type path. An unknown page address or a scope
+    over `SITE_MAX_PAGES_PER_JOB` comes back 422 before any job is created.
+    """
     job = await KnowledgeService(db).start_composition(project_id, req, user)
     await AuditService(db).log(
         "project.compose", "job",
         user_id=user.id, resource_id=job.id,
-        details={"project_id": project_id, "doc_types": req.doc_types},
+        details={
+            "project_id": project_id,
+            "doc_types": req.doc_types,
+            # The resolved scope, not what was asked for: "api" becomes the pages it
+            # actually expanded to, which is what the job will be judged against.
+            "page_slugs": (job.config_json or {}).get("page_slugs", []),
+        },
         ip_address=request.client.host if request.client else None,
     )
     return job

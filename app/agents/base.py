@@ -162,7 +162,13 @@ class BaseAgent(ABC):
 
         existing = await repo.list(job_id=self.job_id, agent_name=step_name)
         if existing:
-            await repo.update(existing[0].id, status=status, output_json=output or {}, **timing)
+            # Every row, not just the first. Fan-out runs several branches of the
+            # same agent concurrently in separate sessions, so two can both find no
+            # row and both create one; updating only `existing[0]` then leaves the
+            # loser stuck at "running" forever, and the UI shows a finished job with
+            # a stage still spinning. Updating all of them converges whoever wins.
+            for step in existing:
+                await repo.update(step.id, status=status, output_json=output or {}, **timing)
         else:
             await repo.create(
                 job_id=self.job_id,

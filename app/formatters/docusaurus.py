@@ -4,8 +4,8 @@ import io
 import json
 import zipfile
 
+from app.formatters.site_tree import SiteTree, rewrite_links, slugify_filename
 from app.models.document import Document
-
 
 _SIDEBAR_POSITION = {
     "architecture": 1,
@@ -76,3 +76,61 @@ module.exports = config;
     def _sidebars_js(self, docs: list[Document]) -> str:
         items = json.dumps(["intro"] + [d.doc_type for d in docs], indent=2)
         return f"module.exports = {{ tutorialSidebar: {items} }};\n"
+
+    # ── Site tree ─────────────────────────────────────────────────────────────
+
+    def format_site_tree(self, tree: SiteTree) -> bytes:
+        """
+        A directory per section with a `_category_.json`, and a generated sidebar.
+
+        Docusaurus derives its own ordering from `_category_.json` and
+        `sidebar_position`, so the sidebar mirrors the site's nav order exactly
+        rather than the alphabetical order it would otherwise invent.
+        """
+        buf = io.BytesIO()
+        safe_name = tree.title.lower().replace(" ", "-")
+
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            sidebar: list[object] = ["intro"]
+
+            for index, section in enumerate(tree.sections, start=1):
+                written = [p for p in section.pages if p.content_markdown.strip()]
+                if not written:
+                    continue
+                folder = slugify_filename(section.slug)
+                zf.writestr(
+                    f"docs/{folder}/_category_.json",
+                    json.dumps({"label": section.title, "position": index}, indent=2),
+                )
+                ids: list[str] = []
+                for position, page in enumerate(written, start=1):
+                    name = slugify_filename(page.slug)
+                    ids.append(f"{folder}/{name}")
+                    zf.writestr(
+                        f"docs/{folder}/{name}.mdx",
+                        "---\n"
+                        f'title: "{page.title}"\n'
+                        f'sidebar_label: "{page.title}"\n'
+                        f"sidebar_position: {position}\n"
+                        "---\n\n"
+                        + rewrite_links(
+                            page.content_markdown, from_page=page.address, suffix=""
+                        ),
+                    )
+                sidebar.append({"type": "category", "label": section.title, "items": ids})
+
+            zf.writestr("docs/intro.mdx", self._tree_intro(tree))
+            zf.writestr("docusaurus.config.js", self._config_js(tree.title, safe_name))
+            zf.writestr(
+                "sidebars.js",
+                f"module.exports = {{ tutorialSidebar: {json.dumps(sidebar, indent=2)} }};\n",
+            )
+        return buf.getvalue()
+
+    @staticmethod
+    def _tree_intro(tree: SiteTree) -> str:
+        body = tree.home_markdown or "Generated documentation."
+        return (
+            "---\ntitle: Introduction\nsidebar_position: 0\n---\n\n"
+            f"# {tree.title}\n\n{body}\n"
+        )

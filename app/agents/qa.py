@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from app.agents.base import BaseAgent
+from app.knowledge.sites import doc_key
 from app.llm.prompts.qa_prompts import QA_CORRECTION, QA_REVIEW
 from app.tools.search_tools import semantic_search
 from app.tracing.artifacts import save_artifact
@@ -33,18 +34,23 @@ class QAAgent(BaseAgent):
             await self._update_step(self.name, "running")
 
             project = state["project"]
-            generated_docs: list[dict] = state.get("generated_docs", [])
+            generated_docs: list[dict] = (
+                state.get("linked_docs") or state.get("generated_docs") or []
+            )
 
             review_results: list[dict] = []
             validation_results: list[dict] = []
 
-            # Deduplicate: QA each doc_type only once (state doubling guard)
-            seen_types: set[str] = set()
+            # Deduplicate (state doubling guard). Keyed on the page address in page
+            # mode: three pages of type `api` are three documents to fact-check, and
+            # keying on doc_type alone silently QA'd one and passed the other two.
+            seen: set[str] = set()
             for doc in generated_docs:
-                doc_type = doc.get("doc_type") or ""
-                if doc_type in seen_types:
+                key = doc_key(doc)
+                if key in seen:
                     continue
-                seen_types.add(doc_type)
+                seen.add(key)
+                doc_type = doc.get("doc_type") or ""
 
                 content = doc.get("content_markdown", "")
                 claims = self._extract_claims(content)[:_MAX_CLAIMS_PER_DOC]
@@ -54,15 +60,18 @@ class QAAgent(BaseAgent):
 
                 claim_checks = review.get("claim_checks") or []
                 passed = sum(1 for c in claim_checks if c.get("verified", True))
-                review_results.append({"doc_type": doc_type, "review": review})
+                review_results.append(
+                    {"doc_type": doc_type, "address": doc.get("address"), "review": review}
+                )
                 validation_results.append({
                     "doc_type": doc_type,
+                    "address": doc.get("address"),
                     "claims_checked": len(claim_checks),
                     "claims_passed": passed,
                     "details": claim_checks,
                 })
                 await self._emit_log(
-                    "info", f"QA complete for {doc_type}",
+                    "info", f"QA complete for {key}",
                     score=review.get("score"), approved=review.get("approved"),
                     claims_passed=f"{passed}/{len(claim_checks)}",
                 )

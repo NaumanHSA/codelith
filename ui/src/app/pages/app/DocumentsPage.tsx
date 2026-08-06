@@ -74,7 +74,8 @@ export default function DocumentsPage() {
       <PageHead
         index="03"
         title="Documents"
-        sub="Everything the studio has written, across every project."
+        sub="Single documents, written before sites existed — across every project."
+        back={{ label: 'back to projects', onClick: () => navigate('/app/projects') }}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2 border border-rule bg-panel px-2 py-1.5">

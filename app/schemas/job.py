@@ -1,10 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AliasPath, BaseModel, Field, model_validator
 
 
 class JobConfig(BaseModel):
     doc_types: list[str] = ["architecture", "api", "module"]
+    #: Resolved page addresses (`"section/page"`) when this job writes into the
+    #: project's documentation site. Empty for the legacy one-document-per-type path.
+    page_slugs: list[str] = []
     output_formats: list[str] = ["markdown"]
     include_diagrams: bool = True
     human_review: bool = False
@@ -47,10 +50,18 @@ class AgentLogOut(BaseModel):
 class JobOut(BaseModel):
     id: int
     project_id: int
+    #: Read straight off the eager-loaded relationship. The cross-project job list
+    #: would otherwise need one fetch per row just to label anything.
+    project_name: str | None = Field(
+        default=None, validation_alias=AliasPath("project", "name")
+    )
     #: "analysis" builds the knowledge base; "composition" writes documents from one.
     job_type: str = "composition"
     status: str
     config_json: dict
+    #: What the job was asked to do, in the reader's vocabulary. Lets a job row say
+    #: "wrote API Reference (3 pages)" rather than "composition completed".
+    scope_json: dict = Field(default_factory=dict, serialization_alias="scope")
     doc_types: list[str] = []
     output_formats: list[str] = []
     requires_human_review: bool = False
@@ -60,7 +71,7 @@ class JobOut(BaseModel):
     created_at: datetime
     steps: list[JobStepOut] = []
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
     @model_validator(mode="after")
     def extract_config_fields(self) -> "JobOut":

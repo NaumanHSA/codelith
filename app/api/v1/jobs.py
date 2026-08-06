@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 from app.dependencies import DbSession, CurrentUser, CurrentUserOrToken, ManagerUser, ReviewerUser
 from app.schemas.job import JobOut, AgentLogOut, JobApproveRequest
@@ -10,9 +10,39 @@ from app.services.audit_service import AuditService
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
+@router.get("", response_model=list[JobOut])
+async def list_jobs(
+    db: DbSession,
+    user: CurrentUser,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    status: str | None = Query(None, description="Filter to one status."),
+):
+    """Every job across the organisation's projects, newest first."""
+    return await JobService(db).list_all(user, limit=limit, offset=offset, status=status)
+
+
 @router.get("/{job_id}", response_model=JobOut)
 async def get_job(job_id: int, db: DbSession, user: CurrentUser):
     return await JobService(db).get(job_id)
+
+
+@router.delete("/{job_id}", status_code=204)
+async def delete_job(job_id: int, db: DbSession, user: ManagerUser, request: Request):
+    """
+    Remove a job from the record.
+
+    A live job is cancelled first — deleting the row does not stop the worker, and a
+    job whose row has gone but whose task is still writing is the worst of both.
+    Documents and pages it produced survive: they carry their own copy of what
+    produced them, and losing written work to a tidied job list would be indefensible.
+    """
+    await JobService(db).delete(job_id)
+    await AuditService(db).log(
+        "job.delete", "job",
+        user_id=user.id, resource_id=job_id,
+        ip_address=request.client.host if request.client else None,
+    )
 
 
 @router.get("/{job_id}/logs", response_model=list[AgentLogOut])

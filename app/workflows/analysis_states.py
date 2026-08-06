@@ -44,6 +44,13 @@ class AnalysisState(TypedDict, total=False):
     narratives_written: int
     narrative_failures: int
 
+    # ── Documentation site ────────────────────────────────────────────────────
+    # The map this analysis proposed, already merged into `doc_pages` by the time it
+    # lands here. Carried so `kb_persister` can report coverage in the KB stats.
+    site_map: dict
+    site_pages: int
+    site_degraded: bool
+
     # ── Outcome ───────────────────────────────────────────────────────────────
     kb_status: str
     kb_stats: dict

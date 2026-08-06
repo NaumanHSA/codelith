@@ -5,6 +5,7 @@ from typing import Any
 import structlog
 
 from app.agents.base import BaseAgent
+from app.knowledge.sites import doc_key
 from app.tracing.artifacts import save_artifact
 
 logger = structlog.get_logger(__name__)
@@ -25,7 +26,9 @@ class FormatterAgent(BaseAgent):
             await self._update_step(self.name, "running")
 
             project = state["project"]
-            generated_docs: list[dict] = state.get("generated_docs", [])
+            generated_docs: list[dict] = (
+                state.get("linked_docs") or state.get("generated_docs") or []
+            )
             diagrams: list[dict] = state.get("diagrams", [])
             output_formats: list[str] = state.get("output_formats", ["markdown"])
 
@@ -36,7 +39,7 @@ class FormatterAgent(BaseAgent):
                 # Diagrams carry the doc_type they were drawn for. Injecting only into
                 # `architecture` meant every diagram generated for an API or deployment
                 # document was produced and then silently discarded.
-                mine = [d for d in diagrams if d.get("doc_type") == doc.get("doc_type")]
+                mine = [d for d in diagrams if d.get("doc_key") == doc_key(doc)]
                 if mine:
                     content = self._inject_diagrams(content, mine)
                 if "mkdocs" in output_formats or "docusaurus" in output_formats:
@@ -64,6 +67,7 @@ class FormatterAgent(BaseAgent):
                     "documents": [
                         {
                             "doc_type": d.get("doc_type"),
+                            "address": d.get("address"),
                             "title": d.get("title"),
                             "chars": len(d.get("content_markdown") or ""),
                         }
@@ -95,7 +99,7 @@ class FormatterAgent(BaseAgent):
                 # Build a lightweight Document-like object
                 doc = _DictDoc(doc_dict)
                 data = formatter.format(doc)
-                key = f"exports/{pid}/{doc_dict['doc_type']}.docx"
+                key = f"exports/{pid}/{_slug(doc_key(doc_dict))}.docx"
                 await storage.upload_bytes(data, key, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                 keys.append(key)
 
@@ -148,7 +152,7 @@ class FormatterAgent(BaseAgent):
     def _diagram_count(diagrams: list[dict]) -> dict[str, int]:
         counts: dict[str, int] = {}
         for d in diagrams:
-            key = d.get("doc_type") or "unknown"
+            key = d.get("doc_key") or d.get("doc_type") or "unknown"
             counts[key] = counts.get(key, 0) + 1
         return counts
 
@@ -156,6 +160,17 @@ class FormatterAgent(BaseAgent):
         title = doc.get("title", "Documentation")
         doc_type = doc.get("doc_type", "doc")
         return f"---\ntitle: \"{title}\"\ncategory: {doc_type}\n---\n\n" + content
+
+
+def _slug(key: str) -> str:
+    """
+    An export filename for one document.
+
+    A page address contains a slash, which would silently write into a nested S3
+    prefix — and two pages of the same `doc_type` would otherwise overwrite each
+    other, which is exactly what page mode makes commonplace.
+    """
+    return key.replace("/", "-") or "document"
 
 
 class _DictDoc:

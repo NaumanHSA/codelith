@@ -334,6 +334,16 @@ class TestGraphShape:
         )._build_graph()
         nodes = set(graph.get_graph().nodes)
 
-        for expected in ("kb_loader", "strategy", "planner", "writer",
+        for expected in ("kb_loader", "strategy", "planner", "writer", "linker",
                          "diagram", "qa", "gate", "formatter", "publisher"):
             assert expected in nodes
+
+    def test_the_ui_knows_every_composition_stage(self) -> None:
+        """
+        A stage missing from `EXPECTED_STAGES` never appears in the progress bar and
+        skews the denominator, so a finished job reports 8/9 and stops at 89%.
+        """
+        from pathlib import Path
+
+        narrate = Path("ui/src/app/lib/narrate.ts").read_text()
+        assert "'linker_agent'" in narrate

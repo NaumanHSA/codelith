@@ -25,6 +25,7 @@ class JobService:
         user: User,
         job_type: str = "composition",
         config_overrides: dict | None = None,
+        scope: dict | None = None,
     ) -> Job:
         config = req.config.model_dump()
         if config_overrides:
@@ -35,6 +36,7 @@ class JobService:
             job_type=job_type,
             status="pending",
             config_json=config,
+            scope_json=scope or {},
         )
         await self.db.commit()
         return job
@@ -120,6 +122,30 @@ class JobService:
         await self.repo.update(job_id, status="cancelled", completed_at=datetime.now(UTC))
         await self.db.commit()
         return await self.get(job_id)
+
+    async def delete(self, job_id: int) -> None:
+        """
+        Remove a job from the record.
+
+        Cancels first when it is still live: deleting a row does not stop a worker,
+        and a job whose row has gone but whose task is still writing pages is the
+        worst of both. Steps and logs cascade; documents and pages do not — they
+        keep their own copy of what produced them, and losing a written page because
+        someone tidied a job list would be indefensible.
+        """
+        job = await self.get(job_id)
+        if job.status in ("pending", "running"):
+            await self.cancel(job_id)
+        await self.repo.delete(job_id)
+        await self.db.commit()
+
+    async def list_all(
+        self, user: User, limit: int = 50, offset: int = 0, status: str | None = None
+    ) -> list[Job]:
+        """Every job in the user's organisation, newest first."""
+        return await self.repo.list_for_org(
+            user.org_id or 0, limit=limit, offset=offset, status=status
+        )
 
     async def update_config(self, job_id: int, extra: dict) -> None:
         """Merge extra key/value pairs into the job's config_json."""

@@ -6,6 +6,7 @@ import { useAuth } from '../../auth'
 import { countLabel, languageShares, relativeTime, shortSha } from '../../lib/format'
 import type { Project } from '../../lib/types'
 import { Button, Chip, PageHead, StatusBadge } from '../../components/ui'
+import ConfirmDelete from '../../components/ConfirmDelete'
 import { EmptyState, ErrorState, SkeletonGrid } from '../../components/States'
 import NewProjectDialog from '../../components/projects/NewProjectDialog'
 
@@ -13,16 +14,33 @@ function probeOf(p: Project) {
   return p.sources?.[0]?.config_json?.probe
 }
 
-function ProjectCard({ p, i, onOpen }: { p: Project; i: number; onOpen: () => void }) {
+function ProjectCard({
+  p, i, onOpen, onDelete,
+}: {
+  p: Project
+  i: number
+  onOpen: () => void
+  onDelete?: () => void
+}) {
   const probe = probeOf(p)
   const shares = languageShares(probe?.languages)
   const source = p.sources?.[0]
 
   return (
+    <div className="relative" style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}>
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          title={`Delete ${p.name}`}
+          aria-label={`Delete ${p.name}`}
+          className="tag absolute top-2 right-2 z-10 border border-rule bg-panel px-1.5 py-[2px] text-ink-dim opacity-0 transition-all group-hover/card:opacity-100 hover:border-bad hover:text-bad focus:opacity-100"
+        >
+          ✕
+        </button>
+      )}
     <button
       onClick={onOpen}
-      style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}
-      className="plate plate-lift anim-rise flex flex-col text-left"
+      className="plate plate-lift anim-rise group/card flex w-full flex-col text-left"
     >
       <span className="flex items-center gap-2 border-b border-rule bg-sunk/60 px-3 py-2">
         <span className="tag text-ink-dim">{String(p.id).padStart(2, '0')}</span>
@@ -76,6 +94,7 @@ function ProjectCard({ p, i, onOpen }: { p: Project; i: number; onOpen: () => vo
         ))}
       </span>
     </button>
+    </div>
   )
 }
 
@@ -86,6 +105,7 @@ export default function ProjectsPage() {
   const [q, setQ] = useState('')
   const [view, setView] = useState<'grid' | 'table'>('grid')
   const [creating, setCreating] = useState(false)
+  const [doomed, setDoomed] = useState<Project | null>(null)
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -168,6 +188,7 @@ export default function ProjectsPage() {
               p={p}
               i={i}
               onOpen={() => navigate(`/app/projects/${p.id}`)}
+              onDelete={canCreate ? () => setDoomed(p) : undefined}
             />
           ))}
         </div>
@@ -234,6 +255,30 @@ export default function ProjectsPage() {
           setData([p, ...(data ?? [])])
           navigate(`/app/projects/${p.id}`)
         }}
+      />
+
+      <ConfirmDelete
+        open={doomed !== null}
+        onClose={() => setDoomed(null)}
+        onConfirm={async () => {
+          if (doomed) await api.deleteProject(doomed.id)
+          reload()
+        }}
+        title={`Delete ${doomed?.name ?? 'project'}`}
+        actionLabel="Delete everything"
+        confirmText={doomed?.name}
+        body={
+          <>
+            <p>
+              This removes the project and everything derived from it — its knowledge
+              base, every job, every document, and the whole documentation site with
+              its pages and versions.
+            </p>
+            <p className="mt-2">
+              The repository itself is untouched. Nothing here can be recovered.
+            </p>
+          </>
+        }
       />
     </div>
   )

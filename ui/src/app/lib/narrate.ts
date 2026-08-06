@@ -21,6 +21,7 @@ export const EXPECTED_STAGES: Record<string, string[]> = {
     'module_summarizer_agent',
     'architecture_synthesizer_agent',
     'narrative_writer_agent',
+    'site_planner_agent',
     'kb_persister_agent',
   ],
   composition: [
@@ -28,6 +29,7 @@ export const EXPECTED_STAGES: Record<string, string[]> = {
     'composition_strategy_agent',
     'composition_planner_agent',
     'composition_writer_agent',
+    'linker_agent',
     'diagram_agent',
     'qa_agent',
     'gate',
@@ -66,11 +68,13 @@ const PURPOSE: Record<string, string> = {
   module_summarizer: 'Writing a summary for every module',
   architecture_synthesizer: 'Assembling components into an architecture',
   narrative_writer: 'Drafting narrative topics from the evidence',
+  site_planner: 'Planning the documentation site — sections and pages',
   kb_persister: 'Committing the knowledge base',
   kb_loader: 'Loading the knowledge base for this commit',
   composition_strategy: 'Deciding what each document should cover',
   composition_planner: 'Planning sections',
   composition_writer: 'Writing the prose',
+  linker: 'Resolving cross-page links and checking every anchor',
   diagram: 'Generating diagrams',
   qa: 'Checking every claim against source',
   gate: 'Waiting for both branches to finish',
@@ -137,6 +141,20 @@ const NARRATORS: Record<string, Narrator> = {
     return s ? `Wrote ${countLabel(w, 'narrative')} · ${s} skipped` : `Wrote ${countLabel(w, 'narrative')}`
   },
 
+  site_planner: o => {
+    const pages = num(o.pages)
+    const sections = num(o.sections)
+    if (pages === undefined) return null
+    // "3 new" is the part that matters on a re-analysis: the map is mostly the
+    // same every run, and what changed is the only news.
+    const added = num(o.inserted)
+    const base =
+      sections === undefined
+        ? `Mapped ${countLabel(pages, 'page')}`
+        : `Mapped ${countLabel(pages, 'page')} across ${countLabel(sections, 'section')}`
+    return added ? `${base} · ${added} new` : base
+  },
+
   kb_persister: o =>
     typeof o.status === 'string' ? `Knowledge base ${o.status}` : 'Knowledge base saved',
 
@@ -153,6 +171,16 @@ const NARRATORS: Record<string, Narrator> = {
   composition_writer: o => {
     const d = num(o.doc_count)
     return d === undefined ? null : `Wrote ${countLabel(d, 'document')}`
+  },
+
+  linker: o => {
+    const resolved = num(o.resolved)
+    const broken = num(o.broken)
+    if (resolved === undefined) return null
+    const base = `Resolved ${countLabel(resolved, 'link')}`
+    // A broken link is the one thing here worth interrupting for: a docs
+    // site with dead links reads as broken however good its prose is.
+    return broken ? `${base} · ${broken} unresolved` : base
   },
 
   diagram: o => {

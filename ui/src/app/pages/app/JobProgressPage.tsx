@@ -9,6 +9,7 @@ import {
 } from '../../lib/format'
 import { confidenceLabel, docTypeTitle } from '../../lib/docTypes'
 import { progressStages, stagePurpose } from '../../lib/narrate'
+import { describeJobScope } from '../../lib/site'
 import { isTerminal, type Doc, type JobLog, type KnowledgeBase } from '../../lib/types'
 import { Button, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { ErrorState, SkeletonPanel } from '../../components/States'
@@ -168,6 +169,8 @@ export default function JobProgressPage() {
     )
   }
 
+  const scope = describeJobScope(job)
+
   return (
     <div className="mx-auto max-w-[1100px] p-5">
       <PageHead
@@ -175,6 +178,9 @@ export default function JobProgressPage() {
         title={`${humanize(job.job_type)} run`}
         sub={
           <>
+            {/* The scope first: "API Reference · 3 pages" says more about
+                this run than when it started. */}
+            {scope && <span className="text-ink-mid">{scope} · </span>}
             started {formatDateTime(job.started_at ?? job.created_at)} · {formatDuration(elapsed)}
             {live ? ' elapsed' : ' total'}
           </>

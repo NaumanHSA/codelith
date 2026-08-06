@@ -17,6 +17,13 @@ Two ordering rules matter and are load-bearing:
      gather would share one AsyncSession across tasks, which raises "another operation
      is in progress" (the bug that silently dropped narratives in Phase B).
   2. Sections are generated concurrently but assembled in plan order.
+
+**Page mode changes only the level.** When the job writes site pages, the graph sends
+one writer per page and everything below runs unchanged, one level deeper: what was
+"sections of a document" is now "headings of a page". The one genuine addition is that
+each page's prompt names what the *other* pages of the site cover, because duplication
+across pages cannot be spotted from inside a single page the way duplication within a
+document can.
 """
 
 from __future__ import annotations
@@ -44,17 +51,27 @@ class CompositionWriterAgent(BaseAgent):
     name = "composition_writer_agent"
 
     async def run(self, state: dict[str, Any]) -> dict[str, Any]:
+        # Fan-out sets exactly one of these. `current_page` means page mode; without
+        # either, write everything requested (the path the tests and legacy graph use).
+        page = state.get("current_page")
+        if page:
+            targets = [page]
+        elif state.get("pages"):
+            targets = list(state["pages"])
+        else:
+            single = state.get("current_doc_type")
+            doc_types = [single] if single else (state.get("doc_types") or ["architecture"])
+            targets = [{"doc_type": dt} for dt in doc_types]
+
+        label = ", ".join(t.get("address") or t["doc_type"] for t in targets)
         tracer = self._tracer()
-        # Fan-out sets current_doc_type; otherwise write every requested type.
-        single = state.get("current_doc_type")
-        doc_types = [single] if single else (state.get("doc_types") or ["architecture"])
 
         with tracer(
             kind="agent",
             agent_id=self.name,
-            start_message=f"Writer: {doc_types}",
+            start_message=f"Writer: {label}",
             end_message="Writer: complete",
-            inputs={"doc_types": doc_types},
+            inputs={"targets": label},
         ) as t:
             await self._update_step(self.name, "running")
 
@@ -63,6 +80,7 @@ class CompositionWriterAgent(BaseAgent):
             kb_id = state["kb_id"]
             plans: dict = state.get("documentation_plan") or {}
             strategy: dict = state.get("strategy") or {}
+            site_map: dict = state.get("site_map") or {}
 
             builder = SectionContextBuilder(
                 db=self.db,
@@ -72,24 +90,41 @@ class CompositionWriterAgent(BaseAgent):
             )
 
             docs: list[dict] = []
-            for doc_type in doc_types:
-                plan = plans.get(doc_type) or {}
+            for target in targets:
+                doc_type = target["doc_type"]
+                address = target.get("address")
+                plan = plans.get(address or doc_type) or {}
                 sections = plan.get("sections") or []
                 if not sections:
-                    await self._emit_log("warning", f"No sections planned for {doc_type}")
+                    await self._emit_log(
+                        "warning", f"No sections planned for {address or doc_type}"
+                    )
                     continue
 
                 content = await self._write_doc(
-                    doc_type, sections, project, strategy, builder, settings
+                    address or doc_type, doc_type, sections, project, strategy,
+                    builder, settings,
+                    neighbours=self._neighbours(site_map, address) if address else "",
                 )
-                docs.append(
-                    {
-                        "doc_type": doc_type,
-                        "title": plan.get("title") or f"{project.name} — {doc_type.title()}",
-                        "content_markdown": content,
+                doc = {
+                    "doc_type": doc_type,
+                    "title": plan.get("title") or f"{project.name} — {doc_type.title()}",
+                    "content_markdown": content,
+                }
+                if address:
+                    # Carried through diagram/qa/formatter untouched, and read by the
+                    # publisher to write the page back with its provenance.
+                    doc |= {
+                        "page_id": target["id"],
+                        "address": address,
+                        "section_slug": target["section_slug"],
+                        "slug": target["slug"],
+                        "source_files": self._source_files(sections),
                     }
+                docs.append(doc)
+                await self._emit_log(
+                    "info", f"Wrote {address or doc_type} ({len(content)} chars)"
                 )
-                await self._emit_log("info", f"Wrote {doc_type} ({len(content)} chars)")
 
             t.outputs(doc_count=len(docs))
             await self._update_step(self.name, "completed", {"doc_count": len(docs)})
@@ -97,8 +132,44 @@ class CompositionWriterAgent(BaseAgent):
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _source_files(sections: list[dict]) -> list[str]:
+        """
+        Every file this page was actually anchored on, deduped in plan order.
+
+        Recorded on the page so S5 can diff a new commit against it and mark exactly
+        the pages that change invalidated — and so a reader can be told, today, which
+        files a claim came from.
+        """
+        files: list[str] = []
+        for section in sections:
+            files.extend(section.get("key_files") or [])
+        return list(dict.fromkeys(files))
+
+    @staticmethod
+    def _neighbours(site_map: dict, address: str) -> str:
+        """
+        What the rest of the site covers, so this page does not cover it again.
+
+        Addresses are included because they are also the link targets: this list is
+        the entire vocabulary of `[[section/page]]` references the writer is allowed
+        to use, and the linker drops anything outside it.
+        """
+        lines: list[str] = []
+        for section in site_map.get("sections") or []:
+            for page in section.get("pages") or []:
+                other = f"{section.get('slug')}/{page.get('slug')}"
+                if other == address:
+                    continue
+                intent = (page.get("intent") or "").strip()
+                lines.append(
+                    f"[[{other}]] {page.get('title')}" + (f" — {intent}" if intent else "")
+                )
+        return "; ".join(lines)
+
     async def _write_doc(
-        self, doc_type, sections, project, strategy, builder, settings
+        self, label, doc_type, sections, project, strategy, builder, settings,
+        neighbours: str = "",
     ) -> str:
         audience, tone = self._voice(strategy, doc_type)
 
@@ -112,11 +183,11 @@ class CompositionWriterAgent(BaseAgent):
             # The exact bundle the model was shown — the single most useful artifact
             # when a section comes out thin or wrong.
             save_input_text_artifact(
-                f"writer.{doc_type}.{section.get('name', 'section')}.context",
+                f"writer.{label}.{section.get('name', 'section')}.context",
                 context.render(),
             )
         save_artifact(
-            f"writer.{doc_type}.context_stats",
+            f"writer.{label}.context_stats",
             [
                 {
                     "section": c.section_name,
@@ -148,7 +219,7 @@ class CompositionWriterAgent(BaseAgent):
                 await check_cancelled()
                 return await self._write_section(
                     sections[index], contexts[index], doc_type, project,
-                    audience, tone, outline, builder,
+                    audience, tone, outline, builder, neighbours,
                 )
 
         results = await asyncio.gather(
@@ -171,17 +242,19 @@ class CompositionWriterAgent(BaseAgent):
                 )
                 continue
             if outcome:
-                save_text_artifact(f"writer.{doc_type}.{name}.section", outcome)
+                save_text_artifact(f"writer.{label}.{name}.section", outcome)
                 parts.append(outcome)
         document = "\n\n".join(parts)
-        save_text_artifact(f"writer.{doc_type}.document", document)
+        save_text_artifact(f"writer.{label}.document", document)
         return document
 
     async def _write_section(
-        self, section, context, doc_type, project, audience, tone, outline, builder
+        self, section, context, doc_type, project, audience, tone, outline, builder,
+        neighbours: str = "",
     ) -> str:
         name = section.get("name", "Section")
-        body = await self._ask(section, context, doc_type, project, audience, tone, outline)
+        ask = (section, context, doc_type, project, audience, tone, outline, neighbours)
+        body = await self._ask(*ask)
 
         # Bounded escape hatch: one extra retrieval when the model says it lacks context.
         need = _NEED_CONTEXT.match(body.strip()) if body else None
@@ -191,9 +264,7 @@ class CompositionWriterAgent(BaseAgent):
             extra = await builder.search(query, limit=6, exclude=context.key_files)
             if extra:
                 context.retrieved_blocks.extend(extra)
-            body = await self._ask(
-                section, context, doc_type, project, audience, tone, outline
-            )
+            body = await self._ask(*ask)
             if _NEED_CONTEXT.match((body or "").strip()):
                 # Only one retry — do not let this become an exploration loop.
                 await self._emit_log("warning", f"Section '{name}' still lacks context")
@@ -204,15 +275,27 @@ class CompositionWriterAgent(BaseAgent):
         body = body.lstrip()
         return body if body.startswith("#") else f"## {name}\n\n{body}"
 
-    async def _ask(self, section, context, doc_type, project, audience, tone, outline) -> str:
+    async def _ask(
+        self, section, context, doc_type, project, audience, tone, outline,
+        neighbours: str = "",
+    ) -> str:
         name = section.get("name", "Section")
         others = [n for n in outline if n and n != name]
-        already = (
-            f"Other sections of this document cover: {', '.join(others)}. "
-            "Do not duplicate them.\n\n"
-            if others
-            else ""
-        )
+        already = ""
+        if others:
+            already += (
+                f"The other sections here cover: {', '.join(others)}. "
+                "Do not duplicate them.\n\n"
+            )
+        if neighbours:
+            # The cross-page rule. A writer that cannot see that `api/auth` exists
+            # will explain authentication again, and nothing downstream can tell
+            # that it did.
+            already += (
+                "Other pages of this documentation site, with the reference to use "
+                f"for each: {neighbours}. They are being written separately — link "
+                "to them, do not restate them.\n\n"
+            )
         messages = SECTION_WRITE.render(
             doc_type=doc_type,
             project_name=project.name,

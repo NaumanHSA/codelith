@@ -5,11 +5,12 @@ import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
 import { useRunningJobs } from '../../running-jobs'
 import { countLabel, humanize, languageShares, relativeTime, shortSha } from '../../lib/format'
-import { confidenceLabel, docTypeMeta, DOC_TYPES, OUTPUT_FORMATS } from '../../lib/docTypes'
-import type { DocType, Job, KnowledgeBase, OutputFormat, Project } from '../../lib/types'
-import { Button, Chip, Eyebrow, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
+import type { Project } from '../../lib/types'
+import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
+import ConfirmDelete from '../../components/ConfirmDelete'
+import { coverage, describeJobScope } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
  * A project has two lives: before analysis and after.
@@ -68,176 +69,54 @@ function SourcePanel({ project }: { project: Project }) {
   )
 }
 
-function ComposePanel({
-  project,
-  kb,
-  onStarted,
-}: {
-  project: Project
-  kb: KnowledgeBase
-  onStarted: (job: Job) => void
-}) {
-  const suggested = kb.suggested_doc_types ?? []
-  const suggestedTypes = suggested.map(s => s.doc_type)
-  const others = Object.keys(DOC_TYPES).filter(t => !suggestedTypes.includes(t)) as DocType[]
-
-  // Pre-select what the analysis is confident about — the picker should
-  // open on a sensible plan, not an empty form.
-  const [picked, setPicked] = useState<DocType[]>(
-    suggested.filter(s => s.confidence >= 0.6).map(s => s.doc_type),
-  )
-  const [formats, setFormats] = useState<OutputFormat[]>(['markdown'])
-  const [review, setReview] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const toggle = (t: DocType) =>
-    setPicked(p => (p.includes(t) ? p.filter(x => x !== t) : [...p, t]))
-
-  const minutes = picked.reduce((s, t) => s + docTypeMeta(t).estMinutes, 0)
-
-  const start = async () => {
-    if (!picked.length || !formats.length) return
-    setBusy(true)
-    setError(null)
-    try {
-      const job = await api.compose(project.id, {
-        doc_types: picked,
-        output_formats: formats,
-        human_review: review,
-        kb_id: kb.knowledge_base.id,
-      })
-      onStarted(job)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not start composition.')
-      setBusy(false)
-    }
-  }
-
-  const card = (t: DocType, confidence?: number, reason?: string) => {
-    const meta = docTypeMeta(t)
-    const on = picked.includes(t)
-    return (
-      <button
-        key={t}
-        onClick={() => toggle(t)}
-        aria-pressed={on}
-        className={`plate plate-lift flex flex-col text-left ${on ? 'plate-hot' : ''}`}
-      >
-        <span className="flex items-center gap-2 border-b border-rule px-2.5 py-1.5">
-          <span
-            className={`block size-[9px] shrink-0 rotate-45 border ${
-              on ? 'border-hot bg-hot' : 'border-ink-dim bg-transparent'
-            }`}
-          />
-          <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-ink">
-            {meta.title}
-          </span>
-          {confidence != null && (
-            <span className="tag shrink-0 text-ink-dim">{confidenceLabel(confidence)}</span>
-          )}
-        </span>
-        <span className="flex-1 px-2.5 py-2">
-          <span className="block font-sans text-[11.5px] leading-relaxed text-ink-mid">
-            {reason || meta.blurb}
-          </span>
-          <span className="mt-1.5 flex flex-wrap gap-1">
-            {meta.contains.map(c => (
-              <span key={c} className="tag border border-rule px-1 py-px text-ink-dim">
-                {c}
-              </span>
-            ))}
-          </span>
-        </span>
-        {confidence != null && (
-          <span className="border-t border-rule px-2.5 py-1.5">
-            <Meter pct={confidence * 100} segments={16} />
-          </span>
-        )}
-      </button>
-    )
-  }
+/**
+ * The bridge to the compose page.
+ *
+ * Deliberately not a picker. What to write next is a decision about the state of
+ * the documentation — which pages are missing, which have gone out of date — and
+ * that needs a screen of its own, not a form stapled to the bottom of a status page.
+ */
+function ComposeCallout({ project }: { project: Project }) {
+  const { data: site } = useAsync(s => api.site(project.id, null, s), [project.id])
+  const c = coverage(site ?? null)
+  const outstanding = c.planned + c.stale + c.failed
+  const planned = c.total - c.orphaned
 
   return (
-    <Panel
-      title="Compose documentation"
-      action={<span className="tag text-ink-dim">{countLabel(picked.length, 'doc')} selected</span>}
-    >
-      <div className="p-3">
-        {error && <ErrorState message={error} compact />}
-
-        {suggested.length > 0 && (
-          <>
-            <Eyebrow>Suggested by the analysis</Eyebrow>
-            <div className="mt-2 mb-4 grid grid-cols-1 gap-2 md:grid-cols-2">
-              {suggested.map(s => card(s.doc_type, s.confidence, s.reason))}
-            </div>
-          </>
-        )}
-
-        {others.length > 0 && (
-          <>
-            <Eyebrow>Also available</Eyebrow>
-            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-              {others.map(t => card(t))}
-            </div>
-          </>
-        )}
-
-        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-rule pt-3 sm:grid-cols-2">
-          <div>
-            <Eyebrow>Output formats</Eyebrow>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {OUTPUT_FORMATS.map(f => (
-                <Chip
-                  key={f.value}
-                  active={formats.includes(f.value)}
-                  title={f.note}
-                  onClick={() =>
-                    setFormats(p =>
-                      p.includes(f.value) ? p.filter(x => x !== f.value) : [...p, f.value],
-                    )
-                  }
-                >
-                  {f.label}
-                </Chip>
-              ))}
-            </div>
-          </div>
-          <div>
-            <Eyebrow>Before publishing</Eyebrow>
-            <label className="mt-1.5 flex cursor-pointer items-start gap-2">
-              <input
-                type="checkbox"
-                checked={review}
-                onChange={e => setReview(e.target.checked)}
-                className="mt-[3px] size-3 accent-[var(--hot)]"
-              />
-              <span className="font-sans text-[11.5px] leading-relaxed text-ink-mid">
-                Pause for human review.{' '}
-                <span className="text-warn">
-                  A paused job cannot be resumed from here yet — it will sit at
-                  awaiting review.
-                </span>
-              </span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <footer className="flex flex-wrap items-center gap-2 border-t border-rule bg-sunk/60 px-3 py-2.5">
-        <span className="tag text-ink-dim">
-          {picked.length ? `about ${minutes} min on a local model` : 'pick at least one document'}
+    <Panel title="Documentation">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-3">
+        <span className="min-w-0 flex-1">
+          <span className="block font-sans text-[12.5px] leading-relaxed text-ink-mid">
+            {!site || !site.sections.length
+              ? 'No pages planned yet. Analysis proposes the sections and pages this codebase warrants.'
+              : outstanding
+                ? `${countLabel(outstanding, 'page')} still to write out of ${planned} planned.`
+                : 'Every planned page is written and current.'}
+          </span>
+          {site && site.sections.length > 0 && (
+            <span className="mt-2 flex items-center gap-2">
+              <Meter pct={c.pct} segments={22} />
+              <span className="tag text-ink-dim">{c.pct}% written</span>
+            </span>
+          )}
         </span>
-        <Button
-          variant="hot"
-          className="ml-auto"
-          disabled={!picked.length || !formats.length || busy}
-          onClick={start}
-        >
-          {busy ? 'starting…' : 'Compose →'}
-        </Button>
-      </footer>
+        <span className="flex gap-2">
+          {site && site.sections.length > 0 && (
+            <Link
+              to={`/app/projects/${project.id}/docs`}
+              className="tag inline-flex items-center border border-rule bg-panel px-3 py-[7px] text-ink-mid transition-colors hover:border-ink hover:text-ink"
+            >
+              Read →
+            </Link>
+          )}
+          <Link
+            to={`/app/projects/${project.id}/compose`}
+            className="tag inline-flex items-center border border-hot bg-hot px-3 py-[7px] text-on-hot transition-colors hover:border-hot-press hover:bg-hot-press"
+          >
+            Compose →
+          </Link>
+        </span>
+      </div>
     </Panel>
   )
 }
@@ -255,6 +134,7 @@ export default function ProjectDetailPage() {
 
   const [analysing, setAnalysing] = useState(false)
   const [analyseError, setAnalyseError] = useState<string | null>(null)
+  const [doomed, setDoomed] = useState(false)
 
   const canRun = can('manager')
 
@@ -311,8 +191,33 @@ export default function ProjectDetailPage() {
                   {analysing ? 'starting…' : 'Analyse repository →'}
                 </Button>
               )}
+              <Button variant="danger" onClick={() => setDoomed(true)} title="Delete this project">
+                Delete
+              </Button>
             </div>
           ) : null
+        }
+      />
+
+      <ConfirmDelete
+        open={doomed}
+        onClose={() => setDoomed(false)}
+        onConfirm={async () => {
+          await api.deleteProject(id)
+          navigate('/app/projects')
+        }}
+        title={`Delete ${p.name}`}
+        actionLabel="Delete everything"
+        confirmText={p.name}
+        body={
+          <>
+            <p>
+              This removes the project and everything derived from it — its knowledge
+              base, every job, every document, and the whole documentation site with
+              its pages and versions.
+            </p>
+            <p className="mt-2">The repository is untouched. Nothing here can be recovered.</p>
+          </>
         }
       />
 
@@ -445,16 +350,7 @@ export default function ProjectDetailPage() {
                 </div>
               )}
 
-              {canRun && base.status !== 'failed' && (
-                <ComposePanel
-                  project={p}
-                  kb={kb.data}
-                  onStarted={job => {
-                    track(job, p.name)
-                    navigate(`/app/projects/${p.id}/jobs/${job.id}`)
-                  }}
-                />
-              )}
+              {base.status !== 'failed' && <ComposeCallout project={p} />}
             </>
           )}
         </div>
@@ -483,7 +379,9 @@ export default function ProjectDetailPage() {
                       <span className="block truncate text-[11.5px] font-semibold text-ink">
                         {humanize(j.job_type)}
                       </span>
-                      <span className="tag block text-ink-dim">{relativeTime(j.created_at)}</span>
+                      <span className="tag block truncate text-ink-dim">
+                        {describeJobScope(j) ?? relativeTime(j.created_at)}
+                      </span>
                     </span>
                     <StatusBadge status={j.status} />
                   </Link>
@@ -504,7 +402,9 @@ export default function ProjectDetailPage() {
               <span className="block text-[22px] leading-none font-bold text-ink">
                 {p.stats?.doc_count ?? 0}
               </span>
-              <span className="tag mt-1 block text-ink-dim">written for this project</span>
+              <span className="tag mt-1 block text-ink-dim">
+                single documents, written before the site
+              </span>
             </div>
           </Panel>
         </div>

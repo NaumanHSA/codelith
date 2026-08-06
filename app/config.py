@@ -65,6 +65,23 @@ class Settings(BaseSettings):
     # what the endpoint sustains — too high and requests queue inside LM Studio.
     ANALYSIS_SUMMARY_CONCURRENCY: int = 6
 
+    # ── Documentation site (the map analysis proposes) ────────────────────────
+    # Ceiling on the site map `site_planner` may propose. Slugs are permanent and
+    # every page is a future generation run, so an over-eager map is expensive in
+    # both directions: 30 pages at one quality call per heading is roughly an hour.
+    # The cap bounds the proposal; SITE_MAX_PAGES_PER_JOB will bound what one
+    # composition job writes.
+    SITE_MAX_PAGES: int = 30
+    SITE_MAX_SECTIONS: int = 8
+    # How many pages one composition job may write. Each page is a planning call
+    # plus a quality-tier call per heading, so a whole 30-page site in one job is
+    # roughly an hour — that has to be a deliberate choice, made a section at a
+    # time, not something a stray request can trigger.
+    SITE_MAX_PAGES_PER_JOB: int = 8
+    # Headings planned within one page. A page is a page because it is readable in
+    # one sitting; more than this and it wanted to be two pages.
+    SITE_MAX_HEADINGS_PER_PAGE: int = 6
+
     # ── Composition (Phase 2: write docs from the knowledge base) ─────────────
     # Token ceiling for one section's retrieved context bundle.
     COMPOSITION_SECTION_TOKEN_BUDGET: int = 6000

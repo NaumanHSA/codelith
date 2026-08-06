@@ -9,6 +9,7 @@ trustworthy enough for the QA stage to check generated prose against.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from app.agents.base import BaseAgent
@@ -73,6 +74,10 @@ class StructuredExtractorAgent(BaseAgent):
 
             await repos.modules.bulk_upsert(kb.id, result.modules)
             await repos.entities.bulk_add(kb.id, entities)
+            # Recorded here because this is the only stage holding file *content*.
+            # Everything downstream sees paths; staleness needs to know what was in
+            # them, so it can say which pages a commit actually invalidated.
+            await repos.bases.update(kb.id, file_hashes_json=self._hashes(files))
             await self.db.commit()
 
             save_artifact("structured_extractor.modules", result.modules)
@@ -92,3 +97,19 @@ class StructuredExtractorAgent(BaseAgent):
                 "commit_sha": commit_sha,
                 "extraction_stats": stats,
             }
+
+    @staticmethod
+    def _hashes(files: list[SourceFile]) -> dict[str, str]:
+        """
+        Content digest per file.
+
+        Truncated to 16 hex characters: this is a change detector, not a security
+        boundary, and a full digest per file triples the size of the column on a
+        large repository for no gain.
+        """
+        return {
+            f.path: hashlib.blake2b(
+                (f.content or "").encode("utf-8", "replace"), digest_size=8
+            ).hexdigest()
+            for f in files
+        }

@@ -52,6 +52,7 @@ class KBPersisterAgent(BaseAgent):
                 "summarised_modules": state.get("summarised_modules", 0),
                 "missing_summaries": missing_summaries,
                 "suggested_doc_types": suggest_doc_types(entity_kinds, roles),
+                "site_pages": state.get("site_pages", 0),
             }
 
             reasons = self._degradation_reasons(state, modules, topics, missing_summaries)
@@ -103,4 +104,6 @@ class KBPersisterAgent(BaseAgent):
             reasons.append(f"{state['narrative_failures']} narratives failed")
         if not state.get("indexed_chunks"):
             reasons.append("no chunks were embedded — semantic retrieval unavailable")
+        if state.get("site_degraded"):
+            reasons.append("site map came from the deterministic fallback")
         return reasons

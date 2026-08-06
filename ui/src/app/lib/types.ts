@@ -97,9 +97,22 @@ export interface JobStep {
 export interface Job {
   id: number
   project_id: number
+  /** Denormalised so a cross-project job list can label a row without a second call. */
+  project_name: string | null
   job_type: JobType
   status: JobStatus
   config_json: Record<string, unknown> | null
+  /**
+   * What the job was asked to do, in the reader's vocabulary. `labels` are
+   * pre-rendered section names, so a job row can be labelled without also
+   * fetching the site. Empty for jobs created before scopes existed.
+   */
+  scope: {
+    kind?: 'pages' | 'documents'
+    sections?: string[]
+    pages?: string[]
+    labels?: string[]
+  } | null
   doc_types: string[] | null
   output_formats: string[] | null
   requires_human_review: boolean
@@ -175,6 +188,102 @@ export interface KnowledgeBase {
   sample_routes: { kind: EntityKind; name: string; detail: string | null }[] | null
   key_dependencies: string[] | null
   entrypoints: string[] | null
+}
+
+/* ------------------------------------------------------------------ *
+ * Documentation site
+ *
+ * One site per project, grown a section at a time. Most pages are
+ * `planned`: in the nav, not yet written — which is the point. The nav
+ * doubles as the roadmap for a project's documentation, so planned
+ * pages are shown greyed with a Generate action rather than hidden.
+ * ------------------------------------------------------------------ */
+
+export type PageStatus = Open<
+  'planned' | 'generating' | 'ready' | 'stale' | 'orphaned' | 'failed'
+>
+
+export interface SitePage {
+  id: number
+  section_slug: string
+  slug: string
+  title: string
+  doc_type: DocType
+  intent: string | null
+  status: PageStatus
+  order_index: number
+  pinned: boolean
+  word_count: number
+  /** Provenance. Null until the page has been written. */
+  job_id: number | null
+  kb_id: number | null
+  commit_sha: string | null
+  /** Files the page was actually written from. */
+  source_files: string[] | null
+  /** Anchor files analysis proposed, before anything was written. */
+  key_files: string[] | null
+  confidence: number | null
+  reason: string | null
+  /** QA's verdict on this page, and the claim checks behind it. */
+  qa_score: number | null
+  qa: {
+    score?: number
+    approved?: boolean
+    issues?: string[]
+    claims_checked?: number
+    claims_passed?: number
+  } | null
+  updated_at: string | null
+}
+
+/** One page with its prose — fetched a page at a time, not with the map. */
+export interface SitePageDetail extends SitePage {
+  content_markdown: string | null
+  /** What the page said before its last rewrite — null if written only once. */
+  previous_markdown: string | null
+  section_title: string | null
+}
+
+export interface SiteVersion {
+  id: number
+  site_id: number
+  label: string
+  notes: string | null
+  commit_sha: string | null
+  page_count: number
+  snapshot_at: string | null
+  created_at: string
+}
+
+export interface SiteSection {
+  slug: string
+  title: string
+  order_index: number
+  pinned: boolean
+  pages: SitePage[]
+}
+
+export interface Site {
+  id: number
+  project_id: number
+  title: string
+  kb_id: number | null
+  sections: SiteSection[]
+  /** No longer proposed by analysis. Never deleted, off the live nav. */
+  orphaned_pages: SitePage[] | null
+  /** PageStatus → count, across every page including orphans. */
+  page_counts: Record<string, number> | null
+  /** The version being read. Null is the live site — the one that gets written. */
+  version: string | null
+  /** Every frozen snapshot, newest first. */
+  versions: SiteVersion[] | null
+  /**
+   * The landing page, derived from the map on every read so it cannot go
+   * stale. Prose only — the index of sections and pages is `sections`
+   * above, rendered by the reader.
+   */
+  home_markdown: string | null
+  updated_at: string | null
 }
 
 export interface Doc {

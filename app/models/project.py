@@ -19,6 +19,8 @@ class Project(Base, TimestampMixin):
     jobs: Mapped[list["Job"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # type: ignore[name-defined]
     documents: Mapped[list["Document"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # type: ignore[name-defined]
     knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(back_populates="project", cascade="all, delete-orphan")  # type: ignore[name-defined]
+    # One documentation site per project, grown a section at a time.
+    doc_site: Mapped["DocSite | None"] = relationship(back_populates="project", cascade="all, delete-orphan", uselist=False)  # type: ignore[name-defined]
 
 
 class ProjectSource(Base, TimestampMixin):

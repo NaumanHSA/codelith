@@ -32,6 +32,7 @@ from app.agents.base import BaseAgent
 from app.config import get_settings
 from app.core.cancellation import JobCancelled
 from app.knowledge.constants import EntityKind
+from app.knowledge.sites import doc_key
 from app.llm.prompts.diagram_prompts import DIAGRAM, DIAGRAM_REPAIR, example_for
 from app.tools.mermaid import clean_mermaid, ungrounded_labels, validate_mermaid
 from app.tools.mermaid_render import render_png, rendering_available
@@ -138,7 +139,11 @@ class DiagramAgent(BaseAgent):
 
             project = state["project"]
             architecture_map: dict = state.get("architecture_map") or {}
-            generated_docs: list[dict] = state.get("generated_docs") or []
+            # Linked copy when the linker ran: a diagram excerpt should show the
+            # page as it will be read, not with unresolved [[refs]] in it.
+            generated_docs: list[dict] = (
+                state.get("linked_docs") or state.get("generated_docs") or []
+            )
             sandbox = state.get("sandbox")
 
             vocabulary = await self._vocabulary(state, architecture_map)
@@ -149,7 +154,9 @@ class DiagramAgent(BaseAgent):
                 specs = self._specs_for(doc_type, vocabulary)
                 if not specs:
                     await self._emit_log(
-                        "info", f"No diagram warranted for {doc_type} — evidence too thin"
+                        "info",
+                        f"No diagram warranted for {doc_key(doc) or doc_type} — "
+                        "evidence too thin",
                     )
                     continue
                 for spec in specs:
@@ -160,7 +167,7 @@ class DiagramAgent(BaseAgent):
             self._persist(diagrams, sandbox)
 
             for d in diagrams:
-                save_text_artifact(f"diagram.{d['doc_type']}.{d['name']}", d["content"], ext="mmd")
+                save_text_artifact(f"diagram.{d['doc_key']}.{d['name']}", d["content"], ext="mmd")
 
             t.outputs(
                 diagrams=len(diagrams),
@@ -276,6 +283,7 @@ class DiagramAgent(BaseAgent):
                 "name": spec.name,
                 "diagram_type": spec.mermaid_type.split()[0],
                 "doc_type": doc.get("doc_type") or "architecture",
+                "doc_key": doc_key(doc) or "architecture",
                 "content": content,
                 "png_base64": None,
             }
@@ -304,6 +312,7 @@ class DiagramAgent(BaseAgent):
             "name": spec.name,
             "diagram_type": spec.mermaid_type.split()[0],
             "doc_type": doc.get("doc_type") or "architecture",
+            "doc_key": doc_key(doc) or "architecture",
             "content": content,
             "png_base64": base64.b64encode(png).decode("ascii"),
         }
@@ -397,7 +406,7 @@ class DiagramAgent(BaseAgent):
             diagrams_dir = sandbox.outputs / "diagrams"
             diagrams_dir.mkdir(parents=True, exist_ok=True)
             for d in diagrams:
-                safe = f"{d['doc_type']}_{d['name']}".lower().replace(" ", "_").replace("/", "-")
+                safe = f"{d['doc_key']}_{d['name']}".lower().replace(" ", "_").replace("/", "-")
                 (diagrams_dir / f"{safe}.mmd").write_text(d["content"], encoding="utf-8")
                 if d.get("png_base64"):
                     (diagrams_dir / f"{safe}.png").write_bytes(

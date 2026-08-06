@@ -34,6 +34,39 @@ SECTION_PLAN = PromptTemplate(
     ),
 )
 
+PAGE_PLAN = PromptTemplate(
+    system=(
+        "You are planning the headings of ONE page of a documentation site. The page "
+        "already exists in the site's navigation, and what it is for has already been "
+        "decided — your job is only to break it into the headings a reader should "
+        "meet, in order.\n\n"
+        "Respond ONLY with valid JSON — no markdown fences, no prose:\n"
+        '{"sections":[{"name":str,"focus":str,"key_files":[str]}]}\n\n'
+        "Rules:\n"
+        "  - 2 to $max_headings headings. A page is a page because it can be read in "
+        "one sitting; if it needs more, plan fewer and go deeper.\n"
+        "  - Stay inside this page's stated purpose. The other pages of this site are "
+        "listed below and are being written separately — anything that belongs to one "
+        "of them is not yours to cover.\n"
+        "  - `focus` is one sentence saying what the heading must explain.\n"
+        "  - `key_files` MUST be paths copied exactly from the anchor files or the "
+        "module inventory below. Never invent a path; an empty list beats a guess.\n"
+        "  - Do not plan a heading the evidence cannot support, and do not plan an "
+        "introduction or a conclusion — write the substance."
+    ),
+    user=(
+        "Project: $project_name\n"
+        "Page: $page_title   (section: $section_title, type: $doc_type)\n"
+        "This page must cover: $intent\n"
+        "Audience: $audience\n\n"
+        "Anchor files chosen when this page was planned:\n$key_files\n\n"
+        "The rest of this documentation site — do not cover these:\n$site_map\n\n"
+        "What we already know about this system:\n$overview\n\n"
+        "Module inventory (path — role — summary):\n$module_inventory\n\n"
+        "Known facts:\n$facts"
+    ),
+)
+
 COMPOSITION_STRATEGY = PromptTemplate(
     system=(
         "You are a documentation strategist. Decide how the requested documents should "
@@ -69,7 +102,15 @@ SECTION_WRITE = PromptTemplate(
         "  - Use fenced code blocks for examples, drawn from the source shown.\n"
         "  - Audience: $audience. Tone: $tone.\n"
         "  - Prefer being short and correct over long and padded.\n"
-        "  - Do not repeat content from sections already written.\n\n"
+        "  - Do not repeat content from sections already written.\n"
+        "  - To point at another page of this documentation site, write "
+        "`[[section-slug/page-slug]]`, or `[[section-slug/page-slug|link text]]` to "
+        "choose the wording. Never write a relative path or a URL for one: those "
+        "pages may not exist yet, and their addresses are resolved for you "
+        "afterwards. A reference to a page not listed below is dropped.\n"
+        "  - The `[[ ]]` syntax is ONLY for those pages. To mention a source file, "
+        "write its path in backticks like `app/config.py` — it is not a page and "
+        "wrapping it in `[[ ]]` just loses you the formatting.\n\n"
         "If — and only if — the context genuinely does not contain what this section "
         "needs, reply with exactly one line and nothing else:\n"
         "NEED_CONTEXT: <a specific search query>\n"
@@ -78,9 +119,11 @@ SECTION_WRITE = PromptTemplate(
     user=(
         "Section: $section_name\n"
         "This section must explain: $focus\n\n"
-        "$already_written"
+        # Braced: bare `$already_written` abuts `Context` and parses as one
+        # identifier, which no caller supplies — the instruction never rendered.
+        "${already_written}"
         "Context:\n$context"
     ),
 )
 
-__all__ = ["SECTION_PLAN", "COMPOSITION_STRATEGY", "SECTION_WRITE"]
+__all__ = ["SECTION_PLAN", "PAGE_PLAN", "COMPOSITION_STRATEGY", "SECTION_WRITE"]

@@ -107,10 +107,43 @@ class ModuleRole(StrEnum):
     UNKNOWN = "unknown"
 
 
+class PageStatus(StrEnum):
+    """
+    Lifecycle of one page of a documentation site.
+
+    A site is grown a section at a time, so most pages spend most of their life
+    `planned`: known to the map, listed in the nav, not yet written. Nothing here
+    ever deletes — a page that analysis stops proposing becomes `orphaned` rather
+    than vanishing, because its slug is a URL somebody may have bookmarked.
+    """
+
+    #: In the map, not yet written. The nav shows it greyed with a Generate action.
+    PLANNED = "planned"
+    GENERATING = "generating"
+    READY = "ready"
+    #: Written, but the code it was written from has moved on.
+    STALE = "stale"
+    #: No longer proposed by analysis. Kept, and readable, but off the live nav.
+    ORPHANED = "orphaned"
+    FAILED = "failed"
+
+    @property
+    def has_content(self) -> bool:
+        """Whether a reader can open this page and find prose."""
+        return self in (PageStatus.READY, PageStatus.STALE, PageStatus.ORPHANED)
+
+
 #: Job kinds — analysis builds the KB, composition consumes it.
 class JobType(StrEnum):
     ANALYSIS = "analysis"
     COMPOSITION = "composition"
 
 
-__all__ = ["KBStatus", "EntityKind", "NarrativeTopic", "ModuleRole", "JobType"]
+__all__ = [
+    "KBStatus",
+    "EntityKind",
+    "NarrativeTopic",
+    "ModuleRole",
+    "PageStatus",
+    "JobType",
+]

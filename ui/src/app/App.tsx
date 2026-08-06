@@ -16,10 +16,13 @@ import ProjectsPage from './pages/app/ProjectsPage'
 import ProjectDetailPage from './pages/app/ProjectDetailPage'
 import JobProgressPage from './pages/app/JobProgressPage'
 import DocumentsPage from './pages/app/DocumentsPage'
+import JobsPage from './pages/app/JobsPage'
+import ComposePage from './pages/app/ComposePage'
 import SettingsPage from './pages/app/SettingsPage'
 
-// The Markdown stack is ~350 kB. Load it only when a document is opened.
+// The Markdown stack is ~350 kB. Load it only when something is read.
 const DocumentReaderPage = lazy(() => import('./pages/app/DocumentReaderPage'))
+const DocsSitePage = lazy(() => import('./pages/app/DocsSitePage'))
 
 function BootScreen() {
   return (
@@ -85,7 +88,28 @@ export default function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+                <Route path="projects/:projectId/compose" element={<ComposePage />} />
                 <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
+                <Route path="jobs" element={<JobsPage />} />
+                {/*
+                  The documentation site. Section and page are optional: no
+                  section shows the coverage view, which is the whole map at a
+                  glance rather than a 404.
+                */}
+                <Route
+                  path="projects/:projectId/docs/:sectionSlug?/:pageSlug?"
+                  element={
+                    <Suspense
+                      fallback={
+                        <div className="mx-auto max-w-[1100px] p-5">
+                          <SkeletonPanel rows={8} />
+                        </div>
+                      }
+                    >
+                      <DocsSitePage />
+                    </Suspense>
+                  }
+                />
                 <Route path="documents" element={<DocumentsPage />} />
                 <Route
                   path="documents/:documentId"

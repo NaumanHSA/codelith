@@ -8,7 +8,8 @@
 
 import type {
   Doc, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
-  Project, ProjectSource, Tokens, User, DocType, OutputFormat, SourceType,
+  Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
+  DocType, OutputFormat, SourceType,
 } from './types'
 
 export const API_BASE =
@@ -248,16 +249,87 @@ export const api = {
   compose: (
     id: number,
     body: {
-      doc_types: DocType[]
+      doc_types?: DocType[]
+      /**
+       * Page addresses (`api/endpoints`) or whole sections (`api`) to write
+       * into the project's documentation site. Present means page mode;
+       * absent falls back to the one-document-per-type path.
+       *
+       * A section writes only its unwritten, evidence-backed pages; naming a
+       * page outright always writes it, which is how you regenerate one.
+       * An unknown address or an over-budget scope comes back 422.
+       */
+      page_slugs?: string[]
       output_formats: OutputFormat[]
       human_review: boolean
       kb_id?: number | null
     },
-  ) => request<Job>(`/projects/${id}/compose`, { method: 'POST', body: { kb_id: null, ...body } }),
+  ) =>
+    request<Job>(`/projects/${id}/compose`, {
+      method: 'POST',
+      body: { kb_id: null, doc_types: [], page_slugs: [], ...body },
+    }),
+
+  /* --- documentation site --- */
+  /** Resolves to null when the project has never been analysed. */
+  /** Omit `version` for the live site; pass a label to read a frozen snapshot. */
+  site: (id: number, version?: string | null, signal?: AbortSignal) =>
+    request<Site | null>(`/projects/${id}/site${version ? `?version=${encodeURIComponent(version)}` : ''}`, { signal }),
+
+  /** One page with its prose. Planned pages resolve too, with null content. */
+  sitePage: (
+    id: number, section: string, slug: string,
+    version?: string | null, signal?: AbortSignal,
+  ) =>
+    request<SitePageDetail>(
+      `/projects/${id}/site/pages/${encodeURIComponent(section)}/${encodeURIComponent(slug)}` +
+        (version ? `?version=${encodeURIComponent(version)}` : ''),
+      { signal },
+    ),
+
+  createSiteVersion: (id: number, body: { label: string; notes?: string | null }) =>
+    request<SiteVersion>(`/projects/${id}/site/versions`, { method: 'POST', body }),
+
+  /**
+   * Download the site as an archive.
+   *
+   * Fetched rather than navigated to, so the JWT stays in the header where it
+   * belongs — a navigation cannot set one, and a token in a URL ends up in
+   * history and server logs. The blob is saved client-side.
+   */
+  exportSite: async (id: number, format: string, version?: string | null) => {
+    const query = `format=${encodeURIComponent(format)}` +
+      (version ? `&version=${encodeURIComponent(version)}` : '')
+    const res = await fetch(`${ROOT}/projects/${id}/site/export?${query}`, {
+      headers: tokenStore.access ? { Authorization: `Bearer ${tokenStore.access}` } : {},
+    })
+    if (!res.ok) {
+      let parsed: unknown = null
+      try {
+        parsed = await res.json()
+      } catch {
+        parsed = null
+      }
+      throw new ApiError(res.status, readError(parsed, res.status))
+    }
+    const disposition = res.headers.get('content-disposition') ?? ''
+    const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `site-${format}.zip`
+    return { blob: await res.blob(), filename: name }
+  },
 
   /* --- jobs --- */
   projectJobs: (id: number, limit = 50, offset = 0) =>
     request<Job[]>(`/projects/${id}/jobs?limit=${limit}&offset=${offset}`),
+
+  /** Every job across the org's projects, newest first. */
+  jobs: (limit = 50, offset = 0, status?: string | null, signal?: AbortSignal) =>
+    request<Job[]>(
+      `/jobs?limit=${limit}&offset=${offset}${status ? `&status=${status}` : ''}`,
+      { signal },
+    ),
+
+  /** Cancels first when the job is live — deleting a row does not stop a worker. */
+  deleteJob: (id: number) => request<void>(`/jobs/${id}`, { method: 'DELETE' }),
 
   job: (id: number, signal?: AbortSignal) => request<Job>(`/jobs/${id}`, { signal }),
 
