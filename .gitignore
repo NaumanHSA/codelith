@@ -49,6 +49,10 @@ Thumbs.db
 # per-job sandbox: traces, outputs, copied source repos
 /runs/
 
+# Node tooling the backend shells out to (mermaid-cli). Restored by `npm install`
+# in the repo root — never committed. The ui/ package has its own rule.
+node_modules/
+
 # Docker
 .docker/
 
