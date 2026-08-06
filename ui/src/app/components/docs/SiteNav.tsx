@@ -45,8 +45,11 @@ export default function SiteNav({
   if (!section) return null
 
   return (
-    <nav className="flex flex-col">
-      <div className="flex items-center gap-2 px-3 py-2">
+    // Bordered like the document container it now sits beside, rather than
+    // bleeding into the shell's rail. These are the site's files; against the
+    // reading column they should read as a peer of it, not as chrome.
+    <nav className="flex flex-col border border-rule bg-panel">
+      <div className="flex items-center gap-2 border-b border-rule px-3 py-2">
         <span className="tag truncate text-ink-dim">{section.title}</span>
         <span className="h-px flex-1 bg-rule" />
         <span className="tag shrink-0 text-ink-dim">{section.pages.length}</span>
@@ -55,7 +58,11 @@ export default function SiteNav({
       {section.pages.map(page => {
         const active = page.slug === activeSlug
         const pending = isPending(page.status)
-        const busy = generating === `${page.section_slug}/${page.slug}`
+        // The server's view first, the local one only as the optimistic gap
+        // between pressing write and the map catching up. A page claimed by
+        // someone else's run has to look busy here too.
+        const busy =
+          page.status === 'generating' || generating === `${page.section_slug}/${page.slug}`
         return (
           <div
             key={page.id}
@@ -67,11 +74,11 @@ export default function SiteNav({
             <button
               onClick={() => onOpen(page)}
               title={page.intent ?? page.title}
-              className="flex min-w-0 flex-1 items-center gap-2 py-[6px] pl-3 text-left"
+              className="flex min-w-0 flex-1 items-center gap-2 py-[9px] pl-3 text-left"
             >
               <PageMark status={busy ? 'generating' : page.status} />
               <span
-                className={`min-w-0 flex-1 truncate text-[11.5px] ${
+                className={`min-w-0 flex-1 truncate text-[12.5px] ${
                   active
                     ? 'font-semibold text-hot-ink'
                     : pending

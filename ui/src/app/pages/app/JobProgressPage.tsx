@@ -10,7 +10,7 @@ import {
 import { confidenceLabel, docTypeTitle } from '../../lib/docTypes'
 import { progressStages, stagePurpose } from '../../lib/narrate'
 import { describeJobScope } from '../../lib/site'
-import { isTerminal, type Doc, type JobLog, type KnowledgeBase } from '../../lib/types'
+import { isTerminal, type Doc, type Job, type JobLog, type KnowledgeBase } from '../../lib/types'
 import { Button, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { ErrorState, SkeletonPanel } from '../../components/States'
 import PipelineTree from '../../components/jobs/PipelineTree'
@@ -212,6 +212,8 @@ export default function JobProgressPage() {
 
       {actionError && <ErrorState message={actionError} compact />}
 
+      <JobTargets job={job} projectId={pid} />
+
       {/* progress strip */}
       <div className="mb-3 border border-rule bg-panel">
         <div className="flex items-center gap-3 px-3 py-2">
@@ -325,6 +327,38 @@ export default function JobProgressPage() {
           {error && <p className="tag mt-2 text-[var(--warn)]">{error} · retrying</p>}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * What this run is actually writing.
+ *
+ * "Architecture · 4 pages" tells you the shape of the run but not its
+ * subject, and every composition looks alike in a list. The addresses
+ * are already on the job — `scope.pages` — and each one is a link to
+ * the page it will become, so a run is one click from its output
+ * whether or not it has finished.
+ * ------------------------------------------------------------------ */
+function JobTargets({ job, projectId }: { job: Job; projectId: number }) {
+  const pages = job.scope?.pages ?? []
+  if (!pages.length) return null
+
+  return (
+    <div className="mb-3 border border-rule bg-panel px-3 py-2">
+      <span className="tag text-ink-dim">writing</span>
+      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {pages.map(addr => (
+          <li key={addr}>
+            <Link
+              to={`/app/projects/${projectId}/docs/${addr}`}
+              className="font-mono text-[11px] text-ink-mid transition-colors hover:text-hot-ink"
+            >
+              {addr}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

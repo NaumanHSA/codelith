@@ -14,6 +14,7 @@ import { Button, Chip, Meter } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Coverage from '../../components/docs/Coverage'
 import PageDiff from '../../components/docs/PageDiff'
+import PageProgress from '../../components/docs/PageProgress'
 import PageProvenance from '../../components/docs/PageProvenance'
 import SiteNav from '../../components/docs/SiteNav'
 import SiteToolbar from '../../components/docs/SiteToolbar'
@@ -74,7 +75,7 @@ export default function DocsSitePage() {
   // Fetched separately from the map: a thirty-page site's markdown is
   // megabytes and the nav re-renders on every navigation.
   const address = current?.address
-  const { data: page, loading: pageLoading } = useAsync(
+  const { data: page, loading: pageLoading, reload: reloadPage } = useAsync(
     s =>
       address
         ? api.sitePage(id, address.split('/')[0], address.split('/')[1], version, s)
@@ -97,6 +98,17 @@ export default function DocsSitePage() {
     const t = setInterval(() => reloadRef.current(), REFRESH_MS)
     return () => clearInterval(t)
   }, [busy])
+
+  // The open page finished being written: pull both the map (its status and
+  // word count changed) and the page itself (it now has prose). Sitting on a
+  // page waiting for it is the common case, and having to reload by hand is
+  // the thing that made it feel broken.
+  const reloadPageRef = useRef(reloadPage)
+  reloadPageRef.current = reloadPage
+  const pageFinished = () => {
+    reloadRef.current()
+    reloadPageRef.current()
+  }
 
   // Scrolled content should not persist across a navigation.
   const scroller = useRef<HTMLDivElement>(null)
@@ -314,75 +326,83 @@ export default function DocsSitePage() {
           />
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[210px_1fr]">
-          {/* ── left: pages in this section ─────────────────────────── */}
-          <aside className="border-b border-rule lg:sticky lg:top-[86px] lg:h-fit lg:self-start lg:border-r lg:border-b-0">
-            <SiteNav
-              section={activeSection}
-              activeSlug={pageSlug}
-              onOpen={p => open(p.section_slug, p)}
-              onGenerate={generatePage}
-              generating={generating}
-              canGenerate={canGenerate}
-            />
-          </aside>
+        /*
+          One centred column with the page list and the heading list either
+          side of it. They are the same kind of thing — where you are in the
+          section, where you are in the page — so they are laid out as a pair
+          and sit against the document rather than against the shell.
 
-          {/* ── centre + right ──────────────────────────────────────── */}
-          <div ref={scroller} className="min-w-0 p-5">
-            <div className="mx-auto grid max-w-[1000px] grid-cols-1 gap-6 xl:grid-cols-[1fr_190px]">
-              <div className="min-w-0">
-                {!current ? (
-                  <EmptyState
-                    title="Nothing planned here yet"
-                    body="This section has no pages. Re-run analysis to propose some."
-                  />
-                ) : pageLoading ? (
-                  <SkeletonPanel rows={10} />
-                ) : (
-                  <PageBody
-                    flat={current}
-                    page={page ?? null}
-                    onGenerate={() => generatePage(current.page)}
-                    generating={generating === current.address}
-                    canGenerate={canGenerate}
-                  />
-                )}
+          Below `lg` both collapse above the prose in reading order: which
+          page, then the page. The ToC only earns its column at `xl`; at `lg`
+          the reading measure matters more.
+        */
+        <div ref={scroller} className="min-w-0 flex-1 p-5">
+          <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_200px]">
+            <aside className="lg:sticky lg:top-[86px] lg:h-fit lg:self-start">
+              <SiteNav
+                section={activeSection}
+                activeSlug={pageSlug}
+                onOpen={p => open(p.section_slug, p)}
+                onGenerate={generatePage}
+                generating={generating}
+                canGenerate={canGenerate}
+              />
+            </aside>
 
-                {/* ── prev / next ────────────────────────────────── */}
-                {(prev || next) && (
-                  <div className="mt-6 grid grid-cols-2 gap-px border border-rule bg-rule">
-                    {prev ? (
-                      <button
-                        onClick={() => open(prev.section.slug, prev.page)}
-                        className="bg-panel px-3 py-2.5 text-left transition-colors hover:bg-sunk"
-                      >
-                        <span className="tag block text-ink-dim">← {prev.section.title}</span>
-                        <span className="mt-0.5 block truncate text-[12px] text-ink">
-                          {prev.page.title}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="bg-panel" />
-                    )}
-                    {next ? (
-                      <button
-                        onClick={() => open(next.section.slug, next.page)}
-                        className="bg-panel px-3 py-2.5 text-right transition-colors hover:bg-sunk"
-                      >
-                        <span className="tag block text-ink-dim">{next.section.title} →</span>
-                        <span className="mt-0.5 block truncate text-[12px] text-ink">
-                          {next.page.title}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="bg-panel" />
-                    )}
-                  </div>
-                )}
-              </div>
+            <div className="min-w-0">
+              {!current ? (
+                <EmptyState
+                  title="Nothing planned here yet"
+                  body="This section has no pages. Re-run analysis to propose some."
+                />
+              ) : pageLoading ? (
+                <SkeletonPanel rows={10} />
+              ) : (
+                <PageBody
+                  flat={current}
+                  page={page ?? null}
+                  projectId={id}
+                  onGenerate={() => generatePage(current.page)}
+                  generating={generating === current.address}
+                  canGenerate={canGenerate}
+                  onFinished={pageFinished}
+                />
+              )}
 
-              <Toc headings={headings} />
+              {/* ── prev / next ────────────────────────────────── */}
+              {(prev || next) && (
+                <div className="mt-6 grid grid-cols-2 gap-px border border-rule bg-rule">
+                  {prev ? (
+                    <button
+                      onClick={() => open(prev.section.slug, prev.page)}
+                      className="bg-panel px-3 py-2.5 text-left transition-colors hover:bg-sunk"
+                    >
+                      <span className="tag block text-ink-dim">← {prev.section.title}</span>
+                      <span className="mt-0.5 block truncate text-[12px] text-ink">
+                        {prev.page.title}
+                      </span>
+                    </button>
+                  ) : (
+                    <span className="bg-panel" />
+                  )}
+                  {next ? (
+                    <button
+                      onClick={() => open(next.section.slug, next.page)}
+                      className="bg-panel px-3 py-2.5 text-right transition-colors hover:bg-sunk"
+                    >
+                      <span className="tag block text-ink-dim">{next.section.title} →</span>
+                      <span className="mt-0.5 block truncate text-[12px] text-ink">
+                        {next.page.title}
+                      </span>
+                    </button>
+                  ) : (
+                    <span className="bg-panel" />
+                  )}
+                </div>
+              )}
             </div>
+
+            <Toc headings={headings} />
           </div>
         </div>
       )}
@@ -423,19 +443,24 @@ function SectionTab({
  * ------------------------------------------------------------------ */
 
 function PageBody({
-  flat, page: detail, onGenerate, generating, canGenerate,
+  flat, page: detail, projectId, onGenerate, generating, canGenerate, onFinished,
 }: {
   flat: FlatPage
   page: SitePageDetail | null
+  projectId: number
   onGenerate: () => void
   generating: boolean
   canGenerate: boolean
+  onFinished: () => void
 }) {
   const { page, section } = flat
   const pending = isPending(page.status)
   const markdown = detail?.content_markdown ?? null
   const previous = detail?.previous_markdown ?? null
   const [showDiff, setShowDiff] = useState(false)
+  // Server-derived, so it is true however you arrived at this page — including
+  // in a second tab, or after a reload that lost whatever button you pressed.
+  const inFlight = page.status === 'generating'
 
   return (
     <>
@@ -462,6 +487,16 @@ function PageBody({
         {page.intent && <p className="mt-1.5 text-[12px] text-ink-mid">{page.intent}</p>}
       </div>
 
+      {inFlight && (
+        <PageProgress
+          projectId={projectId}
+          page={page}
+          onFinished={onFinished}
+          onRetry={onGenerate}
+          canGenerate={canGenerate}
+        />
+      )}
+
       {/* Staleness is per page, so the offer is precise: refresh *this* one. */}
       {page.status === 'stale' && (
         <div className="mb-4 flex flex-wrap items-center gap-2 border border-warn/40 bg-warn-wash px-3 py-2">
@@ -487,11 +522,13 @@ function PageBody({
         </article>
       ) : (
         <section className="plate p-5">
+          {/* `generating` is not listed: PageProgress above already says so, in
+              far more detail than a three-word tag could. */}
           <span className="tag text-ink-dim">
-            {page.status === 'generating'
-              ? 'being written now'
-              : page.status === 'failed'
-                ? 'this page could not be written'
+            {page.status === 'failed'
+              ? 'this page could not be written'
+              : inFlight
+                ? 'what it will say'
                 : 'not written yet'}
           </span>
           <p className="mt-2 max-w-[60ch] text-[12px] leading-relaxed text-ink-mid">
@@ -513,7 +550,7 @@ function PageBody({
             </div>
           )}
 
-          {pending && canGenerate && (
+          {pending && canGenerate && !inFlight && (
             <div className="mt-5">
               <Button variant="hot" onClick={onGenerate} disabled={generating}>
                 {generating ? 'writing…' : 'Write this page'}
