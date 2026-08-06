@@ -19,6 +19,11 @@ A separate UX overhaul (U1–U7) ran after Phase D and is complete — see
 [UX_PLAN.md](UX_PLAN.md) / [UX_PROGRESS.md](UX_PROGRESS.md). It also landed real
 cancellation, which is a backend change this tracker did not plan for.
 
+Two further bodies of work have landed since, tracked in their own documents rather than
+here: **S1–S6** (documentation sites, complete — [SITE_PLAN.md](SITE_PLAN.md)) and
+**C1** (the post-fix composition baseline — [COMPOSITION_PLAN.md](COMPOSITION_PLAN.md),
+where C2–C5 remain open). E2–E4 below are still the oldest open items in the repo.
+
 ## Phase A — Data model and persistence ✅
 
 Completed 2026-08-04. 48 tests pass (20 new unit, 21 new integration); ruff clean.

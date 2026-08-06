@@ -17,14 +17,14 @@ LangGraph workflows, produces structured documentation in Markdown/DOCX/MkDocs/D
 
 ## Stack
 
-- **API**: FastAPI + Python 3.12 (async throughout)
+- **API**: FastAPI + Python 3.11+ (async throughout)
 - **DB**: PostgreSQL via SQLAlchemy 2.0 async + Alembic migrations
 - **Cache / Queue broker**: Redis
 - **Vector search**: pgvector extension inside PostgreSQL — `code_chunks` table with HNSW index (no extra service)
 - **Graph DB**: Neo4j (code entity relationships)
 - **Task queue**: Celery (background ingestion + generation jobs)
 - **Agent workflow**: LangGraph StateGraph
-- **LLM**: `openai.AsyncOpenAI` pointed at LM Studio (`http://localhost:1234/v1`) — swap `LLM_BASE_URL` to use any OpenAI-compatible endpoint
+- **LLM**: `openai.AsyncOpenAI`, with **one provider per tier** — `LLM_QUALITY_PROVIDER` and `LLM_FAST_PROVIDER` are each `local` or `openai`, resolved to a concrete endpoint by `app/llm/providers.py`. Embeddings have their own provider and never follow the tiers
 - **Storage**: MinIO (S3-compatible) via boto3
 - **Logging**: structlog (JSON in prod, colored in dev)
 - **UI**: React 19 + Vite 8 + Tailwind 4, in `ui/` (same repo — there is no separate UI repository). **Needs Node ≥ 20.19**; the studio is a pnpm project
@@ -47,7 +47,10 @@ cd ui && pnpm install && pnpm dev      # studio on :5173 — needs Node >= 20.19
 - Every agent inherits from `app.agents.base.BaseAgent` and implements `async def run(state) -> state`
 - LangGraph workflow state is a `TypedDict` — `analysis_states.py`, `composition_states.py`, `states.py` (legacy)
 - All config is `pydantic-settings` in `app/config.py` — no hardcoded values anywhere
-- LLM calls go through `app.llm.client.get_llm_client()` — never instantiate `openai.AsyncOpenAI` directly
+- LLM calls go through `app.llm.client` — never instantiate `openai.AsyncOpenAI` directly.
+  Resolve the endpoint with `app.llm.router.select_spec(task_type)` and pass the
+  resulting `ModelSpec`; a bare model name is not enough to place a call now that the
+  two tiers can sit on different providers
 - **No language-specific code outside `app/languages/`.** Python's `ast`, file extensions,
   framework idioms — all of it lives behind `LanguageProvider`. Agents and the KB speak
   the neutral vocabulary in `app/languages/taxonomy.py` and `app/knowledge/constants.py`.

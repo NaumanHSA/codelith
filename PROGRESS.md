@@ -218,16 +218,150 @@ to re-enable. A better strategy for diagrams is still worth designing.
 
 ---
 
-## Next: documentation sites
+## Phase 6 — Documentation sites ✅
 
-The output model changes from *a document per job* to **one living documentation site
+The output model changed from *a document per job* to **one living documentation site
 per project**, grown a section at a time — top-level sections, real `.md` pages beneath
 them, headings inside each page. The site map is decided during analysis, so a section
 generated months later slots into a navigation that already expected it.
 
-Full phased plan in [.dev/SITE_PLAN.md](.dev/SITE_PLAN.md). Decisions taken: our own UI
-and theme (MkDocs and Docusaurus stay export targets), the map is analysis-driven, and
-it is built in stages with the current single-document path working throughout.
+Phases S1–S6 all landed; full record in [.dev/SITE_PLAN.md](.dev/SITE_PLAN.md).
+Decisions taken: our own UI and theme (MkDocs and Docusaurus stay export targets), the
+map is analysis-driven, and it was built in stages with the single-document path working
+throughout.
+
+- **S1** — schema and site map: `doc_sites`, `doc_pages`, `site_planner` during analysis
+- **S2** — page-based generation; `page_slugs` scope on `POST /{id}/compose`
+- **S3** — the site UI: reader, nav, per-page status, generate-from-nav
+- **S4** — incremental growth: `SiteService.merge_proposal`, dirty-checked, never deletes
+- **S5** — staleness and provenance, per-page QA
+- **S6** — export tree, static HTML, and frozen versions (`version_id IS NULL` is live)
+
+Three things that bite, kept from [.dev/HANDOFF.md](.dev/HANDOFF.md): `version_id IS NULL`
+is the live site and uniqueness is two *partial* indexes; slugs are permanent and a
+dropped page becomes `orphaned`, never deleted; `anchor_id` in `app/knowledge/sites.py`
+and `anchorId` in `ui/src/app/lib/site.ts` must produce identical strings.
+
+---
+
+## Phase 7 — Windows support, and the C1 baseline ✅
+
+### The worker never ran a task on Windows
+
+Three defects, each invisible on POSIX and none catchable by the test suite. They are
+recorded together because the first masked the second and the second masked the third.
+
+- **Celery's prefork pool needs `fork()`.** Windows spawns instead, and the child never
+  inherits the module globals `celery.app.trace.fast_trace_task` reads — every task died
+  on pickup with `not enough values to unpack (expected 3, got 0)` while the worker
+  printed its queues, its task list and `ready`. A booting worker and a working one look
+  identical. `app/workers/celery_app.py` now sets `worker_pool = "solo"` on win32, as
+  config rather than a CLI flag so it reaches `dev.sh`, `make worker` and a bare
+  `celery … worker` alike
+- **`asyncio.get_event_loop()` in all five task entrypoints** worked only by accident of
+  prefork's implicit main-thread loop. `asyncio.run()` is not the fix: the SQLAlchemy
+  engine pool and the `@lru_cache`d `AsyncOpenAI` httpx pool are bound to the loop that
+  created them, so a fresh loop per task breaks the *second* task somewhere far from the
+  cause. New `app/workers/runner.py` keeps one loop per thread — the lifetime prefork
+  used to provide, made explicit
+- **Every stored path used `\` separators**, which silently defeated `registry.should_skip`:
+  `PurePosixPath("node_modules\\x.py")` has one part, so no vendored directory was ever
+  skipped and `node_modules` / `.venv` would have been parsed, embedded and stored. Paths
+  are normalised with `.as_posix()` at all seven sites, and `should_skip` splits both
+  separators as a backstop. This was the one the two failing unit tests were pointing at
+
+**Why `solo` and not `threads`:** the two loop-bound singletons above would then be shared
+across four worker loops, and making them thread-local is a real refactor that buys
+nothing — one LM Studio instance serves requests serially. Concurrency *within* a job is
+untouched; the `asyncio.gather` over modules still runs 6-wide.
+
+Also: Python floor lowered `>=3.12` → `>=3.11` (plus `ruff` target and `mypy` version) to
+match the conda env in use; nothing in `app/` uses 3.12-only syntax. And
+`scripts/test_embedding.py` had its own `.env` parser that did not strip inline comments,
+so it reported a false `[FAIL]` against a perfectly good endpoint.
+
+### C1 — the post-fix composition baseline
+
+Measured on **job #4**, `architecture` composed as one section job (4 pages, 570s).
+Full results and the re-scoping of C4/C5 in
+[.dev/COMPOSITION_PLAN.md](.dev/COMPOSITION_PLAN.md). The three findings that change what
+gets built next:
+
+- **The `$already_written` fix works and did not solve the problem.** 64 `[[ ]]` refs
+  emitted with real cross-page links on every page — those addresses exist nowhere but
+  the neighbour list, so it reached the model. `overview-2` still restates its neighbours,
+  in four broad headings instead of five narrow ones. **C4 stays a rescue, not an
+  optimisation**
+- **C5's heading-cap bullet is void.** Every page planned exactly 4 `##` against a cap of
+  6. The length driver is **594 words per heading vs 555 pre-fix** — the number that has
+  never moved. The word budget is C5's only real lever. The writer also adds 13–24 `###`
+  per page that nothing asked for
+- **Per-page time is unchanged** (142s vs 140s). The 72s of redundant `strategy` calls is
+  real and gone (6.0s for one section job), but that is a **job-scope** win available
+  today, not something the prompt fix bought
+
+*Caveat recorded with the numbers: this is a post-fix baseline on different models
+(`qwen/qwen3.5-9b`, `liquid/lfm2.5-1.2b`) and a freshly planned map, not a controlled A/B
+of the fix.*
+
+---
+
+## Phase 8 — C2–C5: composing into the site ✅
+
+Tracker and full measurements in [.dev/COMPOSITION_PLAN.md](.dev/COMPOSITION_PLAN.md).
+Measured on job #5 against C1's job #4 — same section, same four pages, same models.
+
+- **C2 — progress where the work is happening.** The docs reader derives "being
+  written" from `doc_pages.job_id` and `status`, not from which button you pressed, so
+  it is right in a second tab and after a reload. New `PageProgress` polls the job with
+  the same discipline `useJob` already had, narrates the stage, links to the run, and
+  reloads both the map and the open page when the job lands. A page whose worker died
+  now reads as **stalled with a retry** instead of spinning for ever. The job page lists
+  the addresses it is writing
+- **C3 — the reading column.** The section nav moved inside the centred column, bordered
+  like the document and mirroring the heading ToC on the other side; larger entries.
+  Both side columns collapse above the prose below `lg`
+- **C4 — one plan per section.** New `SECTION_PAGE_PLAN` allocates headings across every
+  page of a section in one call. Per-page planning stays as the fallback and fires on a
+  failed call, an unusable response, *or* a page the model forgot. `key_files` are still
+  validated against the whole KB
+- **C5 — pages the size of pages.** `SECTION_WRITE` reframed: it now says which page and
+  which heading, carries `SITE_WORDS_PER_HEADING` (350) and
+  `SITE_MAX_SUBHEADINGS_PER_SECTION` (3), and adds an overview-page steer. The linker
+  demotes markdown links to source paths — the C1 defect — to backticked code
+
+| | C1 (job #4) | C4+C5 (job #5) | |
+|---|---|---|---|
+| Words per page | 2,376 | **1,249** | −47% |
+| Words per `##` | 594 | **312** | −47% |
+| `###` subheadings | 75 | **39** | −48% |
+| Planner calls | 4 | **1** | |
+| **Dead links published** | **19** | **0** | |
+| Wall clock | 570s | 626s | **+10%** |
+
+**C4's saving is real, and the run that appeared to disprove it was a reasoning loop.**
+Replaying both prompts: one page = 49.6s, one section = 58.7s, so four page calls ≈ 198s
+against one section call at 59s. The measured 221.3s was `qwen3.5` looping in its own
+thinking — repeating "Wait, checking the Overview content again" until it hit
+`LLM_MAX_TOKENS`, returning empty, and being retried three times **inside one traced
+span**, which is why it read as a single slow call.
+
+The finding underneath it is the reusable one: **a reasoning model emits ~4,700 tokens
+of thinking per call whatever the task size** — a single-page plan whose stored JSON is
+337 tokens cost 5,086 completion tokens. That overhead is fixed, per call, and invisible
+in the artifacts, which store the parsed result. Three fixes landed: the section prompt
+no longer asks the model to verify `key_files` membership (the loop trigger — `_validate`
+already drops unknown paths), `chat_completion` now counts `reasoning_content` and logs
+`llm_thought_but_did_not_answer`, and `LLM_MAX_TOKENS` went 8192 → 12288.
+
+**C5 overshot its own target** — 312 words per heading against a 350 budget, with the
+heading count untouched, confirming C1 read the mechanism right. `overview-2` went from
+2,299 words with 8 outgoing links to **1,237 with 24**: half the length, three times the
+links out, which is what an overview page is supposed to do.
+
+Two regressions recorded rather than smoothed over: wall clock up 10%, and
+`state-management`'s QA fell 7.0 → 5.0 — the only page that dropped, and exactly the
+"thin rather than padded" risk C5 named. 222 unit tests pass.
 
 ---
 
@@ -251,6 +385,22 @@ it is built in stages with the current single-document path working throughout.
 - **Mermaid validation is structural, not a parser.** It rejects everything that has
   actually gone wrong, but a determined model can still produce something that passes
   and renders badly
+- **Nothing validates a plain markdown link.** The linker checks `[[ ]]` addresses and
+  heading anchors; a relative-path link is not checked by anything. C1 found
+  `architecture/data-model` published with **19 of 28 links dead** — source paths used as
+  hrefs, some carrying a stray backtick inside them, e.g.
+  ``[`TracerConfig`](`neurosurfer/tracing/config.py)``. Concentrated on one page of four,
+  so it is a drift the writer falls into rather than a systematic failure. Tracked as a
+  C5 item
+- **Overview-shaped pages still shadow the rest of the site** even with the
+  anti-duplication instruction rendering — see C1. The allocation is made by independent
+  per-page planning calls, and no instruction to the writer can undo it; that is what C4
+  is for
+- **CI and the Dockerfile still pin Python 3.12** while the declared floor is now 3.11,
+  so the version actually developed on is never exercised. One line each in
+  `.github/workflows/ci.yml`, `.gitlab-ci.yml` and `Dockerfile`
+- **`ui_backup/` is still parked** and wired to nothing; `CLAUDE.md` says delete it once
+  nothing cross-references it, and nothing does
 
 ---
 
@@ -258,11 +408,36 @@ it is built in stages with the current single-document path working throughout.
 
 ```bash
 cp .env.example .env          # fill in values
-make dev                      # Docker infra + hot-reload API on :8000
-make migrate                  # apply DB migrations
-make worker                   # Celery worker (separate terminal)
+make infra                    # postgres, redis, minio, neo4j, prometheus, grafana
+make migrate                  # apply DB migrations — through a91b6d47c052
+make seed                     # admin@docany.dev / admin1234
+./dev.sh                      # Celery worker + hot-reload API on :8000
+cd ui && pnpm install && pnpm dev     # studio on :5173, needs Node >= 20.19
+```
 
-# LM Studio: load your LLM + text-embedding-bge-m3 (or any 1024-dim model)
-# Update EMBEDDING_MODEL + VECTOR_DIMENSIONS in .env to match
-conda run -n LLMs python scripts/test_embedding.py   # verify embedding endpoint
+`make dev` does not exist — `dev.sh` is the entry point, and it starts *both* the worker
+and the API. It picks `.venv` when there is one, else conda `$CONDA_ENV` (default `LLMs`).
+
+**The embedding model and `VECTOR_DIMENSIONS` are one decision.** The value is read at
+migration time and baked into `code_chunks.embedding`; changing it later means re-running
+`alembic upgrade head`, **which TRUNCATEs `code_chunks`**, and re-ingesting every project.
+Current local setup is `text-embedding-nomic-embed-text-v1.5-embedding` at **768** dims.
+
+```bash
+conda run -n LLMs python scripts/test_embedding.py   # checks reachability + dims + similarity
+```
+
+### ⚠️ The Celery worker does not auto-reload
+
+The API runs with `--reload` and picks up changes; **the worker does not**. It has already
+cost two sessions — fixes sat in the tree while jobs ran the old code and the results were
+measured as if they were current. **Restart the worker after any change to `app/`**,
+especially agents, prompts or workflows.
+
+Integration tests need their database to exist first:
+
+```sql
+CREATE DATABASE documentanything_test;
+\c documentanything_test
+CREATE EXTENSION IF NOT EXISTS vector;
 ```

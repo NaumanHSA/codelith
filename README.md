@@ -87,13 +87,31 @@ cp .env.example .env
 Edit `.env` — the key settings:
 
 ```env
-LLM_BASE_URL=http://localhost:1234/v1   # LM Studio server
-LLM_DEFAULT_MODEL=local-model           # Model name as shown in LM Studio
-LLM_FAST_MODEL=local-model              # Used for classify/extract/summarize/diagram
-LLM_QUALITY_MODEL=local-model           # Used for plan/write/review/architecture
-EMBEDDING_MODEL=text-embedding-bge-m3   # Must match VECTOR_DIMENSIONS below
-VECTOR_DIMENSIONS=1024
+# Two tiers, and each picks its own provider — `local` or `openai`.
+LLM_QUALITY_PROVIDER=local              # plan / write / review / architecture / diagram
+LLM_FAST_PROVIDER=local                 # classify / extract / summarize
+
+# `local` — any OpenAI-compatible endpoint. No API key is needed.
+LLM_LOCAL_BASE_URL=http://localhost:1234/v1
+LLM_LOCAL_QUALITY_MODEL=qwen/qwen3.5-9b
+LLM_LOCAL_FAST_MODEL=liquid/lfm2.5-1.2b
+LLM_LOCAL_CONTEXT_WINDOW=21000          # what the model is SERVED with, not its maximum
+
+# `openai` — only a key and a model name.
+OPENAI_API_KEY=
+OPENAI_QUALITY_MODEL=gpt-5-mini
+OPENAI_FAST_MODEL=gpt-4o-mini
+
+# Embeddings have their own provider, deliberately — see below.
+EMBEDDING_PROVIDER=local
+EMBEDDING_MODEL=text-embedding-nomic-embed-text-v1.5
+VECTOR_DIMENSIONS=768                   # must match the embedding model's output size
 ```
+
+The tiers are independent, which is the point: a 1.2b model can summarise 45 modules
+locally while a hosted model writes the prose. **Embeddings never follow the quality
+tier** — `VECTOR_DIMENSIONS` is written into `code_chunks.embedding` at migration time,
+so moving the embedder means a migration that truncates that table and a full re-ingest.
 
 The two model slots are a real speed lever, not decoration: module summarisation is
 thousands of short calls and runs fine on a small model, while planning and writing
@@ -397,11 +415,17 @@ See `.env.example` for the full list. Key variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_BASE_URL` | `http://localhost:1234/v1` | LM Studio (or any OpenAI-compatible) endpoint |
-| `LLM_API_KEY` | `lm-studio` | API key (LM Studio ignores this) |
-| `LLM_DEFAULT_MODEL` | `local-model` | Fallback model for untiered tasks |
-| `LLM_FAST_MODEL` | `local-model` | classify / extract / summarize / diagram |
-| `LLM_QUALITY_MODEL` | `local-model` | plan / write / review / architecture |
+| `LLM_QUALITY_PROVIDER` | `local` | `local` or `openai` — serves plan / write / review / architecture / diagram |
+| `LLM_FAST_PROVIDER` | `local` | `local` or `openai` — serves classify / extract / summarize |
+| `LLM_LOCAL_BASE_URL` | `http://localhost:1234/v1` | Any OpenAI-compatible endpoint |
+| `LLM_LOCAL_QUALITY_MODEL` | `local-model` | Model ID as the endpoint lists it |
+| `LLM_LOCAL_FAST_MODEL` | `local-model` | Model ID as the endpoint lists it |
+| `LLM_LOCAL_CONTEXT_WINDOW` | `21000` | What the model is *served* with; ReAct compaction reads it |
+| `OPENAI_API_KEY` | — | Required only if a tier is set to `openai` |
+| `OPENAI_QUALITY_MODEL` | `gpt-4o-mini` | Used when the quality tier is `openai` |
+| `OPENAI_FAST_MODEL` | `gpt-4o-mini` | Used when the fast tier is `openai` |
+| `LLM_MAX_TOKENS` | `8192` | **Local only.** Hosted models are sent no ceiling |
+| `EMBEDDING_PROVIDER` | `local` | Independent of the tiers — see `VECTOR_DIMENSIONS` |
 | `LLM_STREAMING` | `true` | Stream completions — required for cancellation to interrupt generation |
 | `DATABASE_URL` | postgres://... | PostgreSQL async connection string |
 | `REDIS_URL` | redis://localhost:6379/0 | Redis connection (also carries cancellation flags) |
