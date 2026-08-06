@@ -1,12 +1,11 @@
 """Celery entrypoint for Phase 1 (analysis)."""
 
-import asyncio
-
 import structlog
 
 from app.db.session import AsyncSessionLocal
 from app.observability.metrics import job_total, time_job
 from app.observability.tracing import workflow_span
+from app.workers import runner
 from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -14,7 +13,7 @@ logger = structlog.get_logger(__name__)
 
 @celery_app.task(name="analysis.run_analysis", bind=True, max_retries=1)
 def run_analysis(self, job_id: int, force: bool = False) -> dict:
-    return asyncio.get_event_loop().run_until_complete(_run_analysis(job_id, force))
+    return runner.run(_run_analysis(job_id, force))
 
 
 async def _run_analysis(job_id: int, force: bool) -> dict:

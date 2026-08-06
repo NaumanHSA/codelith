@@ -1,3 +1,5 @@
+import sys
+
 from celery import Celery
 
 from app.config import get_settings
@@ -17,14 +19,41 @@ celery_app = Celery(
     ],
 )
 
-from celery.signals import worker_process_init
+from celery.signals import worker_init, worker_process_init
 
 
+# `worker_process_init` fires per forked child and never fires at all under the
+# threads pool, which would leave a Windows worker logging unformatted. `worker_init`
+# fires in the worker process for every pool. Both are connected because prefork
+# children need their own call, and `setup_logging` is idempotent — it reconfigures
+# structlog, so a second call in the parent costs nothing.
+@worker_init.connect
 @worker_process_init.connect
 def init_worker_logging(**kwargs):
     from app.core.logging import setup_logging
     setup_logging()
 
+
+# The prefork pool needs fork(). Windows has none, so the pool spawns instead and the
+# child never inherits the module globals `celery.app.trace.fast_trace_task` reads —
+# every task dies on pickup with "not enough values to unpack (expected 3, got 0)"
+# while the worker itself reports ready. That gap is the trap: a booting worker that
+# has printed its queues and its task list looks identical to a working one.
+#
+# `solo` rather than `threads`, because two process-wide singletons are bound to the
+# event loop that created them — the SQLAlchemy engine's connection pool
+# (`app/db/session.py`) and the `@lru_cache`d `AsyncOpenAI` client's httpx pool
+# (`app/llm/client.py`). A thread pool gives each worker thread its own loop, so those
+# pools would be shared across loops; making them thread-local is a real refactor and
+# buys nothing here, because one LM Studio instance serves requests serially anyway.
+# Concurrency *within* a job is untouched — `asyncio.gather` over narratives and
+# sections all happens inside the single task.
+#
+# Set as config rather than a `--pool` flag so it reaches every entry point —
+# `dev.sh`, `make worker`, a bare `celery ... worker`. Celery only overrides the CLI
+# when that CLI value is the default `prefork`, so an explicit `--pool=X` still wins.
+if sys.platform == "win32":
+    celery_app.conf.worker_pool = "solo"
 
 celery_app.conf.update(
     task_serializer="json",

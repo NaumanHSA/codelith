@@ -1,8 +1,7 @@
-import asyncio
-
 import structlog
 
 from app.db.session import AsyncSessionLocal
+from app.workers import runner
 from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -10,7 +9,7 @@ logger = structlog.get_logger(__name__)
 
 @celery_app.task(name="export.export_document", bind=True, max_retries=2)
 def export_document_task(self, document_id: int, format: str) -> dict:
-    return asyncio.get_event_loop().run_until_complete(_export(document_id, format))
+    return runner.run(_export(document_id, format))
 
 
 async def _export(document_id: int, format: str) -> dict:

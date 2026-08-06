@@ -1,9 +1,8 @@
-import asyncio
-
 import structlog
 
 from app.db.session import AsyncSessionLocal
 from app.services.job_service import JobService
+from app.workers import runner
 from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -11,7 +10,7 @@ logger = structlog.get_logger(__name__)
 
 @celery_app.task(name="ingestion.run_ingestion_pipeline", bind=True, max_retries=2)
 def run_ingestion_pipeline(self, job_id: int) -> dict:
-    return asyncio.get_event_loop().run_until_complete(_run_ingestion(job_id))
+    return runner.run(_run_ingestion(job_id))
 
 
 async def _run_ingestion(job_id: int) -> dict:
