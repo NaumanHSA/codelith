@@ -85,3 +85,35 @@ class TestRendererIsOptional:
             assert mermaid_render.render_png("graph TD\n A-->B") is None
         finally:
             get_settings.cache_clear()
+
+
+class TestRenderingAvailability:
+    """
+    `DIAGRAM_RENDER_PNG=false` must mean "publish the source", not "publish nothing".
+
+    The agent treats a missing PNG as a failed diagram and drops it, which is right
+    when rendering is available and wrong when it is switched off — that combination
+    silently produced zero diagrams instead of falling back.
+    """
+
+    def test_unavailable_when_rendering_is_disabled(self, monkeypatch) -> None:
+        from app.config import get_settings
+        from app.tools.mermaid_render import rendering_available
+
+        get_settings.cache_clear()
+        monkeypatch.setenv("DIAGRAM_RENDER_PNG", "false")
+        try:
+            assert rendering_available() is False
+        finally:
+            get_settings.cache_clear()
+
+    def test_unavailable_when_the_binary_is_missing(self, monkeypatch) -> None:
+        from app.config import get_settings
+        from app.tools.mermaid_render import rendering_available
+
+        get_settings.cache_clear()
+        monkeypatch.setenv("MERMAID_CLI_PATH", "/nonexistent/mmdc")
+        try:
+            assert rendering_available() is False
+        finally:
+            get_settings.cache_clear()

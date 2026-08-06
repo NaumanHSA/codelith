@@ -47,6 +47,17 @@ def mermaid_cli() -> str | None:
     return shutil.which("mmdc")
 
 
+def rendering_available() -> bool:
+    """
+    Whether PNG rendering is switched on *and* possible.
+
+    Callers need this distinction: a diagram that cannot be rendered because rendering
+    is off is not a broken diagram, and treating it as one drops the diagram entirely
+    instead of publishing its source.
+    """
+    return bool(get_settings().DIAGRAM_RENDER_PNG and mermaid_cli())
+
+
 def render_png(diagram: str, *, scale: int = 2, background: str = "white") -> bytes | None:
     """
     Render Mermaid source to PNG bytes, or `None` if it cannot be rendered.
@@ -116,4 +127,4 @@ def render_png(diagram: str, *, scale: int = 2, background: str = "white") -> by
     return data
 
 
-__all__ = ["mermaid_cli", "render_png"]
+__all__ = ["mermaid_cli", "render_png", "rendering_available"]

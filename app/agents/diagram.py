@@ -34,7 +34,7 @@ from app.core.cancellation import JobCancelled
 from app.knowledge.constants import EntityKind
 from app.llm.prompts.diagram_prompts import DIAGRAM, DIAGRAM_REPAIR, example_for
 from app.tools.mermaid import clean_mermaid, ungrounded_labels, validate_mermaid
-from app.tools.mermaid_render import render_png
+from app.tools.mermaid_render import render_png, rendering_available
 from app.tracing.artifacts import save_text_artifact
 
 
@@ -263,6 +263,22 @@ class DiagramAgent(BaseAgent):
         if problem:
             await self._emit_log("warning", f"Diagram '{spec.name}' dropped — {problem}")
             return None
+
+        if not rendering_available():
+            # Rendering is off, or mmdc is not installed. The diagram is fine — it just
+            # cannot be turned into a picture here, so publish the source and let the
+            # formatter fall back. Treating this as a failure dropped every diagram.
+            await self._emit_log(
+                "info", f"Diagram '{spec.name}' kept as source — PNG rendering unavailable"
+            )
+            return {
+                "key": spec.key,
+                "name": spec.name,
+                "diagram_type": spec.mermaid_type.split()[0],
+                "doc_type": doc.get("doc_type") or "architecture",
+                "content": content,
+                "png_base64": None,
+            }
 
         # The renderer is the real Mermaid parser; anything it refuses would have shipped
         # as an error box. A dotted participant id (`neurosurfer.app.server`) passes every
