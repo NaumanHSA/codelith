@@ -200,6 +200,47 @@ class TestTheAgentReportsTheRename:
         assert len(find_blocks(out["generated_docs"][0]["content_markdown"], out["new_anchor"])) == 1
 
 
+class TestTheSectionStaysAddressable:
+    """A rename is only safe if the section is still findable afterwards. Two ways a
+    model breaks that while appearing to answer correctly."""
+
+    async def test_a_heading_returned_at_the_wrong_level_is_corrected(self, agent) -> None:
+        """Asked to rewrite a `##`, models sometimes answer with `###`. Spliced
+        verbatim, the section leaves the page's structure: gone from the outline,
+        no rewrite button, and unreachable to every later revision."""
+        _answers(agent, "### Development tips\n\nTips about development.")
+
+        out = await agent.run(_state())
+        content = out["generated_docs"][0]["content_markdown"]
+
+        assert "## Development tips" in content
+        assert "### Development tips" not in content
+        assert [b.title for b in split_blocks(content)] == ["Development tips", "Errors"]
+        assert len(find_blocks(content, out["new_anchor"])) == 1
+
+    async def test_a_deeper_heading_the_model_added_is_kept(self, agent) -> None:
+        """Only the section's own heading is levelled. Sub-structure the writer
+        chose inside it is its business."""
+        _answers(agent, "## Development tips\n\n### Local setup\n\nSteps.")
+
+        content = (await agent.run(_state()))["generated_docs"][0]["content_markdown"]
+
+        assert "### Local setup" in content
+
+    async def test_a_title_with_no_addressable_form_is_refused(self, agent) -> None:
+        """`anchor_id('🚀')` is the empty string. Accepting it would re-key the
+        conversation onto "" and rewrite every link into the section to a bare `#`."""
+        _answers(agent, "## 🚀\n\nTips about development.")
+
+        out = await agent.run(_state())
+        content = out["generated_docs"][0]["content_markdown"]
+
+        assert out["new_anchor"] is None
+        assert "## Development and observability tips" in content
+        assert "Tips about development." in content
+        assert len(find_blocks(content, OLD_ANCHOR)) == 1
+
+
 class TestARenameOntoAnExistingHeading:
     """`find_blocks` refuses an anchor matching two headings — deliberately, since
     guessing would edit the wrong half of the page. A rename that *creates* that

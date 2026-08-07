@@ -159,6 +159,22 @@ class ReviserAgent(BaseAgent):
                     new_title = first.lstrip("#").strip()
                     new_anchor = anchor_id(new_title)
 
+                # A title of nothing but emoji or punctuation reduces to an empty
+                # anchor, which is not an address: the conversation would be re-keyed
+                # onto "" and every link into the section rewritten to a bare `#`.
+                if new_anchor != anchor and not new_anchor:
+                    await self._emit_log(
+                        "warning",
+                        f"Kept the heading “{block.title}”: “{new_title}” has no "
+                        "addressable form.",
+                    )
+                    content = replace_block(
+                        markdown,
+                        block,
+                        f"{'#' * block.level} {block.title}\n\n{block_body(revised)}",
+                    )
+                    new_anchor, new_title = anchor, None
+
                 # A rename that lands on a heading the page already has makes the
                 # anchor ambiguous, and every later revision of *either* section is
                 # then refused as un-addressable. The prose is still wanted, so the

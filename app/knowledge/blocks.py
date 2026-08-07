@@ -126,6 +126,13 @@ def replace_block(markdown: str, block: Block, replacement: str) -> str:
     The replacement is expected to carry its own heading — that is what the writer
     produces — but one is prepended if it does not, so a model that answered with
     prose alone cannot silently delete the heading and orphan every link to it.
+
+    Its *level* is forced back to the block's. A model asked to rewrite a `##` will
+    occasionally answer with `###`, and splicing that verbatim removes the section
+    from the page's structure entirely: `split_blocks` no longer sees it, so it
+    disappears from the outline, loses its rewrite button, and becomes unreachable
+    to every later revision. Only the first heading is adjusted — a replacement that
+    legitimately splits into several sections keeps the ones it added.
     """
     # `.strip()`, not `.strip("\n")`: a model answering with spaces and newlines is
     # not answering, and blanking a stored section on that would be silent data loss.
@@ -133,8 +140,13 @@ def replace_block(markdown: str, block: Block, replacement: str) -> str:
         raise ValueError("refusing to replace a section with nothing")
     body = replacement.strip("\n")
 
-    first = body.split("\n", 1)[0].lstrip()
-    if not _HEADING.match(first):
+    lines = body.split("\n")
+    first = lines[0].lstrip()
+    if match := _HEADING.match(first):
+        if len(match.group(1)) != block.level:
+            lines[0] = f"{'#' * block.level} {match.group(2).strip()}"
+            body = "\n".join(lines)
+    else:
         body = f"{'#' * block.level} {block.title}\n\n{body}"
 
     lines = markdown.split("\n")
