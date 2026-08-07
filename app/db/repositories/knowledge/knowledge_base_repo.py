@@ -29,6 +29,37 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
         )
         return result.scalar_one_or_none()
 
+    # ── Composition strategy cache ────────────────────────────────────────────
+    #
+    # Audience, tone and whether diagrams are worth drawing, per doc type. It is
+    # derived from this KB's narratives and stats and from nothing else, so it is a
+    # property of the knowledge base rather than of the job that first asked for it —
+    # which is why it is cached here and expires naturally when a new analysis
+    # produces a new KB.
+
+    async def get_strategy(self, kb_id: int) -> dict:
+        """What has already been decided for this KB, keyed by doc type."""
+        result = await self.session.execute(
+            select(KnowledgeBase.strategy_json).where(KnowledgeBase.id == kb_id)
+        )
+        return result.scalar_one_or_none() or {}
+
+    async def merge_strategy(self, kb_id: int, entries: dict) -> None:
+        """
+        Add these doc types to the cache, leaving any others intact.
+
+        Read-modify-write rather than a JSONB merge because the whole value is
+        replaced: SQLAlchemy does not notice a dict mutated in place.
+        """
+        if not entries:
+            return
+        stored = await self.get_strategy(kb_id)
+        stored.update(entries)
+        await self.session.execute(
+            update(KnowledgeBase).where(KnowledgeBase.id == kb_id).values(strategy_json=stored)
+        )
+        await self.session.commit()
+
     async def get_by_commit(self, project_id: int, commit_sha: str | None) -> KnowledgeBase | None:
         result = await self.session.execute(
             select(KnowledgeBase).where(

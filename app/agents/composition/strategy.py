@@ -38,6 +38,25 @@ class CompositionStrategyAgent(BaseAgent):
             stats: dict = state.get("kb_stats") or {}
             repos = KnowledgeRepositories.for_session(self.db)
 
+            # Already decided for these doc types against this knowledge base. The
+            # strategy reads the same narratives and the same stats every time, so
+            # composing a section one page at a time was paying for an identical
+            # answer on every run — ~13s each against a hosted model.
+            if cached := await self._cached(repos, kb_id, doc_types):
+                await self._emit_log(
+                    "info", f"Strategy reused from knowledge base {kb_id}"
+                )
+                save_artifact("strategy.strategy", cached)
+                t.outputs(
+                    doc_types=doc_types,
+                    diagrams=cached.get("generate_diagrams"),
+                    cached=True,
+                )
+                await self._update_step(
+                    self.name, "completed", {"doc_types": doc_types, "cached": True}
+                )
+                return {"strategy": cached}
+
             # Narratives for what was actually requested. Hardcoding overview +
             # architecture meant an API document's strategy call never saw an endpoint:
             # the routes were in the request_lifecycle narrative, which was not passed.
@@ -64,10 +83,54 @@ class CompositionStrategyAgent(BaseAgent):
             strategy.setdefault("generate_diagrams", True)
 
             save_artifact("strategy.strategy", strategy)
+            await self._remember(repos, kb_id, doc_types, strategy)
 
             t.outputs(doc_types=doc_types, diagrams=strategy.get("generate_diagrams"))
             await self._update_step(self.name, "completed", {"doc_types": doc_types})
             return {"strategy": strategy}
+
+    # ── Cache ─────────────────────────────────────────────────────────────────
+    #
+    # Keyed by doc type, because one knowledge base serves several and each gets its
+    # own pitch. A job asking for two doc types only reuses when *both* are known —
+    # a partial hit would silently drop the audience for the missing one.
+
+    @staticmethod
+    async def _cached(repos, kb_id: int, doc_types: list[str]) -> dict | None:
+        stored = await repos.bases.get_strategy(kb_id)
+        if not stored or not all(dt in stored for dt in doc_types):
+            return None
+
+        return {
+            "audiences": [stored[dt]["audience"] for dt in doc_types],
+            # Diagrams are a per-run cost, so the stricter answer wins when a job spans
+            # doc types that disagreed about them.
+            "generate_diagrams": all(
+                stored[dt].get("generate_diagrams", True) for dt in doc_types
+            ),
+        }
+
+    async def _remember(self, repos, kb_id: int, doc_types: list[str], strategy: dict) -> None:
+        """
+        Store what was decided, per doc type.
+
+        Never fatal: a strategy that could not be cached still governs this job, and
+        the next one simply pays for it again. Losing a run over a cache write would
+        be a poor trade.
+        """
+        try:
+            by_type = {a.get("doc_type"): a for a in strategy.get("audiences") or []}
+            entries = {
+                doc_type: {
+                    "audience": by_type[doc_type],
+                    "generate_diagrams": bool(strategy.get("generate_diagrams", True)),
+                }
+                for doc_type in doc_types
+                if doc_type in by_type
+            }
+            await repos.bases.merge_strategy(kb_id, entries)
+        except Exception as exc:  # noqa: BLE001 — see docstring
+            await self._emit_log("warning", f"Could not cache strategy: {exc}")
 
     @staticmethod
     async def _narratives(repos, kb_id: int, doc_types: list[str]) -> str:

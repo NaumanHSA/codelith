@@ -127,6 +127,49 @@ class AnalyzeRequest(BaseModel):
     )
 
 
+class AddPageRequest(BaseModel):
+    """
+    Ask for a page the site does not have.
+
+    Free text, because the reader is describing a gap rather than filling in a form.
+    A title may be supplied and is then used verbatim — somebody who named their page
+    meant it — otherwise it is derived along with the intent.
+    """
+
+    section_slug: str = Field(..., description="Which section of the nav it belongs in.")
+    request: str = Field(
+        ...,
+        min_length=1,
+        description="What the page should cover, in the reader's own words.",
+    )
+    title: str | None = Field(
+        default=None,
+        description="Optional. Used verbatim when given; derived from the request otherwise.",
+    )
+
+
+class ReviseRequest(BaseModel):
+    """
+    Change prose that already exists.
+
+    Deliberately not a document type or a plan: the subject is already decided. The
+    only inputs are *which* piece and *what should change about it*.
+    """
+
+    instructions: str = Field(
+        ...,
+        min_length=1,
+        description="What should change. Free text — this is what the reader typed.",
+    )
+    anchor: str | None = Field(
+        default=None,
+        description=(
+            "The `anchor_id` of a `##` heading — the id the studio stamps on rendered "
+            "headings. Omit to revise the whole page."
+        ),
+    )
+
+
 class ComposeRequest(BaseModel):
     """
     Phase 2 trigger — this is where what to write is finally chosen, once the

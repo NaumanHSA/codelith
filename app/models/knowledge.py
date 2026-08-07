@@ -83,6 +83,15 @@ class KnowledgeBase(Base, TimestampMixin):
     #: digest here. Deliberately not a git diff — uploads and local directories have
     #: no commits, and this works for all of them.
     file_hashes_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    #: doc-type key → the composition strategy chosen for it: audience, tone, whether
+    #: diagrams are worth drawing.
+    #:
+    #: Cached here because the strategy is a property of *this knowledge base and this
+    #: doc type*, not of a job — it reads the same narratives and the same stats every
+    #: time, so a second job on the same KB re-derives an answer it already has. It
+    #: lives on the KB rather than in a cache because that is exactly its lifetime: a
+    #: new analysis makes a new KB, and the strategy is reconsidered with it.
+    strategy_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     #: Why a build ended up DEGRADED or FAILED.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
