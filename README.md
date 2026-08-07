@@ -52,7 +52,7 @@ cheap: composition never re-reads the repository.
 
 | Layer | Technology |
 |---|---|
-| API | FastAPI + Python 3.12 (async) |
+| API | FastAPI + Python 3.11+ (async) |
 | UI | React 19 + Vite 8 + Tailwind 4 (light studio, Node ≥ 20.19) |
 | Database | PostgreSQL + SQLAlchemy 2.0 async + Alembic |
 | Cache / Queue broker | Redis |
@@ -71,7 +71,7 @@ cheap: composition never re-reads the repository.
 
 ### 1. Prerequisites
 
-- Python 3.12
+- Python 3.11 or newer
 - Node.js 20.19+ (for the studio)
 - Docker + Docker Compose
 - [LM Studio](https://lmstudio.ai/) running locally with a model loaded and server started on `http://localhost:1234`
@@ -87,25 +87,34 @@ cp .env.example .env
 Edit `.env` — the key settings:
 
 ```env
-# Two tiers, and each picks its own provider — `local` or `openai`.
-LLM_QUALITY_PROVIDER=local              # plan / write / review / architecture / diagram
-LLM_FAST_PROVIDER=local                 # classify / extract / summarize
-
-# `local` — any OpenAI-compatible endpoint. No API key is needed.
-LLM_LOCAL_BASE_URL=http://localhost:1234/v1
-LLM_LOCAL_QUALITY_MODEL=qwen/qwen3.5-9b
-LLM_LOCAL_FAST_MODEL=liquid/lfm2.5-1.2b
-LLM_LOCAL_CONTEXT_WINDOW=21000          # what the model is SERVED with, not its maximum
-
-# `openai` — only a key and a model name.
+# Three models, each described by the same four settings. `openai` uses the API key;
+# `local` needs no key at all — that is the only difference between them.
 OPENAI_API_KEY=
-OPENAI_QUALITY_MODEL=gpt-5-mini
-OPENAI_FAST_MODEL=gpt-4o-mini
 
-# Embeddings have their own provider, deliberately — see below.
-EMBEDDING_PROVIDER=local
-EMBEDDING_MODEL=text-embedding-nomic-embed-text-v1.5
+MODEL_QUALITY_PROVIDER=local            # plan / write / review / architecture / diagram
+MODEL_QUALITY=qwen/qwen3.5-9b
+MODEL_QUALITY_BASE_URL=http://localhost:1234/v1
+MODEL_QUALITY_CONTEXT_WINDOW=21000
+
+MODEL_FAST_PROVIDER=local               # classify / extract / summarize
+MODEL_FAST=liquid/lfm2.5-1.2b
+MODEL_FAST_BASE_URL=http://localhost:1234/v1
+MODEL_FAST_CONTEXT_WINDOW=21000
+
+MODEL_EMBEDDING_PROVIDER=local
+MODEL_EMBEDDING=text-embedding-nomic-embed-text-v1.5
+MODEL_EMBEDDING_BASE_URL=http://localhost:1234/v1
+
 VECTOR_DIMENSIONS=768                   # must match the embedding model's output size
+```
+
+To move a tier to OpenAI, change one word and the model name:
+
+```env
+MODEL_QUALITY_PROVIDER=openai
+MODEL_QUALITY=gpt-5-mini
+MODEL_QUALITY_BASE_URL=https://api.openai.com/v1
+MODEL_QUALITY_CONTEXT_WINDOW=128000
 ```
 
 The tiers are independent, which is the point: a 1.2b model can summarise 45 modules
@@ -113,9 +122,9 @@ locally while a hosted model writes the prose. **Embeddings never follow the qua
 tier** — `VECTOR_DIMENSIONS` is written into `code_chunks.embedding` at migration time,
 so moving the embedder means a migration that truncates that table and a full re-ingest.
 
-The two model slots are a real speed lever, not decoration: module summarisation is
+The quality/fast split is a real speed lever, not decoration: module summarisation is
 thousands of short calls and runs fine on a small model, while planning and writing
-degrade badly on one. Point them at the same model if you only have one loaded.
+degrade badly on one. Point both tiers at the same model if you only have one loaded.
 
 ### 3. Install Python dependencies
 
@@ -415,17 +424,14 @@ See `.env.example` for the full list. Key variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_QUALITY_PROVIDER` | `local` | `local` or `openai` — serves plan / write / review / architecture / diagram |
-| `LLM_FAST_PROVIDER` | `local` | `local` or `openai` — serves classify / extract / summarize |
-| `LLM_LOCAL_BASE_URL` | `http://localhost:1234/v1` | Any OpenAI-compatible endpoint |
-| `LLM_LOCAL_QUALITY_MODEL` | `local-model` | Model ID as the endpoint lists it |
-| `LLM_LOCAL_FAST_MODEL` | `local-model` | Model ID as the endpoint lists it |
-| `LLM_LOCAL_CONTEXT_WINDOW` | `21000` | What the model is *served* with; ReAct compaction reads it |
-| `OPENAI_API_KEY` | — | Required only if a tier is set to `openai` |
-| `OPENAI_QUALITY_MODEL` | `gpt-4o-mini` | Used when the quality tier is `openai` |
-| `OPENAI_FAST_MODEL` | `gpt-4o-mini` | Used when the fast tier is `openai` |
+| `MODEL_QUALITY_PROVIDER` | `local` | `local` or `openai` — serves plan / write / review / architecture / diagram |
+| `MODEL_QUALITY` | `local-model` | Model name, exactly as the endpoint lists it |
+| `MODEL_QUALITY_BASE_URL` | `http://localhost:1234/v1` | Where to connect |
+| `MODEL_QUALITY_CONTEXT_WINDOW` | `21000` | What it will accept; ReAct compaction reads it |
+| `MODEL_FAST_*` | — | The same four, for classify / extract / summarize |
+| `MODEL_EMBEDDING_*` | — | Provider, model and base URL. Independent of the other tiers — see `VECTOR_DIMENSIONS` |
+| `OPENAI_API_KEY` | — | Required only for tiers set to `openai` |
 | `LLM_MAX_TOKENS` | `8192` | **Local only.** Hosted models are sent no ceiling |
-| `EMBEDDING_PROVIDER` | `local` | Independent of the tiers — see `VECTOR_DIMENSIONS` |
 | `LLM_STREAMING` | `true` | Stream completions — required for cancellation to interrupt generation |
 | `DATABASE_URL` | postgres://... | PostgreSQL async connection string |
 | `REDIS_URL` | redis://localhost:6379/0 | Redis connection (also carries cancellation flags) |

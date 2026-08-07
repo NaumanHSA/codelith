@@ -29,38 +29,45 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    # ── LLM: one provider per tier ────────────────────────────────────────────
-    # There are two tiers, and `app/llm/router.py` picks between them by task type,
-    # never the caller. Each tier chooses its own provider independently, so the
-    # common setup — a cheap local model summarising 45 modules while a hosted one
-    # writes the prose — needs no code change, only these two values.
+    # ── Models ────────────────────────────────────────────────────────────────
+    # Three of them, and each is described by the same four settings:
     #
-    #   local  — any OpenAI-compatible endpoint: LM Studio, Ollama, vLLM, llama.cpp.
-    #            Needs a base URL, a model name and the context length it is served
-    #            with. The API key is ignored.
-    #   openai — needs an API key and a model name. The base URL and context window
-    #            have working defaults.
-    LLM_QUALITY_PROVIDER: str = "local"
-    LLM_FAST_PROVIDER: str = "local"
+    #   MODEL_<TIER>_PROVIDER        local | openai
+    #   MODEL_<TIER>                 the model name
+    #   MODEL_<TIER>_BASE_URL        where to connect
+    #   MODEL_<TIER>_CONTEXT_WINDOW  how much it will accept
+    #
+    # `openai` uses OPENAI_API_KEY; `local` needs no key and is sent a placeholder.
+    # That is the whole difference between the two providers — everything else is
+    # the same four values, so a tier moves between them by editing one word.
+    #
+    # `app/llm/router.py` picks the tier by task type, never the caller:
+    #   write/review/validate/architecture/plan/select/diagram → QUALITY
+    #   classify/extract/summarize                             → FAST
+    #
+    # The tiers are independent on purpose: a 1.2b model summarising 45 modules
+    # locally while a hosted model writes the prose is the setup this is for.
+    MODEL_QUALITY_PROVIDER: str = "local"
+    MODEL_QUALITY: str = "local-model"
+    MODEL_QUALITY_BASE_URL: str = "http://localhost:1234/v1"
+    MODEL_QUALITY_CONTEXT_WINDOW: int = 21000
 
-    # Local endpoint, shared by whichever tiers are set to `local`.
-    LLM_LOCAL_BASE_URL: str = "http://localhost:1234/v1"
-    LLM_LOCAL_QUALITY_MODEL: str = "local-model"
-    LLM_LOCAL_FAST_MODEL: str = "local-model"
-    # The context length the model is actually *served* with, which is a property of
-    # how it was loaded, not of the model. Set it too high and requests 400 late in a
-    # long job; too low and context is trimmed that would have fitted.
-    LLM_LOCAL_CONTEXT_WINDOW: int = 21000
-    # Ignored by local endpoints, which authenticate nothing. Present because the
-    # OpenAI SDK requires a non-empty string.
-    LLM_LOCAL_API_KEY: str = "not-needed"
+    MODEL_FAST_PROVIDER: str = "local"
+    MODEL_FAST: str = "local-model"
+    MODEL_FAST_BASE_URL: str = "http://localhost:1234/v1"
+    MODEL_FAST_CONTEXT_WINDOW: int = 21000
 
-    # OpenAI, or anything speaking its API at another base URL (Azure, a gateway).
+    # The embedding model is a third tier, and deliberately not tied to the other
+    # two: its output size is baked into `code_chunks.embedding` by the migrations
+    # (`VECTOR_DIMENSIONS`), so changing it means a migration that TRUNCATEs the
+    # table and a full re-ingest. Moving the writing model to OpenAI must not drag
+    # the embedder with it. No context window — nothing reads one for embeddings.
+    MODEL_EMBEDDING_PROVIDER: str = "local"
+    MODEL_EMBEDDING: str = "text-embedding-nomic-embed-text-v1.5"
+    MODEL_EMBEDDING_BASE_URL: str = "http://localhost:1234/v1"
+
+    #: Used by whichever tiers are set to `openai`.
     OPENAI_API_KEY: str = ""
-    OPENAI_QUALITY_MODEL: str = "gpt-4o-mini"
-    OPENAI_FAST_MODEL: str = "gpt-4o-mini"
-    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
-    OPENAI_CONTEXT_WINDOW: int = 128_000
 
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.2
@@ -68,14 +75,6 @@ class Settings(BaseSettings):
     # than waiting for the model to finish. Disable only to debug the transport.
     LLM_STREAMING: bool = True
 
-    # ── Embeddings ────────────────────────────────────────────────────────────
-    # Deliberately its own provider rather than following the quality tier. The
-    # embedding model's output size is baked into `code_chunks.embedding` by the
-    # migrations (`VECTOR_DIMENSIONS`), so switching it means a migration that
-    # TRUNCATEs the table and a full re-ingest of every project. Moving the writing
-    # model to OpenAI must not drag the embedder along with it.
-    EMBEDDING_PROVIDER: str = "local"
-    EMBEDDING_MODEL: str = "text-embedding-ada-002"
     # Texts per embeddings request. Batching is what keeps ingestion off a
     # one-request-per-chunk path; lower it if the endpoint rejects large batches.
     EMBEDDING_BATCH_SIZE: int = 64
@@ -213,8 +212,8 @@ class Settings(BaseSettings):
     REACT_CONTEXT_WINDOW_MAX: int = 8000
 
     # ReAct context compaction (intelligent LLM summarisation)
-    # (The model's real context window is a property of the endpoint, not a global —
-    #  see LLM_LOCAL_CONTEXT_WINDOW / OPENAI_CONTEXT_WINDOW, resolved per tier by
+    # (A model's real context window belongs to its tier, not to the application —
+    #  see MODEL_QUALITY_CONTEXT_WINDOW / MODEL_FAST_CONTEXT_WINDOW, resolved by
     #  `app/llm/providers.py`.)
     REACT_TOOL_RESULT_MAX_CHARS: int = 4000    # cap one tool result (~1k tokens)
     REACT_COMPACT_THRESHOLD_TOKENS: int = 9000 # compact conversation when it grows past this
@@ -228,7 +227,9 @@ class Settings(BaseSettings):
             raise ValueError(f"APP_ENV must be one of {allowed}")
         return v
 
-    @field_validator("LLM_QUALITY_PROVIDER", "LLM_FAST_PROVIDER", "EMBEDDING_PROVIDER")
+    @field_validator(
+        "MODEL_QUALITY_PROVIDER", "MODEL_FAST_PROVIDER", "MODEL_EMBEDDING_PROVIDER"
+    )
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """

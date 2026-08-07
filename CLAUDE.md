@@ -24,7 +24,7 @@ LangGraph workflows, produces structured documentation in Markdown/DOCX/MkDocs/D
 - **Graph DB**: Neo4j (code entity relationships)
 - **Task queue**: Celery (background ingestion + generation jobs)
 - **Agent workflow**: LangGraph StateGraph
-- **LLM**: `openai.AsyncOpenAI`, with **one provider per tier** — `LLM_QUALITY_PROVIDER` and `LLM_FAST_PROVIDER` are each `local` or `openai`, resolved to a concrete endpoint by `app/llm/providers.py`. Embeddings have their own provider and never follow the tiers
+- **LLM**: `openai.AsyncOpenAI`. Three model tiers — quality, fast, embedding — each described by `MODEL_<TIER>_PROVIDER` (`local` | `openai`), `MODEL_<TIER>`, `MODEL_<TIER>_BASE_URL` and a context window, resolved by `app/llm/providers.py`. The provider decides only whether `OPENAI_API_KEY` is sent
 - **Storage**: MinIO (S3-compatible) via boto3
 - **Logging**: structlog (JSON in prod, colored in dev)
 - **UI**: React 19 + Vite 8 + Tailwind 4, in `ui/` (same repo — there is no separate UI repository). **Needs Node ≥ 20.19**; the studio is a pnpm project

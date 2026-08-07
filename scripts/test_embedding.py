@@ -54,16 +54,12 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 async def main() -> None:
     env = _load_env()
 
-    # Embeddings have their own provider — they do not follow the quality tier, because
+    # The embedding model is its own tier — it does not follow the quality one, because
     # VECTOR_DIMENSIONS is baked into the database. See app/llm/providers.py.
-    provider = env.get("EMBEDDING_PROVIDER", "local").strip().lower()
-    if provider == "openai":
-        base_url = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        api_key = env.get("OPENAI_API_KEY", "")
-    else:
-        base_url = env.get("LLM_LOCAL_BASE_URL", "http://localhost:1234/v1")
-        api_key = env.get("LLM_LOCAL_API_KEY", "not-needed")
-    model = env.get("EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5")
+    provider = env.get("MODEL_EMBEDDING_PROVIDER", "local").strip().lower()
+    base_url = env.get("MODEL_EMBEDDING_BASE_URL", "http://localhost:1234/v1")
+    api_key = env.get("OPENAI_API_KEY", "") if provider == "openai" else "not-needed"
+    model = env.get("MODEL_EMBEDDING", "text-embedding-nomic-embed-text-v1.5")
     expected_dims = int(env.get("VECTOR_DIMENSIONS", "1536"))
     print(f"  Provider : {provider}")
 

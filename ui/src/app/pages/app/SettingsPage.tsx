@@ -15,11 +15,22 @@ import { ErrorState, SkeletonPanel, Working } from '../../components/States'
  * ------------------------------------------------------------------ */
 
 const DEFAULTS: LLMSettings = {
-  base_url: 'http://localhost:11434/v1',
-  api_key: '',
-  default_model: 'llama3.1:8b',
-  quality_model: 'llama3.1:70b',
-  fast_model: 'llama3.1:8b',
+  quality_provider: 'local',
+  quality_model: 'local-model',
+  quality_base_url: 'http://localhost:1234/v1',
+  quality_context_window: 21000,
+
+  fast_provider: 'local',
+  fast_model: 'local-model',
+  fast_base_url: 'http://localhost:1234/v1',
+  fast_context_window: 21000,
+
+  embedding_provider: 'local',
+  embedding_model: '',
+  embedding_base_url: 'http://localhost:1234/v1',
+
+  openai_key_set: false,
+
   temperature: 0.2,
   max_tokens: 4096,
   max_react_iterations: 10,
@@ -123,56 +134,118 @@ function SettingsForm({ initial }: { initial: LLMSettings }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      {/* Endpoint */}
-      <Panel title="Endpoint" index="01">
+      {/* Quality tier */}
+      <Panel title="Quality model" index="01">
+        <p className="px-4 pt-3 text-[11.5px] text-ink-mid">
+          Plans, writes, reviews and draws. Everything whose output you read.
+        </p>
         <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
           <TextField
-            label="Base URL"
-            name="base_url"
-            help="OpenAI-compatible base URL. Ollama: http://localhost:11434/v1"
-            value={form.base_url}
-            onChange={v => set('base_url', v)}
+            label="Provider"
+            name="quality_provider"
+            help="local | openai — decides only whether the API key is sent."
+            value={form.quality_provider}
+            onChange={v => set('quality_provider', v)}
           />
           <TextField
-            label="API Key"
-            name="api_key"
-            type="password"
-            help='Leave blank for Ollama or "ollama" for the default local key.'
-            value={form.api_key}
-            onChange={v => set('api_key', v)}
-          />
-        </div>
-      </Panel>
-
-      {/* Models */}
-      <Panel title="Models" index="02">
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
-          <TextField
-            label="Default model"
-            name="default_model"
-            help="Used when no quality tier is specified."
-            value={form.default_model}
-            onChange={v => set('default_model', v)}
-          />
-          <TextField
-            label="Quality model"
+            label="Model"
             name="quality_model"
-            help="Used for high-stakes generation steps."
+            help="Exactly as the endpoint lists it at GET /v1/models."
             value={form.quality_model}
             onChange={v => set('quality_model', v)}
           />
           <TextField
-            label="Fast model"
-            name="fast_model"
-            help="Used for quick, low-cost steps."
-            value={form.fast_model}
-            onChange={v => set('fast_model', v)}
+            label="Base URL"
+            name="quality_base_url"
+            help="Where to connect."
+            value={form.quality_base_url}
+            onChange={v => set('quality_base_url', v)}
+          />
+          <NumericField
+            label="Context window"
+            name="quality_context_window"
+            help="What the model is SERVED with, not its theoretical maximum."
+            value={form.quality_context_window}
+            onChange={v => set('quality_context_window', v)}
+            step={1024}
+            min={1024}
           />
         </div>
       </Panel>
 
+      {/* Fast tier */}
+      <Panel title="Fast model" index="02">
+        <p className="px-4 pt-3 text-[11.5px] text-ink-mid">
+          Classifies, extracts and summarises — thousands of short calls where a small
+          model is indistinguishable and far cheaper.
+        </p>
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+          <TextField
+            label="Provider"
+            name="fast_provider"
+            help="local | openai"
+            value={form.fast_provider}
+            onChange={v => set('fast_provider', v)}
+          />
+          <TextField
+            label="Model"
+            name="fast_model"
+            value={form.fast_model}
+            onChange={v => set('fast_model', v)}
+          />
+          <TextField
+            label="Base URL"
+            name="fast_base_url"
+            value={form.fast_base_url}
+            onChange={v => set('fast_base_url', v)}
+          />
+          <NumericField
+            label="Context window"
+            name="fast_context_window"
+            value={form.fast_context_window}
+            onChange={v => set('fast_context_window', v)}
+            step={1024}
+            min={1024}
+          />
+        </div>
+      </Panel>
+
+      {/* Embeddings */}
+      <Panel title="Embedding model" index="03">
+        <p className="px-4 pt-3 text-[11.5px] text-warn">
+          Changing this is destructive. Its output size is written into the database at
+          migration time, so a different model means re-migrating — which truncates every
+          stored chunk — and re-ingesting every project.
+        </p>
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
+          <TextField
+            label="Provider"
+            name="embedding_provider"
+            help="local | openai"
+            value={form.embedding_provider}
+            onChange={v => set('embedding_provider', v)}
+          />
+          <TextField
+            label="Model"
+            name="embedding_model"
+            value={form.embedding_model}
+            onChange={v => set('embedding_model', v)}
+          />
+          <TextField
+            label="Base URL"
+            name="embedding_base_url"
+            value={form.embedding_base_url}
+            onChange={v => set('embedding_base_url', v)}
+          />
+        </div>
+        <p className="px-4 pb-4 text-[11px] text-ink-dim">
+          OpenAI API key: {form.openai_key_set ? 'configured' : 'not set'} — it is read from
+          the server environment and never returned here.
+        </p>
+      </Panel>
+
       {/* Sampling */}
-      <Panel title="Sampling" index="03">
+      <Panel title="Sampling" index="04">
         <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
           <NumericField
             label="Temperature"

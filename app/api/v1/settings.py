@@ -2,12 +2,24 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.dependencies import DbSession, AdminUser
+from app.dependencies import CurrentUser, DbSession, AdminUser
 from app.models.setting import SystemSetting
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
+
+class Features(BaseModel):
+    """
+    Which optional stages are switched on.
+
+    Readable by any signed-in user, unlike the rest of this router: the studio needs
+    it to render a pipeline honestly. A stage that is off shows as *queued* until it
+    runs and reports itself disabled, which reads as "still to come" for the whole
+    job — the one thing a progress view must never get wrong.
+    """
+
+    diagrams_enabled: bool = False
 
 class LlmConfig(BaseModel):
     """
@@ -25,21 +37,20 @@ class LlmConfig(BaseModel):
     """
 
     quality_provider: str = "local"   # local | openai
+    quality_model: str = "local-model"
+    quality_base_url: str = "http://localhost:1234/v1"
+    quality_context_window: int = 21000
+
     fast_provider: str = "local"
-
-    local_base_url: str = "http://localhost:1234/v1"
-    local_quality_model: str = "local-model"
-    local_fast_model: str = "local-model"
-    local_context_window: int = 21000
-
-    openai_quality_model: str = "gpt-4o-mini"
-    openai_fast_model: str = "gpt-4o-mini"
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_context_window: int = 128_000
-    openai_key_set: bool = False
+    fast_model: str = "local-model"
+    fast_base_url: str = "http://localhost:1234/v1"
+    fast_context_window: int = 21000
 
     embedding_provider: str = "local"
     embedding_model: str = ""
+    embedding_base_url: str = "http://localhost:1234/v1"
+
+    openai_key_set: bool = False
 
     temperature: float = 0.2
     max_tokens: int = 4096
@@ -71,6 +82,16 @@ async def _set(db, key: str, value: dict, user_id: int) -> None:
     await db.commit()
 
 
+# ── Features ──────────────────────────────────────────────────────────────────
+
+@router.get("/features", response_model=Features)
+async def get_features(_: CurrentUser) -> Features:
+    """What optional stages are enabled. Any signed-in user may read this."""
+    from app.config import get_settings
+
+    return Features(diagrams_enabled=get_settings().DIAGRAMS_ENABLED)
+
+
 # ── LLM Config ────────────────────────────────────────────────────────────────
 
 @router.get("/llm", response_model=LlmConfig)
@@ -81,19 +102,18 @@ async def get_llm_config(db: DbSession, _: AdminUser) -> LlmConfig:
     from app.config import get_settings
     s = get_settings()
     return LlmConfig(
-        quality_provider=s.LLM_QUALITY_PROVIDER,
-        fast_provider=s.LLM_FAST_PROVIDER,
-        local_base_url=s.LLM_LOCAL_BASE_URL,
-        local_quality_model=s.LLM_LOCAL_QUALITY_MODEL,
-        local_fast_model=s.LLM_LOCAL_FAST_MODEL,
-        local_context_window=s.LLM_LOCAL_CONTEXT_WINDOW,
-        openai_quality_model=s.OPENAI_QUALITY_MODEL,
-        openai_fast_model=s.OPENAI_FAST_MODEL,
-        openai_base_url=s.OPENAI_BASE_URL,
-        openai_context_window=s.OPENAI_CONTEXT_WINDOW,
+        quality_provider=s.MODEL_QUALITY_PROVIDER,
+        quality_model=s.MODEL_QUALITY,
+        quality_base_url=s.MODEL_QUALITY_BASE_URL,
+        quality_context_window=s.MODEL_QUALITY_CONTEXT_WINDOW,
+        fast_provider=s.MODEL_FAST_PROVIDER,
+        fast_model=s.MODEL_FAST,
+        fast_base_url=s.MODEL_FAST_BASE_URL,
+        fast_context_window=s.MODEL_FAST_CONTEXT_WINDOW,
+        embedding_provider=s.MODEL_EMBEDDING_PROVIDER,
+        embedding_model=s.MODEL_EMBEDDING,
+        embedding_base_url=s.MODEL_EMBEDDING_BASE_URL,
         openai_key_set=bool(s.OPENAI_API_KEY.strip()),
-        embedding_provider=s.EMBEDDING_PROVIDER,
-        embedding_model=s.EMBEDDING_MODEL,
         temperature=s.LLM_TEMPERATURE,
         max_tokens=s.LLM_MAX_TOKENS,
         max_react_iterations=s.REACT_MAX_ITERATIONS,
