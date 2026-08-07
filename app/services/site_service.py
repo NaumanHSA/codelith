@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,6 +82,9 @@ class MergeCounts:
     #: be visible as such rather than inferred from counts.
     inserted_slugs: list[str] = field(default_factory=list)
     orphaned_slugs: list[str] = field(default_factory=list)
+
+
+logger = structlog.get_logger(__name__)
 
 
 class SiteService:
@@ -861,6 +865,50 @@ class SiteService:
             section_slug,
         )
         return detail
+
+    async def delete_page(self, project_id: int, section_slug: str, slug: str, user: User) -> None:
+        """
+        Remove a page from the live site, at the user's explicit request.
+
+        This is the one place a page is deleted, and it is deliberately not what
+        re-analysis does. When the *model* stops proposing a page it becomes
+        `orphaned` — the slug is a URL somebody may have bookmarked, and analysis
+        changing its mind is not a reason to break it. A person choosing to remove a
+        page is a different act, and they get a real delete.
+
+        Only the live page goes. Frozen versions keep their copy: a snapshot is a
+        record of what the site said at a moment, and editing it after the fact would
+        make it worthless as one.
+
+        A page being written right now is refused rather than deleted. The job would
+        finish and write its prose back to a row that no longer exists, which fails
+        deep inside the publisher for reasons nobody could reconstruct from the error.
+        """
+        await self.projects.get(project_id, user)
+
+        site = await self.sites.get_for_project(project_id)
+        if site is None:
+            raise NotFoundError("Documentation site for project", project_id)
+
+        page = await self.pages.get_by_slug(site.id, section_slug, slug, version_id=None)
+        if page is None:
+            raise NotFoundError("Page", f"{section_slug}/{slug}")
+
+        if page.status == PageStatus.GENERATING:
+            raise ValidationError(
+                f"'{section_slug}/{slug}' is being written right now. "
+                "Wait for the run to finish, or cancel it, then delete the page."
+            )
+
+        await self.pages.delete(page.id)
+        logger.info(
+            "doc_page_deleted",
+            project_id=project_id,
+            site_id=site.id,
+            address=f"{section_slug}/{slug}",
+            status=str(page.status),
+            user_id=user.id,
+        )
 
 
 __all__ = ["SiteService", "MergeCounts"]

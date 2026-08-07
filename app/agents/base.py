@@ -163,6 +163,29 @@ class BaseAgent(ABC):
         svc = JobService(self.db)
         await svc.write_log(self.job_id, self.name, level, message, extra or None)
 
+    async def _emit_log_isolated(self, level: str, message: str, **extra: Any) -> None:
+        """
+        Log from inside a concurrent phase, on a session of its own.
+
+        `self.db` belongs to the agent and must not be shared by tasks running under
+        `asyncio.gather` — that is the rule in CLAUDE.md, and the writer's generation
+        phase is marked "no DB access inside" precisely because of it. Progress from
+        that phase still has to reach the reader, so each line opens and closes its
+        own session rather than borrowing one.
+
+        Never raises. A progress line is not worth failing generation for.
+        """
+        from app.db.session import AsyncSessionLocal
+        from app.services.job_service import JobService
+
+        try:
+            async with AsyncSessionLocal() as db:
+                await JobService(db).write_log(
+                    self.job_id, self.name, level, message, extra or None
+                )
+        except Exception:  # noqa: BLE001 — see docstring
+            self.log.debug("progress_log_dropped", message=message)
+
     async def _update_step(self, step_name: str, status: str, output: dict | None = None) -> None:
         from app.db.repositories.job_repo import JobStepRepository
         repo = JobStepRepository(self.db)

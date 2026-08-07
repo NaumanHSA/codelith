@@ -7,7 +7,13 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, Response, Up
 from app.config import get_settings
 from app.dependencies import CurrentUser, DbSession, ManagerUser
 from app.schemas.job import JobCreate, JobOut
-from app.schemas.knowledge import AnalyzeRequest, ComposeRequest, KnowledgeBaseSummary
+from app.schemas.knowledge import (
+    AddPageRequest,
+    AnalyzeRequest,
+    ComposeRequest,
+    KnowledgeBaseSummary,
+    ReviseRequest,
+)
 from app.schemas.project import (
     ProjectCreate,
     ProjectCreateWithSource,
@@ -28,6 +34,8 @@ from app.schemas.site import (
 from app.services.audit_service import AuditService
 from app.services.job_service import JobService
 from app.services.knowledge_service import KnowledgeService
+from app.services.page_builder_service import PageBuilderService
+from app.services.revision_service import RevisionService
 from app.services.project_service import ProjectService
 from app.services.site_service import SiteService
 from app.services.source_service import SourceService
@@ -253,6 +261,130 @@ async def get_site_page(
     content — the reader shows what it is going to cover instead.
     """
     return await SiteService(db).get_page(project_id, section_slug, slug, user, version)
+
+
+@router.post("/{project_id}/site/pages", response_model=SitePageDetail, status_code=201)
+async def add_site_page(
+    project_id: int,
+    req: AddPageRequest,
+    db: DbSession,
+    user: ManagerUser,
+    request: Request,
+):
+    """
+    Add a page the analysis never proposed, from a free-text description.
+
+    Creates it as `planned` — with a title, an intent and the anchor files retrieval
+    says are relevant — and stops there. Nothing is written. Those anchor files are
+    what the whole write depends on, and this is the one moment they can be looked at
+    and rejected before a quality-tier call per heading is spent on them.
+
+    The page is `pinned`, so the next analysis cannot orphan it for the crime of not
+    being in the model's proposal.
+    """
+    page = await PageBuilderService(db).propose(
+        project_id, req.section_slug, req.request, user, title=req.title
+    )
+    await AuditService(db).log(
+        "site.page.add", "doc_page",
+        user_id=user.id, resource_id=page.id,
+        details={
+            "project_id": project_id,
+            "address": f"{page.section_slug}/{page.slug}",
+            "request": req.request[:280],
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+    return await SiteService(db).get_page(project_id, page.section_slug, page.slug, user)
+
+
+@router.post(
+    "/{project_id}/site/pages/{section_slug}/{slug}/revise",
+    response_model=JobOut,
+    status_code=202,
+)
+async def revise_site_page(
+    project_id: int,
+    section_slug: str,
+    slug: str,
+    req: ReviseRequest,
+    db: DbSession,
+    user: ManagerUser,
+    request: Request,
+):
+    """
+    Rewrite one heading of a page, or the whole page, against instructions.
+
+    `anchor` is the `anchor_id` of a `##` heading — the id the studio already stamps
+    on rendered headings. Omit it to revise the entire page.
+
+    Everything refusable is refused here rather than inside the worker: a page still
+    being written, a heading that no longer exists, an anchor matching two headings.
+    The result is a message instead of a job that fails two minutes later.
+    """
+    job = await RevisionService(db).start(
+        project_id, section_slug, slug, user,
+        instructions=req.instructions,
+        anchor=req.anchor,
+    )
+    await AuditService(db).log(
+        "site.page.revise", "job",
+        user_id=user.id, resource_id=job.id,
+        details={
+            "project_id": project_id,
+            "address": f"{section_slug}/{slug}",
+            "anchor": req.anchor,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+    return job
+
+
+@router.get("/{project_id}/site/pages/{section_slug}/{slug}/revisions", response_model=list[JobOut])
+async def list_page_revisions(
+    project_id: int,
+    section_slug: str,
+    slug: str,
+    db: DbSession,
+    user: CurrentUser,
+    anchor: str | None = Query(None, description="Only turns against this heading."),
+):
+    """
+    The revision turns against this page, oldest first.
+
+    This is the conversation. It is not stored in a table of its own — each turn is a
+    job carrying its anchor and its instruction — so a panel reopened after a reload
+    shows the same history the model was given.
+    """
+    return await RevisionService(db).transcript(project_id, section_slug, slug, user, anchor)
+
+
+@router.delete("/{project_id}/site/pages/{section_slug}/{slug}", status_code=204)
+async def delete_site_page(
+    project_id: int,
+    section_slug: str,
+    slug: str,
+    db: DbSession,
+    user: ManagerUser,
+    request: Request,
+) -> None:
+    """
+    Remove a page from the live documentation site.
+
+    Deliberately distinct from what re-analysis does: a page the model stops
+    proposing becomes `orphaned`, because its slug is a URL somebody may have
+    bookmarked. A person asking for it gone is a different act and gets a real
+    delete — audited, because nothing else in this API destroys written prose.
+
+    Frozen versions keep their copy. A page being written is refused.
+    """
+    await SiteService(db).delete_page(project_id, section_slug, slug, user)
+    await AuditService(db).log(
+        "site.page.delete", "doc_page",
+        user_id=user.id, resource_id=project_id,
+        details={"project_id": project_id, "address": f"{section_slug}/{slug}"},
+        ip_address=request.client.host if request.client else None,
+    )
 
 
 @router.post("/{project_id}/compose", response_model=JobOut, status_code=202)

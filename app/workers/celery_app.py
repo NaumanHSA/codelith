@@ -14,6 +14,7 @@ celery_app = Celery(
         "app.workers.tasks.ingestion_tasks",
         "app.workers.tasks.analysis_tasks",
         "app.workers.tasks.composition_tasks",
+        "app.workers.tasks.revision_tasks",
         "app.workers.tasks.generation_tasks",
         "app.workers.tasks.export_tasks",
     ],
@@ -73,6 +74,10 @@ celery_app.conf.update(
         "analysis.*": {"queue": "ingestion"},
         # Composition is generation-shaped work and shares that queue.
         "composition.*": {"queue": "generation"},
+        # A revision is one writing call against a page that exists. Same queue:
+        # it competes for the same model, and a separate one would only let a
+        # revision jump ahead of the composition whose output it edits.
+        "revision.*": {"queue": "generation"},
         "generation.*": {"queue": "generation"},
         "export.*": {"queue": "export"},
     },

@@ -68,9 +68,10 @@ class LinkerAgent(BaseAgent):
             docs: list[dict] = state.get("generated_docs") or []
             site_map: dict = state.get("site_map") or {}
             index = self._index(site_map)
+            site_anchors = await self._site_anchors(project.id, docs)
 
             linked: list[dict] = []
-            resolved = broken = anchors = demoted = 0
+            resolved = broken = anchors = demoted = stale = 0
             report: list[dict] = []
 
             for doc in docs:
@@ -79,12 +80,20 @@ class LinkerAgent(BaseAgent):
                     linked.append(doc)
                     continue
 
-                content, outcome = self._link_one(content, project.id, index, doc)
+                content, outcome = self._link_one(
+                    content, project.id, index, doc, site_anchors
+                )
                 resolved += outcome["resolved"]
                 broken += len(outcome["unresolved"]) + len(outcome["dead_anchors"])
                 anchors += outcome["anchors"]
                 demoted += len(outcome["source_links"])
-                if outcome["unresolved"] or outcome["dead_anchors"] or outcome["source_links"]:
+                stale += len(outcome["stale_fragments"])
+                if (
+                    outcome["unresolved"]
+                    or outcome["dead_anchors"]
+                    or outcome["stale_fragments"]
+                    or outcome["source_links"]
+                ):
                     report.append({"page": doc_key(doc), **outcome})
                 linked.append({**doc, "content_markdown": content})
 
@@ -94,12 +103,13 @@ class LinkerAgent(BaseAgent):
                     "resolved": resolved,
                     "broken": broken,
                     "anchors": anchors,
+                    "stale_fragments": stale,
                     "source_links": demoted,
                     "problems": report,
                 },
             )
 
-            if broken or demoted:
+            if broken or demoted or stale:
                 # Named, not counted: "3 broken links" is not actionable, and the
                 # whole reason this stage is deterministic is that its failures can
                 # be pointed at precisely.
@@ -112,6 +122,14 @@ class LinkerAgent(BaseAgent):
                     for anchor in entry["dead_anchors"]:
                         await self._emit_log(
                             "warning", f"{entry['page']}: no heading matches #{anchor}"
+                        )
+                    # The heading it named has been renamed or removed since. The
+                    # link still reaches the page; only the scroll target is gone.
+                    for target in entry["stale_fragments"]:
+                        await self._emit_log(
+                            "info",
+                            f"{entry['page']}: '{target}' no longer exists — "
+                            "kept the link, dropped the fragment",
                         )
                     # Repaired rather than broken, so it is info: the reader sees a
                     # backticked path instead of a dead link. Still logged, because a
@@ -176,12 +194,61 @@ class LinkerAgent(BaseAgent):
                 index[entry["slug"]] = entry
         return index
 
+    async def _site_anchors(
+        self, project_id: int, docs: list[dict]
+    ) -> dict[str, set[str]]:
+        """
+        Every page of this site by address, mapped to the heading anchors it has.
+
+        Needed because a heading may be renamed — by a revision, or by rewriting the
+        page — and a `#fragment` link from *another* page then points at nothing. The
+        same-page check catches none of those: it only ever sees one page at a time.
+
+        Pages in this run take precedence over the stored copy, since they are what is
+        about to be written.
+        """
+        from app.db.repositories.site_repo import DocPageRepository, DocSiteRepository
+
+        anchors: dict[str, set[str]] = {}
+        site = await DocSiteRepository(self.db).get_for_project(project_id)
+        if site is not None:
+            for page in await DocPageRepository(self.db).list_for_site(site.id):
+                anchors[f"{page.section_slug}/{page.slug}"] = {
+                    anchor_id(h) for h in self._headings(page.content_markdown or "")
+                }
+
+        for doc in docs:
+            if address := doc.get("address"):
+                anchors[address] = {
+                    anchor_id(h)
+                    for h in self._headings(doc.get("content_markdown") or "")
+                }
+        return anchors
+
     def _link_one(
-        self, content: str, project_id: int, index: dict[str, dict], doc: dict
+        self,
+        content: str,
+        project_id: int,
+        index: dict[str, dict],
+        doc: dict,
+        site_anchors: dict[str, set[str]] | None = None,
     ) -> tuple[str, dict]:
         unresolved: list[str] = []
         resolved = 0
         self_address = doc.get("address")
+
+        # A revision may have renamed a heading in this very page. Its own links to
+        # that heading are repointed *before* the dead-anchor check below, or they
+        # are flattened to plain text — the anchor is known, so losing the link
+        # would be throwing away a reference this stage can repair exactly.
+        renamed = 0
+        for old, new in (doc.get("anchor_renames") or {}).items():
+            content, hits = re.subn(
+                rf"(\]\((?:/app/projects/\d+/docs/{re.escape(self_address or '')})?)#{re.escape(old)}\)",
+                rf"\g<1>#{new})",
+                content,
+            )
+            renamed += hits
 
         def replace(match: re.Match[str]) -> str:
             nonlocal resolved
@@ -205,13 +272,31 @@ class LinkerAgent(BaseAgent):
 
         # The same rule for a route the model wrote out by hand rather than as a
         # reference — rarer, since the prompt forbids it, but just as dead.
-        if self_address:
-            content = _PAGE_PATH.sub(
-                lambda m: m.group(0)
-                if f"{m.group(3).rstrip('/')}" != self_address
-                else m.group(1),
-                content,
-            )
+        stale_fragments: list[str] = []
+
+        def check_route(match: re.Match[str]) -> str:
+            target = match.group(3).rstrip("/")
+            if self_address and target == self_address:
+                # A page referencing itself renders as a link that does nothing.
+                return match.group(1)
+
+            fragment = (match.group(4) or "").lstrip("#")
+            if not fragment or site_anchors is None:
+                return match.group(0)
+
+            known = site_anchors.get(target)
+            # Only judged when the target's headings are actually known. An address
+            # this run has never seen is not evidence that the fragment is wrong.
+            if known is None or fragment in known:
+                return match.group(0)
+
+            # The page is right and only the fragment has gone, so the link is kept
+            # and trimmed rather than demoted to text — losing the fragment costs a
+            # scroll position, losing the link costs the reference.
+            stale_fragments.append(f"{target}#{fragment}")
+            return f"[{match.group(1)}](/app/projects/{match.group(2)}/docs/{match.group(3)})"
+
+        content = _PAGE_PATH.sub(check_route, content)
 
         # Heading anchors within this page.
         headings = {anchor_id(h) for h in self._headings(content)}
@@ -231,6 +316,8 @@ class LinkerAgent(BaseAgent):
             "unresolved": unresolved,
             "anchors": len(headings),
             "dead_anchors": dead,
+            "repointed": renamed,
+            "stale_fragments": stale_fragments,
             "source_links": source_links,
         }
 

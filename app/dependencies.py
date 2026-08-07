@@ -21,10 +21,22 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     from app.db.repositories.user_repo import UserRepository
+
+    # `auto_error=False` means FastAPI hands over None rather than raising when the
+    # header is absent, so this has to be checked. Without it every unauthenticated
+    # request died on `None.credentials` and came back **500**, not 401 — which the
+    # studio cannot act on: `api.ts` refreshes once on a 401 and then redirects to
+    # sign-in, so an expired session surfaced as a server error instead of a login.
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         payload = decode_token(credentials.credentials)

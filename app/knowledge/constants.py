@@ -137,6 +137,12 @@ class PageStatus(StrEnum):
 class JobType(StrEnum):
     ANALYSIS = "analysis"
     COMPOSITION = "composition"
+    #: A targeted edit to prose that already exists: one heading of a page, or a
+    #: whole page, rewritten against instructions the user gave. Distinct from
+    #: composition because it neither plans nor chooses what to write — the subject
+    #: is already decided and the existing text is an input, not something to replace
+    #: unseen.
+    REVISION = "revision"
 
 
 __all__ = [
