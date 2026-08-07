@@ -219,10 +219,24 @@ class CompositionWriterAgent(BaseAgent):
             async with semaphore:
                 # Queued sections must not start once the user has cancelled.
                 await check_cancelled()
-                return await self._write_section(
+                name = sections[index].get("name", "Section")
+                # Isolated session: this runs under `gather`, and `self.db` is not
+                # shared. Without these two lines the longest stage of the run reports
+                # nothing at all between starting and finishing.
+                await self._emit_log_isolated(
+                    "info", f"Writing “{name}”",
+                    section=name, page=label, event="section_start",
+                )
+                out = await self._write_section(
                     sections[index], contexts[index], doc_type, project,
                     audience, tone, outline, builder, neighbours, page, settings,
                 )
+                await self._emit_log_isolated(
+                    "info", f"Finished “{name}” ({len(out.split())} words)",
+                    section=name, page=label, event="section_done",
+                    words=len(out.split()),
+                )
+                return out
 
         results = await asyncio.gather(
             *(generate(i) for i in range(len(sections))), return_exceptions=True

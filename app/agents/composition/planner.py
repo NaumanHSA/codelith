@@ -106,7 +106,21 @@ class CompositionPlannerAgent(BaseAgent):
             )
             t.outputs(doc_types=doc_types, pages=len(pages), sections=total)
             await self._update_step(
-                self.name, "completed", {"sections": total, "pages": len(pages)}
+                self.name,
+                "completed",
+                {
+                    "sections": total,
+                    "pages": len(pages),
+                    # The headings themselves, so the studio can show what the writer
+                    # is about to work through — and then which of them are in flight —
+                    # instead of one opaque bar for the longest stage in the run. Names
+                    # only; the plan's `focus` and `key_files` are large and are already
+                    # written to artifacts.
+                    "outline": {
+                        address: [s.get("name", "") for s in plan.get("sections") or []]
+                        for address, plan in plans.items()
+                    },
+                },
             )
 
             return {"documentation_plan": plans}
