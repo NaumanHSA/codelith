@@ -12,52 +12,68 @@ import { Button, Meter } from '../ui'
  * The reader and the operator need the same facts, so this shows the
  * stage narration the jobs page shows rather than the word "writing…".
  *
- * Everything here derives from the server: a page carries `status` and
- * `job_id`, both set when a job claims it. That matters because the
- * alternative — remembering locally which button you pressed — is wrong
- * the moment you arrive from anywhere else. Open the page in a second
- * tab, or come back to it from the jobs list, and local state says
- * nothing is happening while the page is being rewritten underneath you.
+ * **The job id does not come from the page alone.** `doc_pages.job_id` is
+ * set when the *worker* claims the page, which is a second or two after
+ * the API returns the job — so a page read in that window is still
+ * `planned` with no job on it, and deriving everything from the row left
+ * the reader staring at "not written yet" with nothing moving. The caller
+ * therefore passes the job it just started, and that wins until the row
+ * catches up.
  *
- * Two states worth separating:
+ * Three states worth separating:
  *
- *   in flight — the job is live. Poll it, narrate it, offer the run.
- *   stranded  — the page still says `generating` but its job has already
- *               reached a terminal status, or it has no job at all. The
- *               worker died mid-write. Without this the page spins for
- *               ever and looks like slow progress rather than a failure.
+ *   starting  — a job exists, the page has not been claimed yet.
+ *   in flight — the job is live and owns the page.
+ *   stranded  — the page says `generating` but its job has reached a
+ *               terminal status, or there is no job at all. The worker
+ *               died mid-write. Without this the page spins for ever and
+ *               looks like slow progress rather than a failure.
  * ------------------------------------------------------------------ */
 
 export default function PageProgress({
-  projectId, page, onFinished, onRetry, canGenerate,
+  projectId, page, jobId, onFinished, onRetry, canGenerate,
 }: {
   projectId: number
   page: SitePage
+  /** The page's own job, or the one just started for it — whichever exists. */
+  jobId: number | null
   /** The job reached a terminal status — reload the map and the open page. */
   onFinished: () => void
   onRetry: () => void
   canGenerate: boolean
 }) {
   const navigate = useNavigate()
-  const { job, error } = useJob(page.job_id)
+  const { job, error } = useJob(jobId)
 
-  // Fire once per job, on the transition into a terminal status. `onFinished`
-  // is a fresh closure every render, so it is held in a ref rather than
-  // listed as a dependency — otherwise the effect re-runs on every poll and
-  // reloads the site in a loop.
+  // Fire once, on the *transition* into a terminal status. Three things guard it,
+  // because getting this wrong is a reload loop rather than a cosmetic bug:
+  //
+  //  - `onFinished` is held in a ref, not listed as a dependency, or the effect
+  //    re-runs on every poll.
+  //  - `announced` stops it firing twice for the same job.
+  //  - `wasLive` stops it firing at all for a job that had already finished when
+  //    this mounted. Without it, anything that renders this against a completed run
+  //    reloads the page, remounts, and announces again — which is exactly what a
+  //    written page's provenance `job_id` used to do, forever.
   const finished = useRef(onFinished)
   finished.current = onFinished
   const announced = useRef<number | null>(null)
+  const wasLive = useRef(false)
   useEffect(() => {
-    if (!job || !isTerminal(job.status)) return
-    if (announced.current === job.id) return
+    if (!job) return
+    if (!isTerminal(job.status)) {
+      wasLive.current = true
+      return
+    }
+    if (!wasLive.current || announced.current === job.id) return
     announced.current = job.id
     finished.current()
   }, [job])
 
-  // No job recorded at all, or a job that has stopped while the page still
-  // claims to be generating. Either way nothing is coming.
-  const stranded = page.job_id == null || (job != null && isTerminal(job.status))
+  // Nothing is coming: either no job was ever recorded against a page that claims to
+  // be generating, or the job that owned it has stopped without finishing it.
+  const stranded =
+    page.status === 'generating' && (jobId == null || (job != null && isTerminal(job.status)))
 
   if (stranded) {
     return (
@@ -92,22 +108,26 @@ export default function PageProgress({
   const done = steps.filter(s => s.status === 'completed').length
   const pct = denominator ? Math.min(100, Math.round((done / denominator) * 100)) : 0
 
-  // The stage being worked on now, else the last one that finished — a job
-  // between stages should not blank the line it was just showing.
+  // The stage being worked on now, else the last one that finished — a job between
+  // stages should not blank the line it was just showing.
   const active = [...steps].reverse().find(s => s.status === 'running') ?? steps[steps.length - 1]
 
+  // Claimed by the worker, or still in the gap between starting and being claimed.
+  const claimed = page.status === 'generating'
+
   return (
-    <section className="mb-4 border border-rule bg-sunk px-3 py-2.5">
+    <section className="mb-4 border border-hot/40 bg-hot-wash/50 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="tag text-hot-ink">being written now</span>
-        <Meter pct={pct} segments={14} />
-        <span className="tag text-ink-dim">
-          {denominator ? `${done}/${denominator}` : '…'}
+        <span className="tag flex items-center gap-1.5 text-hot-ink">
+          <span className="anim-blink block size-[6px] rounded-full bg-hot" />
+          {claimed ? 'being written now' : 'starting…'}
         </span>
+        <Meter pct={pct} segments={14} />
+        <span className="tag text-ink-dim">{denominator ? `${done}/${denominator}` : '…'}</span>
         {job && (
           <button
             onClick={() => navigate(`/app/projects/${projectId}/jobs/${job.id}`)}
-            className="tag ml-auto text-hot-ink hover:underline"
+            className="tag ml-auto border border-hot/40 px-1.5 py-[2px] text-hot-ink transition-colors hover:bg-hot hover:text-paper"
           >
             View run #{job.id} →
           </button>
@@ -119,7 +139,7 @@ export default function PageProgress({
           ? error
           : active
             ? `${agentLabel(active.name)} — ${describeStep(active) ?? 'working'}`
-            : 'Starting…'}
+            : 'Waiting for the worker to pick this up…'}
       </p>
     </section>
   )

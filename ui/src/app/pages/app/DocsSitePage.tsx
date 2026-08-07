@@ -12,10 +12,13 @@ import {
 import type { SitePage, SitePageDetail } from '../../lib/types'
 import { Button, Chip, Meter } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
+import ConfirmDelete from '../../components/ConfirmDelete'
+import AddPage from '../../components/docs/AddPage'
 import Coverage from '../../components/docs/Coverage'
 import PageDiff from '../../components/docs/PageDiff'
 import PageProgress from '../../components/docs/PageProgress'
 import PageProvenance from '../../components/docs/PageProvenance'
+import RevisePanel, { type ReviseTarget } from '../../components/docs/RevisePanel'
 import SiteNav from '../../components/docs/SiteNav'
 import SiteToolbar from '../../components/docs/SiteToolbar'
 import Toc from '../../components/docs/Toc'
@@ -59,6 +62,18 @@ export default function DocsSitePage() {
   const [generatingSection, setGeneratingSection] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // The job we just started, and the addresses it claimed. `doc_pages.job_id` is only
+  // set once the *worker* picks the task up, a second or two after the API returns —
+  // and until then the row still reads `planned` with no job on it. Without holding
+  // this, pressing Write leaves the reader on "not written yet" with nothing moving.
+  const [started, setStarted] = useState<{ jobId: number; addresses: string[] } | null>(null)
+  const [doomed, setDoomed] = useState<SitePage | null>(null)
+  // The panel is scoped to whatever heading was last clicked. Setting a different
+  // target is what clears the conversation — see RevisePanel.
+  const [revising, setRevising] = useState<ReviseTarget | null>(null)
+  // Which heading a run is actually rewriting, as opposed to which one the panel
+  // happens to be open against. The document shows the difference.
+  const [revisingBusy, setRevisingBusy] = useState(false)
 
   // Nothing in a frozen snapshot can be regenerated: it is a record, not a draft.
   const canGenerate = can('manager') && !version
@@ -88,9 +103,14 @@ export default function DocsSitePage() {
   const results = useMemo(() => searchPages(site ?? null, query), [site, query])
   const cov = useMemo(() => coverage(site ?? null), [site])
 
-  // While anything is being written, the map is out of date the moment a
-  // page lands. Poll until nothing is in flight.
-  const busy = (site?.page_counts?.generating ?? 0) > 0
+  // While anything is being written, the map is out of date the moment a page lands.
+  // Poll until nothing is in flight.
+  //
+  // `started` is part of the condition, not decoration: polling only on the server's
+  // count meant that pressing Write, reloading before the worker had claimed the page,
+  // and seeing `generating: 0` stopped the polling permanently — the one moment it is
+  // most needed. The local marker covers exactly that gap.
+  const busy = (site?.page_counts?.generating ?? 0) > 0 || started !== null
   const reloadRef = useRef(reload)
   reloadRef.current = reload
   useEffect(() => {
@@ -99,6 +119,20 @@ export default function DocsSitePage() {
     return () => clearInterval(t)
   }, [busy])
 
+  // `started` exists only to bridge the gap between the API returning a job and the
+  // worker claiming the pages. Once the server shows those addresses have left
+  // `planned`, it has taken over and the local marker must go — otherwise navigating
+  // away mid-run leaves it set and the map polling every few seconds for ever.
+  useEffect(() => {
+    if (!started || !site) return
+    const stillPlanned = site.sections.some(s =>
+      s.pages.some(
+        p => started.addresses.includes(`${p.section_slug}/${p.slug}`) && p.status === 'planned',
+      ),
+    )
+    if (!stillPlanned) setStarted(null)
+  }, [site, started])
+
   // The open page finished being written: pull both the map (its status and
   // word count changed) and the page itself (it now has prose). Sitting on a
   // page waiting for it is the common case, and having to reload by hand is
@@ -106,6 +140,11 @@ export default function DocsSitePage() {
   const reloadPageRef = useRef(reloadPage)
   reloadPageRef.current = reloadPage
   const pageFinished = () => {
+    // The job is over, so the local marker has done its job — drop it and let the
+    // server's own `generating` count decide from here.
+    setStarted(null)
+    setGenerating(null)
+    setGeneratingSection(null)
     reloadRef.current()
     reloadPageRef.current()
   }
@@ -114,6 +153,12 @@ export default function DocsSitePage() {
   const scroller = useRef<HTMLDivElement>(null)
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 })
+  }, [address])
+
+  // Navigating away ends the conversation. Keeping it open against a heading the
+  // reader has left would mean the next instruction edits a page they cannot see.
+  useEffect(() => {
+    setRevising(null)
   }, [address])
 
   const suffix = version ? `?v=${encodeURIComponent(version)}` : ''
@@ -130,6 +175,12 @@ export default function DocsSitePage() {
         human_review: false,
       })
       track(job, project?.name)
+      // The resolved scope, not what was asked for: "architecture" expands to the
+      // pages it actually claimed, and those are the ones to show progress on.
+      setStarted({
+        jobId: job.id,
+        addresses: job.scope?.pages?.length ? job.scope.pages : slugs,
+      })
       reload()
     } catch (e) {
       setActionError(
@@ -142,6 +193,43 @@ export default function DocsSitePage() {
   const generatePage = (p: SitePage) => {
     const addr = addressOf(p)
     void compose([addr], () => setGenerating(addr), () => setGenerating(null))
+  }
+
+  const deletePage = async () => {
+    if (!doomed) return
+    await api.deleteSitePage(id, doomed.section_slug, doomed.slug)
+    // Navigating away first: staying on a page that no longer exists would show the
+    // reader a 404 they caused themselves.
+    if (current?.address === `${doomed.section_slug}/${doomed.slug}`) {
+      navigate(`/app/projects/${id}/docs/${doomed.section_slug}${suffix}`)
+    }
+    setDoomed(null)
+    reload()
+  }
+
+  const exportPage = async (p: SitePage) => {
+    setActionError(null)
+    try {
+      const detail = await api.sitePage(id, p.section_slug, p.slug, version)
+      const body = detail.content_markdown
+      if (!body) {
+        setActionError('That page has nothing written in it yet.')
+        return
+      }
+      // A title the file can be opened by, then the prose exactly as stored.
+      const markdown = `# ${detail.title}
+
+${body}
+`
+      const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${p.section_slug}-${p.slug}.md`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not export that page.')
+    }
   }
 
   const generateSection = (slug: string) =>
@@ -304,6 +392,29 @@ export default function DocsSitePage() {
         </div>
       )}
 
+      <ConfirmDelete
+        open={doomed !== null}
+        onClose={() => setDoomed(null)}
+        onConfirm={deletePage}
+        title={`Delete “${doomed?.title ?? ''}”?`}
+        actionLabel="Delete the page"
+        body={
+          <>
+            <p>
+              This removes <code className="text-ink">{doomed?.section_slug}/{doomed?.slug}</code>{' '}
+              from the site.{' '}
+              {doomed?.status === 'ready' || doomed?.status === 'stale'
+                ? 'Its written prose goes with it.'
+                : 'It has not been written yet.'}
+            </p>
+            <p className="mt-2">
+              Frozen versions keep their copy. Analysis may propose the page again on a
+              later run, and links other pages already made to it will stop resolving.
+            </p>
+          </>
+        }
+      />
+
       {showCoverage ? (
         <div className="mx-auto w-full max-w-[1100px] p-5">
           <Coverage
@@ -337,16 +448,34 @@ export default function DocsSitePage() {
           the reading measure matters more.
         */
         <div ref={scroller} className="min-w-0 flex-1 p-5">
-          <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_200px]">
+          <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 lg:grid-cols-[288px_minmax(0,1fr)] xl:grid-cols-[288px_minmax(0,1fr)_200px]">
             <aside className="lg:sticky lg:top-[86px] lg:h-fit lg:self-start">
-              <SiteNav
-                section={activeSection}
-                activeSlug={pageSlug}
-                onOpen={p => open(p.section_slug, p)}
-                onGenerate={generatePage}
-                generating={generating}
-                canGenerate={canGenerate}
-              />
+              <div className="border border-rule bg-panel">
+                <SiteNav
+                  section={activeSection}
+                  activeSlug={pageSlug}
+                  onOpen={p => open(p.section_slug, p)}
+                  onGenerate={generatePage}
+                  onDelete={setDoomed}
+                  onExport={exportPage}
+                  generating={generating}
+                  canGenerate={canGenerate}
+                  bare
+                />
+              </div>
+              {canGenerate && activeSection && (
+                <div className="mt-2">
+                  <AddPage
+                    projectId={id}
+                    sectionSlug={activeSection.slug}
+                    sectionTitle={activeSection.title}
+                    onCreated={reload}
+                    onOpen={p => navigate(
+                      `/app/projects/${id}/docs/${p.section_slug}/${p.slug}${suffix}`,
+                    )}
+                  />
+                </div>
+              )}
             </aside>
 
             <div className="min-w-0">
@@ -362,10 +491,42 @@ export default function DocsSitePage() {
                   flat={current}
                   page={page ?? null}
                   projectId={id}
+                  // How many pages of this section are still unwritten. "Write the
+                  // section" is the cheaper unit — one strategy call and one planning
+                  // call cover all of them — so the offer is sized honestly rather
+                  // than nudging when there is nothing to batch.
+                  sectionRemaining={
+                    activeSection?.pages.filter(p => isPending(p.status)).length ?? 0
+                  }
+                  onGenerateSection={() => generateSection(current.section.slug)}
+                  generatingSection={generatingSection === current.section.slug}
+                  // ONLY the run we just started. `page.job_id` is provenance — every
+                  // written page has one, naming the job that wrote it — so treating a
+                  // non-null value as "in flight" made every finished page mount the
+                  // progress panel, poll a long-completed job, fire its completion
+                  // handler, reload, remount, and do it again. PageProgress falls back
+                  // to `page.job_id` itself, but only once the row says `generating`.
+                  startedJobId={
+                    started?.addresses.includes(current.address) ? started.jobId : null
+                  }
                   onGenerate={() => generatePage(current.page)}
                   generating={generating === current.address}
                   canGenerate={canGenerate}
                   onFinished={pageFinished}
+                  onRevise={
+                    // No rewriting a frozen snapshot, and none without write access.
+                    canGenerate
+                      ? (anchor, title) =>
+                          setRevising({
+                            sectionSlug: current.page.section_slug,
+                            slug: current.page.slug,
+                            anchor,
+                            title,
+                          })
+                      : undefined
+                  }
+                  revisingAnchor={revising?.anchor ?? null}
+                  busyAnchor={revisingBusy ? (revising?.anchor ?? null) : null}
                 />
               )}
 
@@ -406,6 +567,25 @@ export default function DocsSitePage() {
           </div>
         </div>
       )}
+
+      {/* Docked to the right edge of the window rather than placed in the reading
+          grid. In the grid it displaced the heading list and narrowed the prose;
+          out here it uses margin that was empty anyway, and can be wide enough to
+          read a conversation in. Fixed, so it stays put while the page scrolls. */}
+      {revising && (
+        <div className="fixed top-0 right-0 bottom-0 z-30 hidden w-[380px] shadow-2xl lg:block xl:w-[440px]">
+          <RevisePanel
+            projectId={id}
+            target={revising}
+            onClose={() => setRevising(null)}
+            onApplied={pageFinished}
+            onBusyChange={setRevisingBusy}
+            onAnchorMoved={(anchor, title) =>
+              setRevising(r => (r ? { ...r, anchor, title } : r))
+            }
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -443,24 +623,39 @@ function SectionTab({
  * ------------------------------------------------------------------ */
 
 function PageBody({
-  flat, page: detail, projectId, onGenerate, generating, canGenerate, onFinished,
+  flat, page: detail, projectId, startedJobId, onGenerate, generating, canGenerate,
+  onFinished, sectionRemaining, onGenerateSection, generatingSection,
+  onRevise, revisingAnchor, busyAnchor,
 }: {
   flat: FlatPage
   page: SitePageDetail | null
   projectId: number
+  /** A run started from this session that claimed this page. Not its provenance. */
+  startedJobId: number | null
   onGenerate: () => void
   generating: boolean
   canGenerate: boolean
   onFinished: () => void
+  /** Unwritten pages in this section, including this one. */
+  sectionRemaining: number
+  onGenerateSection: () => void
+  generatingSection: boolean
+  /** Undefined on a frozen version or without write access — no button is drawn. */
+  onRevise?: (anchor: string, title: string) => void
+  revisingAnchor: string | null
+  busyAnchor: string | null
 }) {
   const { page, section } = flat
   const pending = isPending(page.status)
   const markdown = detail?.content_markdown ?? null
   const previous = detail?.previous_markdown ?? null
   const [showDiff, setShowDiff] = useState(false)
-  // Server-derived, so it is true however you arrived at this page — including
-  // in a second tab, or after a reload that lost whatever button you pressed.
-  const inFlight = page.status === 'generating'
+  // The server says it is being written, or we just started a run against it. A
+  // written page's `job_id` is deliberately not part of this — see the caller.
+  const claimed = page.status === 'generating'
+  const inFlight = claimed || startedJobId != null
+  // Poll the row's own job once it has been claimed; before that, the one we started.
+  const jobId = claimed ? (page.job_id ?? startedJobId) : startedJobId
 
   return (
     <>
@@ -491,6 +686,7 @@ function PageBody({
         <PageProgress
           projectId={projectId}
           page={page}
+          jobId={jobId}
           onFinished={onFinished}
           onRetry={onGenerate}
           canGenerate={canGenerate}
@@ -517,7 +713,13 @@ function PageBody({
       ) : markdown ? (
         <article className="doc min-w-0 border border-rule bg-panel px-5 py-4 md:px-8 md:py-6">
           <Suspense fallback={<SkeletonPanel rows={8} />}>
-            <DocMarkdown>{markdown}</DocMarkdown>
+            <DocMarkdown
+              onRevise={onRevise}
+              selectedAnchor={revisingAnchor}
+              busyAnchor={busyAnchor}
+            >
+              {markdown}
+            </DocMarkdown>
           </Suspense>
         </article>
       ) : (
@@ -551,10 +753,36 @@ function PageBody({
           )}
 
           {pending && canGenerate && !inFlight && (
-            <div className="mt-5">
-              <Button variant="hot" onClick={onGenerate} disabled={generating}>
-                {generating ? 'writing…' : 'Write this page'}
-              </Button>
+            // The section is the primary offer when there is more than one page left
+            // in it. A run pays for its strategy and its planning once regardless of
+            // how many pages it covers, so writing them one at a time buys the same
+            // two calls over and over — measured at ~29s of pure overhead per page.
+            // Writing a single page stays available, just not as the default.
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {sectionRemaining > 1 ? (
+                <>
+                  <Button
+                    variant="hot"
+                    onClick={onGenerateSection}
+                    disabled={generatingSection || generating}
+                  >
+                    {generatingSection
+                      ? 'writing the section…'
+                      : `Write all ${sectionRemaining} unwritten pages in ${section.title}`}
+                  </Button>
+                  <Button variant="ghost" onClick={onGenerate} disabled={generating || generatingSection}>
+                    {generating ? 'writing…' : 'Just this page'}
+                  </Button>
+                  <span className="tag w-full text-ink-dim">
+                    One run plans the whole section together, so the pages divide the
+                    material between them instead of each deciding alone.
+                  </span>
+                </>
+              ) : (
+                <Button variant="hot" onClick={onGenerate} disabled={generating}>
+                  {generating ? 'writing…' : 'Write this page'}
+                </Button>
+              )}
             </div>
           )}
         </section>

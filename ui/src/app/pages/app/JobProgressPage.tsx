@@ -10,10 +10,11 @@ import {
 import { confidenceLabel, docTypeTitle } from '../../lib/docTypes'
 import { progressStages, stagePurpose } from '../../lib/narrate'
 import { describeJobScope } from '../../lib/site'
-import { isTerminal, type Doc, type Job, type JobLog, type KnowledgeBase } from '../../lib/types'
+import { isTerminal, type Doc, type JobLog, type KnowledgeBase, type Site } from '../../lib/types'
 import { Button, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { ErrorState, SkeletonPanel } from '../../components/States'
 import PipelineTree from '../../components/jobs/PipelineTree'
+import JobTargets from '../../components/jobs/JobTargets'
 
 const LEVEL_COLOR: Record<string, string> = {
   error: 'text-[var(--bad)]',
@@ -102,6 +103,10 @@ export default function JobProgressPage() {
   const [confirming, setConfirming] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [docs, setDocs] = useState<Doc[]>([])
+  const [site, setSite] = useState<Site | null>(null)
+  // Null until known. A stage must never be drawn as enabled on a guess — showing
+  // optional work as merely queued is the failure this is here to prevent.
+  const [diagramsEnabled, setDiagramsEnabled] = useState<boolean | null>(null)
   const [kb, setKb] = useState<KnowledgeBase | null>(null)
 
   // Documents only exist once the job finished writing them.
@@ -123,6 +128,33 @@ export default function JobProgressPage() {
       .then(setKb)
       .catch(() => setKb(null))
   }, [job?.status, job?.id, job?.job_type, pid])
+
+  // The target list needs page titles and — while the run is live — each page's
+  // current status, so this follows the job rather than being fetched once. It is one
+  // request per poll against a map that is already cached client-side.
+  const isComposition = job?.job_type === 'composition'
+  useEffect(() => {
+    if (!isComposition || !Number.isFinite(pid)) return
+    let alive = true
+    api
+      .site(pid, null)
+      .then(s => alive && setSite(s))
+      .catch(() => alive && setSite(null))
+    return () => {
+      alive = false
+    }
+  }, [pid, isComposition, job?.status, (job?.steps ?? []).length])
+
+  useEffect(() => {
+    let alive = true
+    api
+      .features()
+      .then(f => alive && setDiagramsEnabled(f.diagrams_enabled))
+      .catch(() => alive && setDiagramsEnabled(null))
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // `gate` never reports a step, so it must not sit in the denominator —
   // counting it left a finished composition showing 8/9 and 89%.
@@ -212,7 +244,7 @@ export default function JobProgressPage() {
 
       {actionError && <ErrorState message={actionError} compact />}
 
-      <JobTargets job={job} projectId={pid} />
+      <JobTargets job={job} site={site} projectId={pid} projectName={job.project_name} />
 
       {/* progress strip */}
       <div className="mb-3 border border-rule bg-panel">
@@ -250,7 +282,7 @@ export default function JobProgressPage() {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_360px]">
         <div className="flex min-w-0 flex-col gap-3">
-          <PipelineTree job={job} />
+          <PipelineTree job={job} diagramsEnabled={diagramsEnabled} logs={logs} />
 
           {job.status === 'completed' && job.job_type === 'analysis' && (
             <Panel
@@ -327,38 +359,6 @@ export default function JobProgressPage() {
           {error && <p className="tag mt-2 text-[var(--warn)]">{error} · retrying</p>}
         </div>
       </div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ *
- * What this run is actually writing.
- *
- * "Architecture · 4 pages" tells you the shape of the run but not its
- * subject, and every composition looks alike in a list. The addresses
- * are already on the job — `scope.pages` — and each one is a link to
- * the page it will become, so a run is one click from its output
- * whether or not it has finished.
- * ------------------------------------------------------------------ */
-function JobTargets({ job, projectId }: { job: Job; projectId: number }) {
-  const pages = job.scope?.pages ?? []
-  if (!pages.length) return null
-
-  return (
-    <div className="mb-3 border border-rule bg-panel px-3 py-2">
-      <span className="tag text-ink-dim">writing</span>
-      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-        {pages.map(addr => (
-          <li key={addr}>
-            <Link
-              to={`/app/projects/${projectId}/docs/${addr}`}
-              className="font-mono text-[11px] text-ink-mid transition-colors hover:text-hot-ink"
-            >
-              {addr}
-            </Link>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

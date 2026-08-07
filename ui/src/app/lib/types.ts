@@ -299,13 +299,36 @@ export interface Doc {
   created_at: string
 }
 
+/**
+ * What each model tier is pointed at.
+ *
+ * Shaped per tier, because the tiers choose their provider independently — the
+ * quality one can be hosted while the fast one stays local. `api_key` is never
+ * returned; `openai_key_set` says only whether one is configured.
+ */
 export interface LLMSettings {
-  base_url: string
-  api_key: string
-  default_model: string
+  quality_provider: string
   quality_model: string
+  quality_base_url: string
+  quality_context_window: number
+
+  fast_provider: string
   fast_model: string
+  fast_base_url: string
+  fast_context_window: number
+
+  embedding_provider: string
+  embedding_model: string
+  embedding_base_url: string
+
+  openai_key_set: boolean
+
   temperature: number
   max_tokens: number
   max_react_iterations: number
+}
+
+/** Optional stages that may be switched off in config. */
+export interface Features {
+  diagrams_enabled: boolean
 }

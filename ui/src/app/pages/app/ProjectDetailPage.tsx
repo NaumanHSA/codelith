@@ -361,7 +361,19 @@ export default function ProjectDetailPage() {
 
           <Panel
             title="Recent jobs"
-            action={<span className="tag text-ink-dim">{p.stats?.job_count ?? 0} total</span>}
+            action={
+              <span className="flex items-center gap-2">
+                <span className="tag text-ink-dim">{p.stats?.job_count ?? 0} total</span>
+                {/* Ten rows is a summary, not the record. Everything that ever ran —
+                    including the failures worth looking at — lives on the jobs page. */}
+                <Link
+                  to={`/app/jobs?project=${p.id}`}
+                  className="tag text-hot-ink transition-colors hover:underline"
+                >
+                  all →
+                </Link>
+              </span>
+            }
           >
             {jobs.loading && <SkeletonPanel rows={3} />}
             {!jobs.loading && !jobs.data?.length && (

@@ -24,6 +24,13 @@ export const EXPECTED_STAGES: Record<string, string[]> = {
     'site_planner_agent',
     'kb_persister_agent',
   ],
+  // A revision is three nodes: it neither plans nor chooses what to write, because
+  // the subject is already decided and the existing prose is an input.
+  revision: [
+    'reviser_agent',
+    'linker_agent',
+    'publisher_agent',
+  ],
   composition: [
     'kb_loader_agent',
     'composition_strategy_agent',
@@ -74,6 +81,7 @@ const PURPOSE: Record<string, string> = {
   composition_strategy: 'Deciding what each document should cover',
   composition_planner: 'Planning sections',
   composition_writer: 'Writing the prose',
+  reviser: 'Applying the change you asked for',
   linker: 'Resolving cross-page links and checking every anchor',
   diagram: 'Generating diagrams',
   qa: 'Checking every claim against source',
@@ -171,6 +179,14 @@ const NARRATORS: Record<string, Narrator> = {
   composition_writer: o => {
     const d = num(o.doc_count)
     return d === undefined ? null : `Wrote ${countLabel(d, 'document')}`
+  },
+
+  reviser: o => {
+    if (typeof o.error === 'string') return o.error
+    const section = typeof o.section === 'string' ? o.section : null
+    const words = num(o.words)
+    if (!section) return null
+    return words === undefined ? `Revised “${section}”` : `Revised “${section}” — ${words} words`
   },
 
   linker: o => {

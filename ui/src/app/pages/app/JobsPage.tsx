@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
@@ -23,26 +23,39 @@ const FILTERS = ['all', 'running', 'completed', 'failed', 'cancelled'] as const
 export default function JobsPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { data, error, loading, reload } = useAsync(s => api.jobs(100, 0, null, s), [])
+  const [params, setParams] = useSearchParams()
+  // Arrived from a project's "all →". Kept in the URL so the view is linkable and
+  // survives a reload, rather than being lost the moment you refresh.
+  const projectId = Number(params.get('project')) || null
+  const { data, error, loading, reload } = useAsync(s => api.jobs(200, 0, null, s), [])
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all')
   const [doomed, setDoomed] = useState<Job | null>(null)
 
+  const scoped = useMemo(
+    () => (data ?? []).filter(j => !projectId || j.project_id === projectId),
+    [data, projectId],
+  )
   const jobs = useMemo(
-    () => (data ?? []).filter(j => filter === 'all' || j.status === filter),
-    [data, filter],
+    () => scoped.filter(j => filter === 'all' || j.status === filter),
+    [scoped, filter],
   )
   const counts = useMemo(() => {
     const out: Record<string, number> = {}
-    for (const j of data ?? []) out[j.status] = (out[j.status] ?? 0) + 1
+    for (const j of scoped) out[j.status] = (out[j.status] ?? 0) + 1
     return out
-  }, [data])
+  }, [scoped])
+  const projectName = scoped[0]?.project_name ?? null
 
   return (
     <div className="mx-auto max-w-[1100px] p-5">
       <PageHead
         index="04"
         title="Jobs"
-        sub="Every analysis and composition run, newest first."
+        sub={
+          projectId
+            ? `Every run for ${projectName ?? `project ${projectId}`}, newest first.`
+            : "Every run, newest first — analysis, composition and revision."
+        }
         right={
           <Button variant="ghost" onClick={reload}>
             ↻ Refresh
@@ -51,6 +64,18 @@ export default function JobsPage() {
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {projectId && (
+          <button
+            onClick={() => {
+              const next = new URLSearchParams(params)
+              next.delete('project')
+              setParams(next, { replace: true })
+            }}
+            className="tag border border-hot bg-hot-wash px-1.5 py-[3px] text-hot-ink transition-colors hover:bg-hot hover:text-paper"
+          >
+            {projectName ?? `project ${projectId}`} ✕
+          </button>
+        )}
         {FILTERS.map(f => (
           <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
             {f}

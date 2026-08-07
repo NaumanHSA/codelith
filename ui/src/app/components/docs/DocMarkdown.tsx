@@ -62,9 +62,23 @@ function Mermaid({ code }: { code: string }) {
   )
 }
 
-const heading = (depth: 1 | 2 | 3) =>
+/**
+ * A `##` is the unit a reader points at.
+ *
+ * It is what the planner decides, what the reader sees as "a section", and what
+ * `anchor_id` addresses — so it is the only depth that carries a rewrite affordance.
+ * `#` is the page and `###` is the writer's own sub-structure inside a section;
+ * neither maps onto something the pipeline can revise on its own.
+ */
+const heading = (
+  depth: 1 | 2 | 3,
+  revise?: (anchor: string, title: string) => void,
+  selected?: string | null,
+  busy?: string | null,
+) =>
   function H({ children }: { children?: React.ReactNode }) {
     const text = String(children)
+    const anchor = anchorId(text)
     const Tag = `h${depth}` as 'h1' | 'h2' | 'h3'
     const size =
       depth === 1
@@ -72,21 +86,74 @@ const heading = (depth: 1 | 2 | 3) =>
         : depth === 2
           ? 'mt-7 mb-2.5 border-b border-rule pb-1.5 text-[16px]'
           : 'mt-5 mb-2 text-[13.5px]'
+
+    const revisable = depth === 2 && Boolean(revise)
+    const isSelected = revisable && selected === anchor
+    // Selected is not the same as working. The chip used to say "revising" for as
+    // long as the panel was open against a heading, which meant it still said so
+    // after the rewrite had landed — the reader had no way to tell a finished
+    // section from one still being written.
+    const isBusy = revisable && busy === anchor
+
     return (
-      <Tag id={anchorId(text)} className={`scroll-mt-28 font-bold tracking-tight text-ink ${size}`}>
-        {children}
+      <Tag
+        id={anchor}
+        className={`group/h scroll-mt-28 font-bold tracking-tight text-ink ${size} ${
+          revisable ? 'flex items-center gap-2 pr-1' : ''
+        } ${isSelected ? 'border-l-[3px] border-l-hot -ml-3 pl-[9px] bg-hot-wash/50' : ''}`}
+      >
+        <span className="min-w-0 flex-1">{children}</span>
+        {revisable && (
+          <button
+            type="button"
+            onClick={() => revise?.(anchor, text)}
+            title={`Rewrite “${text}” with AI`}
+            aria-label={`Rewrite ${text} with AI`}
+            // Always visible. A hover-only control tells nobody the feature exists,
+            // and on a touch screen there is no hover at all.
+            className={`tag shrink-0 border px-1.5 py-[2px] font-normal transition-colors ${
+              isBusy
+                ? 'border-hot bg-hot text-paper'
+                : isSelected
+                  ? 'border-hot bg-hot-wash text-hot-ink'
+                  : 'border-rule bg-panel text-ink-dim hover:border-hot hover:bg-hot-wash hover:text-hot-ink'
+            }`}
+          >
+            {isBusy ? (
+              <span className="flex items-center gap-1">
+                <span className="anim-blink block size-[5px] rounded-full bg-paper" />
+                rewriting
+              </span>
+            ) : (
+              'rewrite'
+            )}
+          </button>
+        )}
       </Tag>
     )
   }
 
-export default function DocMarkdown({ children }: { children: string }) {
+export default function DocMarkdown({
+  children,
+  onRevise,
+  selectedAnchor = null,
+  busyAnchor = null,
+}: {
+  children: string
+  /** Omitted on a frozen version or for a reader without write access. */
+  onRevise?: (anchor: string, title: string) => void
+  /** The heading the panel is open against — highlighted, but not necessarily busy. */
+  selectedAnchor?: string | null
+  /** The heading a run is rewriting right now. */
+  busyAnchor?: string | null
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
       components={{
         h1: heading(1),
-        h2: heading(2),
+        h2: heading(2, onRevise, selectedAnchor, busyAnchor),
         h3: heading(3),
         code({ className, children, ...props }) {
           const text = String(children).replace(/\n$/, '')

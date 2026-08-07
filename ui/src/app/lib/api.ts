@@ -7,7 +7,7 @@
  * ------------------------------------------------------------------ */
 
 import type {
-  Doc, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
+  Doc, Features, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
 } from './types'
@@ -287,6 +287,45 @@ export const api = {
       { signal },
     ),
 
+  /**
+   * Ask for a page the site does not have. Returns it `planned`, with the anchor
+   * files retrieval chose — nothing is written until you say so.
+   */
+  addSitePage: (
+    id: number,
+    body: { section_slug: string; request: string; title?: string | null },
+  ) => request<SitePageDetail>(`/projects/${id}/site/pages`, { method: 'POST', body }),
+
+  /**
+   * Rewrite one heading of a page, or the whole page, against instructions.
+   * `anchor` is the id stamped on the rendered heading; omit it for the whole page.
+   */
+  revisePage: (
+    id: number, section: string, slug: string,
+    body: { instructions: string; anchor?: string | null },
+  ) =>
+    request<Job>(
+      `/projects/${id}/site/pages/${encodeURIComponent(section)}/${encodeURIComponent(slug)}/revise`,
+      { method: 'POST', body },
+    ),
+
+  /** The revision turns against one heading, oldest first — the conversation. */
+  pageRevisions: (id: number, section: string, slug: string, anchor?: string | null) =>
+    request<Job[]>(
+      `/projects/${id}/site/pages/${encodeURIComponent(section)}/${encodeURIComponent(slug)}/revisions` +
+        (anchor ? `?anchor=${encodeURIComponent(anchor)}` : ''),
+    ),
+
+  /**
+   * Remove a page from the live site. Frozen versions keep their copy, and a page
+   * being written right now is refused with a 422 rather than deleted.
+   */
+  deleteSitePage: (id: number, section: string, slug: string) =>
+    request<void>(
+      `/projects/${id}/site/pages/${encodeURIComponent(section)}/${encodeURIComponent(slug)}`,
+      { method: 'DELETE' },
+    ),
+
   createSiteVersion: (id: number, body: { label: string; notes?: string | null }) =>
     request<SiteVersion>(`/projects/${id}/site/versions`, { method: 'POST', body }),
 
@@ -358,7 +397,10 @@ export const api = {
 
   publishDocument: (id: number) => request<Doc>(`/documents/${id}/publish`, { method: 'POST' }),
 
-  /* --- settings (admin) --- */
+  /* --- settings --- */
+  // Readable by any signed-in user, unlike the rest of /settings: the pipeline
+  // view needs it to avoid showing a disabled stage as merely queued.
+  features: () => request<Features>('/settings/features'),
   llmSettings: () => request<LLMSettings>('/settings/llm'),
   putLlmSettings: (body: LLMSettings) =>
     request<LLMSettings>('/settings/llm', { method: 'PUT', body }),
