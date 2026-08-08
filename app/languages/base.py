@@ -78,6 +78,40 @@ class DetectedEntity:
 
 
 @dataclass(slots=True, frozen=True)
+class ImportRef:
+    """
+    One import, as written in the source.
+
+    Deliberately unresolved: the text `from .. import session` means nothing without
+    knowing the language's resolution rules and the file it appeared in. `resolve_import`
+    turns this into a path, and only a provider can do that.
+    """
+
+    target: str
+    line: int
+    #: Names pulled in by a `from X import a, b`, so a call site can be traced back
+    #: to the file that defines it.
+    names: tuple[str, ...] = ()
+    #: Relative-import depth. 0 is absolute; Python's `from ..pkg import x` is 2.
+    level: int = 0
+
+
+@dataclass(slots=True, frozen=True)
+class CallRef:
+    """
+    A call site, named but not resolved.
+
+    `callee` is the expression as written — `session.commit`, `build_modules`. Turning
+    that into a symbol is the graph builder's job, and it is allowed to fail: a call
+    it cannot resolve is dropped rather than guessed.
+    """
+
+    caller: str
+    callee: str
+    line: int
+
+
+@dataclass(slots=True, frozen=True)
 class ModuleRef:
     """
     Which module a file belongs to.
@@ -157,6 +191,49 @@ class LanguageProvider(ABC):
         """
         return []
 
+    # ── Graph ─────────────────────────────────────────────────────────────────
+    #
+    # "What imports what" is a traversal, not a similarity, so vector search cannot
+    # answer it. These three feed the code graph. All are optional: a provider that
+    # implements none still produces a usable knowledge base, just without edges.
+
+    def extract_imports(self, source: str, relative_path: str) -> list[ImportRef]:
+        """Imports as written. Must never raise on bad input."""
+        return []
+
+    def resolve_import(
+        self, ref: ImportRef, from_path: str, known_files: frozenset[str]
+    ) -> str | None:
+        """
+        The repository file an import refers to, or `None` if it is external.
+
+        `known_files` is every path in the repo, so resolution can be checked rather
+        than guessed — a target that does not correspond to a real file is external
+        (a third-party package) or unresolvable, and both must return `None`.
+        Returning a path that is not in `known_files` is a bug: it invents a node.
+        """
+        return None
+
+    def external_package(self, ref: ImportRef) -> str | None:
+        """
+        The third-party distribution an unresolved import belongs to, or `None`.
+
+        Called only for imports `resolve_import` could not place inside the
+        repository. Returning `None` drops the edge, which is what should happen for
+        the standard library: `DEPENDS_ON typing` is not a dependency, and on a real
+        repository stdlib imports outnumber real ones several times over.
+        """
+        return None
+
+    def extract_calls(self, source: str, relative_path: str) -> list[CallRef]:
+        """
+        Call sites, named but unresolved. Must never raise on bad input.
+
+        Approximate by nature in a dynamic language. Consumers are expected to treat
+        `CALLS` edges as "might reach" rather than as a complete call graph.
+        """
+        return []
+
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def owns(self, relative_path: str) -> bool:
@@ -166,4 +243,11 @@ class LanguageProvider(ABC):
         return f"<{type(self).__name__} language={self.language!r}>"
 
 
-__all__ = ["LanguageProvider", "Symbol", "ModuleRef", "DetectedEntity"]
+__all__ = [
+    "LanguageProvider",
+    "Symbol",
+    "ModuleRef",
+    "DetectedEntity",
+    "ImportRef",
+    "CallRef",
+]

@@ -21,6 +21,7 @@ and its slugs become permanent URLs the moment they are merged.
 """
 
 from app.agents.analysis.architecture_synthesizer import ArchitectureSynthesizerAgent
+from app.agents.analysis.graph_builder import GraphBuilderAgent
 from app.agents.analysis.kb_persister import KBPersisterAgent
 from app.agents.analysis.module_summarizer import ModuleSummarizerAgent
 from app.agents.analysis.narrative_writer import NarrativeWriterAgent
@@ -35,5 +36,6 @@ __all__ = [
     "ArchitectureSynthesizerAgent",
     "NarrativeWriterAgent",
     "SitePlannerAgent",
+    "GraphBuilderAgent",
     "KBPersisterAgent",
 ]

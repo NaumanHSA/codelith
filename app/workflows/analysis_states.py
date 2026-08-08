@@ -33,6 +33,10 @@ class AnalysisState(TypedDict, total=False):
     extraction_stats: dict
 
     # ── Semantic index ────────────────────────────────────────────────────────
+    #: Node and edge counts from the code graph. Empty when Neo4j was unreachable —
+    #: the run continues without it, so an empty dict is a real outcome, not an error.
+    graph_stats: dict
+
     indexed_chunks: int
     embed_failures: int
 

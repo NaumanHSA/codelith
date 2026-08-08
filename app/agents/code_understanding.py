@@ -3,7 +3,9 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.llm.client import create_embedding
-from app.memory.graph_store import GraphStore
+from app.knowledge.builder import SourceFile
+from app.knowledge.graph import build_code_graph
+from app.memory.graph_store import GraphScope, GraphStore
 from app.memory.long_term import LongTermMemory
 from app.memory.vector_store import VectorStore
 
@@ -76,9 +78,15 @@ class CodeUnderstandingAgent(BaseAgent):
             # ── Build Neo4j code graph ─────────────────────────────────────────
             graph_stats: dict = {}
             try:
+                # Same builder the analysis pipeline uses, so the legacy workflow and
+                # the two-phase one produce the same shape of graph. No `kb_id` here:
+                # this path predates knowledge bases and is scoped to the project.
+                code_graph = build_code_graph([
+                    SourceFile(path=f.path, content=f.content, language=f.language)
+                    for f in (getattr(codebase, "files", None) or [])
+                ])
                 async with GraphStore() as graph:
-                    await graph.clear_project(project.id)
-                    graph_stats = await graph.build_code_graph(project.id, codebase)
+                    graph_stats = await graph.write(GraphScope(project.id), code_graph)
                 await self._emit_log("info", "Graph built", **graph_stats)
             except Exception as exc:
                 await self._emit_log("warning", f"Neo4j graph build failed (non-fatal): {exc}")

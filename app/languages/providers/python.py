@@ -11,10 +11,18 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 from pathlib import PurePosixPath
 
 from app.knowledge.constants import EntityKind
-from app.languages.base import DetectedEntity, LanguageProvider, ModuleRef, Symbol
+from app.languages.base import (
+    CallRef,
+    DetectedEntity,
+    ImportRef,
+    LanguageProvider,
+    ModuleRef,
+    Symbol,
+)
 from app.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 #: `@router.get("/x")`, `@app.post("/y")` — FastAPI/Flask-style routing decorators.
@@ -43,6 +51,10 @@ _NON_ENTRYPOINT_DIRS = frozenset({
 })
 
 _PROPERTY_DECORATORS = frozenset({"property", "cached_property", "functools.cached_property"})
+
+#: Names that reach `external_package` but are not distributions. `__future__` is
+#: a compiler directive, and the rest are stdlib aliases too old to be listed.
+_NOT_A_PACKAGE = frozenset({"__future__", "__main__"})
 
 
 class PythonProvider(LanguageProvider):
@@ -239,6 +251,133 @@ class PythonProvider(LanguageProvider):
         if any(part in _NON_ENTRYPOINT_DIRS for part in path.parts):
             return False
         return '__name__ == "__main__"' in source or "__name__ == '__main__'" in source
+
+    # ── Graph ─────────────────────────────────────────────────────────────────
+
+    def extract_imports(self, source: str, relative_path: str) -> list[ImportRef]:
+        try:
+            tree = ast.parse(source)
+        except (SyntaxError, ValueError, RecursionError):
+            return []
+
+        refs: list[ImportRef] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    refs.append(ImportRef(target=alias.name, line=node.lineno))
+            elif isinstance(node, ast.ImportFrom):
+                # `from . import x` has no module; the package itself is the target.
+                refs.append(
+                    ImportRef(
+                        target=node.module or "",
+                        line=node.lineno,
+                        names=tuple(a.name for a in node.names),
+                        level=node.level or 0,
+                    )
+                )
+        return refs
+
+    def resolve_import(
+        self, ref: ImportRef, from_path: str, known_files: frozenset[str]
+    ) -> str | None:
+        """
+        A dotted module path to a file in this repository.
+
+        Both spellings of a package are tried — `a/b.py` and `a/b/__init__.py` — and
+        the result is only returned if it is a file we actually saw. Anything else is
+        third-party, stdlib, or a namespace package we cannot place, and inventing a
+        node for it would fill the graph with things that do not exist.
+        """
+        parts = [p for p in ref.target.split(".") if p]
+
+        if ref.level:
+            # Relative: walk up from the importing file's package. Level 1 is the
+            # containing directory, so the first step up is already accounted for.
+            base = PurePosixPath(from_path).parent
+            for _ in range(ref.level - 1):
+                base = base.parent
+            prefix = [p for p in base.as_posix().split("/") if p and p != "."]
+            parts = prefix + parts
+
+        if not parts:
+            return None
+
+        for candidate in (
+            "/".join(parts) + ".py",
+            "/".join(parts) + "/__init__.py",
+        ):
+            if candidate in known_files:
+                return candidate
+
+        # `from app.db.session import X` where `session` is a symbol in `app/db.py`
+        # rather than a module — drop the last segment and try the parent.
+        if len(parts) > 1:
+            for candidate in (
+                "/".join(parts[:-1]) + ".py",
+                "/".join(parts[:-1]) + "/__init__.py",
+            ):
+                if candidate in known_files:
+                    return candidate
+        return None
+
+    def external_package(self, ref: ImportRef) -> str | None:
+        """
+        The distribution a non-repository import comes from.
+
+        Stdlib is dropped: `sys.stdlib_module_names` is exact, and without it the
+        package edges are mostly `typing`, `__future__` and `pathlib` — 4,862 edges
+        on this repository, of which the large majority said nothing about what the
+        software depends on.
+
+        The top-level name only, so `openai.types.chat` records `openai` once rather
+        than burying it under submodules.
+        """
+        if ref.level:
+            return None  # relative, and unresolved means the file simply is not there
+        root = ref.target.split(".")[0].strip()
+        if not root or root in sys.stdlib_module_names or root in _NOT_A_PACKAGE:
+            return None
+        return root
+
+    def extract_calls(self, source: str, relative_path: str) -> list[CallRef]:
+        """
+        Call sites, attributed to the function or method containing them.
+
+        Only the callee's *name* is recorded — `self.db.commit()` yields `commit`.
+        Resolving that to a definition is the graph builder's job and is allowed to
+        fail; a name that matches nothing is dropped rather than guessed at.
+        """
+        try:
+            tree = ast.parse(source)
+        except (SyntaxError, ValueError, RecursionError):
+            return []
+
+        calls: list[CallRef] = []
+
+        def walk(node: ast.AST, caller: str | None, parent: str | None) -> None:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.ClassDef):
+                    walk(child, caller, child.name)
+                    continue
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    name = f"{parent}.{child.name}" if parent else child.name
+                    walk(child, name, parent)
+                    continue
+                if isinstance(child, ast.Call) and caller:
+                    if name := self._callee_name(child.func):
+                        calls.append(CallRef(caller=caller, callee=name, line=child.lineno))
+                walk(child, caller, parent)
+
+        walk(tree, None, None)
+        return calls
+
+    @staticmethod
+    def _callee_name(func: ast.expr) -> str | None:
+        if isinstance(func, ast.Name):
+            return func.id
+        if isinstance(func, ast.Attribute):
+            return func.attr
+        return None
 
     # ── Entity detection ──────────────────────────────────────────────────────
 

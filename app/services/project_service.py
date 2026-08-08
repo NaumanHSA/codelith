@@ -2,14 +2,18 @@
 # `list`, which shadows the builtin for every annotation evaluated after it.
 from __future__ import annotations
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from slugify import slugify
 from app.core.exceptions import NotFoundError, AuthorizationError
 from app.db.repositories.project_repo import ProjectRepository, ProjectSourceRepository
 from app.models.project import Project
+from app.memory.graph_store import GraphStore
 from app.models.user import User
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectStats, LatestJobOut
+
+logger = structlog.get_logger(__name__)
 
 
 class ProjectService:
@@ -70,6 +74,16 @@ class ProjectService:
         self._check_access(project, user)
         await self.repo.delete(project_id)
         await self.db.commit()
+
+        # The code graph lives outside Postgres, so no cascade reaches it. Left
+        # behind, it would answer questions about a project that no longer exists —
+        # and the next project to reuse the id would inherit them. Non-fatal: the
+        # project is already gone, and failing here would only make that confusing.
+        try:
+            async with GraphStore() as graph:
+                await graph.clear_project(project_id)
+        except Exception as exc:  # pragma: no cover - Neo4j optional
+            logger.warning("graph_cleanup_failed", project_id=project_id, error=str(exc))
 
     async def add_source(self, project_id: int, source_type: str, url_or_path: str, user: User, **kwargs):
         project = await self.repo.get_by_id(project_id)

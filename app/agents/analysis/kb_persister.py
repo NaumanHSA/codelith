@@ -53,6 +53,10 @@ class KBPersisterAgent(BaseAgent):
                 "missing_summaries": missing_summaries,
                 "suggested_doc_types": suggest_doc_types(entity_kinds, roles),
                 "site_pages": state.get("site_pages", 0),
+                # Empty when Neo4j was unreachable. Recorded either way, so "the graph
+                # is missing" is answerable from the KB rather than by querying Neo4j
+                # and finding nothing.
+                "graph": state.get("graph_stats") or {},
             }
 
             reasons = self._degradation_reasons(state, modules, topics, missing_summaries)

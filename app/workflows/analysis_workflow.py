@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis import (
     ArchitectureSynthesizerAgent,
+    GraphBuilderAgent,
     KBPersisterAgent,
     ModuleSummarizerAgent,
     NarrativeWriterAgent,
@@ -83,6 +84,7 @@ class AnalysisWorkflow:
 
         graph.add_node("repo_analyzer", make_node(RepoAnalyzerAgent))
         graph.add_node("structured_extractor", make_node(StructuredExtractorAgent))
+        graph.add_node("graph_builder", make_node(GraphBuilderAgent))
         graph.add_node("semantic_indexer", make_node(SemanticIndexerAgent))
         graph.add_node("module_summarizer", make_node(ModuleSummarizerAgent))
         graph.add_node("architecture_synthesizer", make_node(ArchitectureSynthesizerAgent))
@@ -93,7 +95,8 @@ class AnalysisWorkflow:
         graph.set_entry_point("repo_analyzer")
         graph.add_edge("repo_analyzer", "structured_extractor")
         # Facts first: the extractor opens the KB, so everything downstream has a kb_id.
-        graph.add_edge("structured_extractor", "semantic_indexer")
+        graph.add_edge("structured_extractor", "graph_builder")
+        graph.add_edge("graph_builder", "semantic_indexer")
         graph.add_edge("semantic_indexer", "module_summarizer")
         # Synthesis reads the summaries, so it must follow them.
         graph.add_edge("module_summarizer", "architecture_synthesizer")
