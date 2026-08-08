@@ -2,12 +2,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-SUPPORTED_EXTENSIONS: dict[str, str] = {
-    ".py": "python",
-    ".js": "javascript",
-    ".jsx": "javascript",
-    ".ts": "typescript",
-    ".tsx": "typescript",
+from app.languages.registry import registry
+
+#: Languages we can ingest but do not understand structurally. Files with these
+#: extensions are read, chunked and made searchable; they have no `LanguageProvider`,
+#: so they contribute no symbols, modules or entities.
+#:
+#: Kept deliberately broad. "Is this source code?" and "can we parse it?" are
+#: different questions, and a Go repository is better served by searchable chunks
+#: than by being ignored entirely.
+_UNPARSED_EXTENSIONS: dict[str, str] = {
     ".go": "go",
     ".rs": "rust",
     ".java": "java",
@@ -18,6 +22,26 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".c": "c",
     ".kt": "kotlin",
 }
+
+
+def _supported_extensions() -> dict[str, str]:
+    """
+    Every extension worth reading: whatever the providers own, plus the rest.
+
+    Derived from the registry rather than hand-listed, because the hand-listed
+    version drifted. `.pyi`, `.mjs`, `.cjs`, `.mts` and `.cts` all had providers and
+    were never ingested — the provider existed, the files never reached it, and
+    nothing failed loudly. Adding a language must not require remembering this file.
+    """
+    out = dict(_UNPARSED_EXTENSIONS)
+    for provider in registry.providers():
+        for extension in provider.extensions:
+            out[extension.lower()] = provider.language
+    return out
+
+
+#: Extension → language. Computed at import, after providers are registered.
+SUPPORTED_EXTENSIONS: dict[str, str] = _supported_extensions()
 
 IGNORED_DIRS = {
     ".git", ".venv", "venv", "env", "node_modules", "__pycache__",

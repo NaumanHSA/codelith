@@ -262,13 +262,27 @@ class TestRobustness:
         assert graph.imports  # the rest still resolved
 
     def test_a_file_with_no_provider_is_skipped(self) -> None:
-        """No TypeScript provider exists yet, so `ui/app.ts` has nobody to parse it.
-        It must be absent rather than half-present."""
-        files = [*_repo(), SourceFile(path="ui/app.ts", content="const x = 1", language=None)]
+        """
+        A file nobody can parse must be absent rather than half-present.
+
+        This used `ui/app.ts` until the TypeScript provider existed — which is the
+        test doing its job: the premise "no provider owns this" stopped being true,
+        and it said so. A stylesheet has no provider and is not likely to gain one.
+        """
+        files = [*_repo(), SourceFile(path="ui/theme.css", content="body { color: red }")]
 
         graph = build_code_graph(files)
 
-        assert "ui/app.ts" not in {f["path"] for f in graph.files}
+        assert "ui/theme.css" not in {f["path"] for f in graph.files}
+
+    def test_typescript_now_has_a_provider(self) -> None:
+        """The other half of the phase above: `.ts` used to be unparseable here."""
+        files = [SourceFile(path="ui/app.ts", content="export function go() { return 1 }\n")]
+
+        graph = build_code_graph(files)
+
+        assert "ui/app.ts" in {f["path"] for f in graph.files}
+        assert {s["name"] for s in graph.symbols} == {"go"}
 
     def test_an_empty_repository_produces_an_empty_graph(self) -> None:
         graph = build_code_graph([])
