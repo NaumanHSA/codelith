@@ -22,6 +22,7 @@ from app.knowledge.builder import (
     merge_entities,
     read_manifest_files,
 )
+from app.knowledge.detectors import detect_file_entities, scan_repository
 from app.tracing.artifacts import save_artifact
 
 
@@ -66,8 +67,16 @@ class StructuredExtractorAgent(BaseAgent):
 
             result = build_modules(files)
 
+            # Config and infrastructure are invisible to the code parser: it only
+            # yields files whose extension maps to a language, so `docker-compose.yml`,
+            # `Dockerfile` and `.env.example` never reach it. Scanned from disk.
+            file_entities: list[dict] = []
+            if repo_path := state.get("repo_path"):
+                file_entities = detect_file_entities(scan_repository(repo_path))
+
             entities = merge_entities(
                 result.entities,
+                file_entities,
                 entities_from_api_specs(state.get("api_specs") or []),
                 entities_from_infra(state.get("infra_context") or []),
             )

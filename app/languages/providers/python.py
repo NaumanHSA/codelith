@@ -23,6 +23,7 @@ from app.languages.base import (
     ModuleRef,
     Symbol,
 )
+from app.languages.providers import _python_entities as python_entities
 from app.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 #: `@router.get("/x")`, `@app.post("/y")` — FastAPI/Flask-style routing decorators.
@@ -250,7 +251,7 @@ class PythonProvider(LanguageProvider):
             return True
         if any(part in _NON_ENTRYPOINT_DIRS for part in path.parts):
             return False
-        return '__name__ == "__main__"' in source or "__name__ == '__main__'" in source
+        return python_entities.has_main_guard(source)
 
     # ── Graph ─────────────────────────────────────────────────────────────────
 
@@ -408,11 +409,10 @@ class PythonProvider(LanguageProvider):
                     )
                 )
 
-        # Environment variables the code reads.
-        for match in _ENV_VAR.finditer(source):
-            name = match.group(1) or match.group(2)
-            if name:
-                found.append(DetectedEntity(kind=EntityKind.ENV_VAR, name=name))
+        # Environment variables the code reads. Read off the AST rather than the raw
+        # text: a regex also matches the comment *documenting* the pattern, and this
+        # file's own `#: os.getenv("X")` was being extracted as an env var called X.
+        found.extend(python_entities.env_vars(source))
 
         if self.is_entrypoint(relative_path, source):
             found.append(
@@ -422,6 +422,22 @@ class PythonProvider(LanguageProvider):
                     data={"language": self.language},
                 )
             )
+
+        # Datastores, external APIs, CLI commands, scheduled work, events and
+        # services. `imported_roots` lets a detector require that the file actually
+        # imported the library it is about — `connect()` means nothing without it.
+        found.extend(
+            python_entities.detect(
+                relative_path,
+                source,
+                symbols,
+                imported_roots={
+                    ref.target.split(".")[0]
+                    for ref in self.extract_imports(source, relative_path)
+                    if ref.target
+                },
+            )
+        )
 
         return found
 
