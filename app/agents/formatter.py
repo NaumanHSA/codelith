@@ -136,16 +136,26 @@ class FormatterAgent(BaseAgent):
         """
         section = "\n\n## Diagrams\n"
         for d in diagrams:
+            language = d.get("language") or "mermaid"
             section += f"\n### {d['name']}\n\n"
-            if png := d.get("png_base64"):
+            if svg := d.get("svg_base64"):
+                # SVG for the graph-derived diagrams: roughly a tenth the size of the
+                # equivalent PNG in a data URI, crisp at any zoom, and themeable
+                # rather than baked onto a white rectangle.
+                section += f"![{d['name']}](data:image/svg+xml;base64,{svg})\n\n"
+                section += (
+                    "<details>\n<summary>Diagram source</summary>\n\n"
+                    f"```{language}\n{d['content']}\n```\n\n</details>\n"
+                )
+            elif png := d.get("png_base64"):
                 section += f"![{d['name']}](data:image/png;base64,{png})\n\n"
                 section += (
                     "<details>\n<summary>Diagram source</summary>\n\n"
-                    f"```mermaid\n{d['content']}\n```\n\n</details>\n"
+                    f"```{language}\n{d['content']}\n```\n\n</details>\n"
                 )
             else:
                 # Nothing rendered it — the source is better than nothing.
-                section += f"```mermaid\n{d['content']}\n```\n"
+                section += f"```{language}\n{d['content']}\n```\n"
         return content + section
 
     @staticmethod

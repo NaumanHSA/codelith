@@ -182,6 +182,19 @@ class Settings(BaseSettings):
     # enormous render is dropped in favour of publishing the source.
     DIAGRAM_MAX_PNG_BYTES: int = 1_500_000
 
+    # D2 renders the graph-derived diagrams. SVG rather than PNG: ~10x smaller in
+    # a data: URI, crisp at any zoom, and themeable — the mermaid path bakes a
+    # white background, which is a latent bug for a dark studio.
+    # Diagrams built from the code graph rather than written by a model. On by
+    # default: they cannot contain an invented node or invalid syntax, which is
+    # what DIAGRAMS_ENABLED was turned off for. That flag still gates the
+    # model-written ones.
+    DIAGRAMS_FROM_GRAPH: bool = True
+    DIAGRAM_RENDER_SVG: bool = True
+    #: Node runs the WASM shim in scripts/d2render.mjs. Empty means: find it on PATH.
+    D2_NODE_PATH: str = ""
+    DIAGRAM_MAX_SVG_BYTES: int = 2_000_000
+
     # ── Step artifacts ────────────────────────────────────────────────────────
     # What each agent actually produced — architecture map, section plan, strategy,
     # narratives, the context a section was written from — dumped verbatim to

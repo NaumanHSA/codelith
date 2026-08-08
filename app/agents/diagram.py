@@ -124,18 +124,38 @@ class DiagramAgent(BaseAgent):
         ) as t:
             await self._update_step(self.name, "running")
 
+            # Deterministic first, and on by default. These are built from the code
+            # graph and the extracted entities by `app/knowledge/diagrams.py` — no
+            # model writes syntax, so they are valid by construction and grounded by
+            # construction, which is exactly what the model-written ones were not.
+            settings = get_settings()
+            graph_diagrams: list[dict] = []
+            if settings.DIAGRAMS_FROM_GRAPH:
+                graph_diagrams = await self._from_graph(state)
+
             if not get_settings().DIAGRAMS_ENABLED:
-                await self._emit_log("info", "DiagramAgent: disabled (DIAGRAMS_ENABLED)")
-                t.outputs(diagrams=0, disabled=True)
-                await self._update_step(self.name, "completed", {"diagrams": 0, "disabled": True})
-                return {"diagrams": []}
+                await self._emit_log(
+                    "info",
+                    "DiagramAgent: model-written diagrams disabled (DIAGRAMS_ENABLED); "
+                    f"{len(graph_diagrams)} graph-derived diagram(s) kept",
+                )
+                self._persist(graph_diagrams, state.get("sandbox"))
+                t.outputs(diagrams=len(graph_diagrams), llm_disabled=True)
+                await self._update_step(
+                    self.name, "completed",
+                    {"diagrams": len(graph_diagrams), "llm_disabled": True},
+                )
+                return {"diagrams": graph_diagrams}
 
             strategy: dict = state.get("strategy") or {}
             if not strategy.get("generate_diagrams", True):
-                await self._emit_log("info", "DiagramAgent: skipped (strategy: no diagrams)")
-                t.outputs(diagrams=0, skipped=True)
-                await self._update_step(self.name, "completed", {"diagrams": 0, "skipped": True})
-                return {"diagrams": []}
+                await self._emit_log("info", "DiagramAgent: model diagrams skipped (strategy)")
+                self._persist(graph_diagrams, state.get("sandbox"))
+                t.outputs(diagrams=len(graph_diagrams), skipped=True)
+                await self._update_step(
+                    self.name, "completed", {"diagrams": len(graph_diagrams), "skipped": True}
+                )
+                return {"diagrams": graph_diagrams}
 
             project = state["project"]
             architecture_map: dict = state.get("architecture_map") or {}
@@ -148,7 +168,7 @@ class DiagramAgent(BaseAgent):
 
             vocabulary = await self._vocabulary(state, architecture_map)
 
-            diagrams: list[dict] = []
+            diagrams: list[dict] = list(graph_diagrams)
             for doc in generated_docs:
                 doc_type = doc.get("doc_type") or "architecture"
                 specs = self._specs_for(doc_type, vocabulary)
@@ -396,6 +416,93 @@ class DiagramAgent(BaseAgent):
         return "\n".join(
             f"  {r['from']} --{r.get('kind', 'uses')}--> {r['to']}" for r in relations[:15]
         )
+
+    async def _from_graph(self, state: dict[str, Any]) -> list[dict]:
+        """
+        Diagrams the knowledge base can draw without asking anything.
+
+        The entire reason diagrams were switched off was that a model wrote the
+        syntax and got it wrong. These are built by `app/knowledge/diagrams.py` from
+        the import graph and the extracted entities — every box corresponds to a file
+        or a fact, and the D2 comes out of a builder, so neither an invented node nor
+        a syntax error is reachable.
+
+        Attached to the first document of the run rather than to each: they describe
+        the system, not a page, and repeating them under every heading is noise.
+        """
+        from app.knowledge.diagrams import module_map, system_context
+        from app.tools.d2_render import render_svg
+
+        kb_id = state.get("kb_id")
+        docs = state.get("linked_docs") or state.get("generated_docs") or []
+        if not kb_id or not docs:
+            return []
+
+        project = state["project"]
+        repos = KnowledgeRepositories.for_session(self.db)
+        modules = await repos.modules.list_by_kb(kb_id)
+
+        # Only the kinds the context diagram draws. There is no "every entity" query,
+        # and fetching one would pull hundreds of dependencies to use three of them.
+        entities: list[dict] = []
+        for kind in (EntityKind.DATASTORE, EntityKind.EXTERNAL_API, EntityKind.ENTRYPOINT):
+            entities += [
+                {"kind": e.kind, "name": e.name, "data_json": e.data_json}
+                for e in await repos.entities.list_by_kind(kb_id, kind, limit=20)
+            ]
+
+        sources: list[tuple[str, str, str | None]] = [
+            ("system_context", "System Context", system_context(entities, project.name)),
+        ]
+
+        files, imports = await self._graph_edges(project.id, kb_id)
+        if files:
+            roles = {m.path: m.role for m in modules}
+            sources.append(("module_map", "Module Dependencies", module_map(files, imports, roles)))
+
+        target = doc_key(docs[0]) or ""
+        drawn: list[dict] = []
+        for key, name, source in sources:
+            if not source:
+                continue
+            svg = render_svg(source)
+            drawn.append({
+                "key": key,
+                "name": name,
+                "doc_key": target,
+                "doc_type": docs[0].get("doc_type") or "architecture",
+                "content": source,
+                "language": "d2",
+                "grounded": True,
+                **({"svg_base64": base64.b64encode(svg).decode()} if svg else {}),
+            })
+            await self._emit_log(
+                "info",
+                f"Drew {name} from the knowledge base"
+                + ("" if svg else " (source only — d2 not installed)"),
+            )
+        return drawn
+
+    async def _graph_edges(self, project_id: int, kb_id: int) -> tuple[list[dict], list[dict]]:
+        """Files and import edges from Neo4j. Empty when it is unreachable."""
+        from app.memory.graph_store import GraphStore
+
+        try:
+            async with GraphStore() as graph:
+                files = await graph.query(
+                    "MATCH (f:File {project_id: $project_id, kb_id: $kb_id}) "
+                    "RETURN f.path AS path, f.module_key AS module_key",
+                    project_id=project_id, kb_id=kb_id,
+                )
+                imports = await graph.query(
+                    "MATCH (a:File {project_id: $project_id, kb_id: $kb_id})-[:IMPORTS]->(b:File) "
+                    "RETURN a.path AS src, b.path AS dst",
+                    project_id=project_id, kb_id=kb_id,
+                )
+            return files, imports
+        except Exception as exc:  # pragma: no cover - Neo4j optional
+            await self._emit_log("info", f"No code graph available for diagrams: {exc}")
+            return [], []
 
     @staticmethod
     def _persist(diagrams: list[dict], sandbox) -> None:
