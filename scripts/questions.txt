@@ -1,0 +1,40 @@
+# The question set K4 is measured by.
+#
+# Real questions someone would ask about a codebase they have just been handed —
+# not questions chosen because retrieval happens to answer them. Run with:
+#
+#     python scripts/ask.py 2 --file scripts/questions.txt
+#
+# For each one, read the evidence and record whether what is needed to answer it is
+# actually present. That fraction is the honest predictor of whether Ask-the-code is
+# worth building, and it is the number K4 exists to produce.
+
+# ── Orientation: what is this thing ──────────────────────────────────────────
+what does this project do
+what are the main components
+how do I run this locally
+where is the entry point
+
+# ── Data: the questions that motivated the phase ─────────────────────────────
+how is the database initialised
+where is data stored
+what database does it use
+how is configuration loaded
+what environment variables does it need
+
+# ── Behaviour: how work flows through the system ─────────────────────────────
+how does a request flow through the system
+what happens when a job fails
+how does authentication work
+how is state managed between steps
+
+# ── Integration and operations ───────────────────────────────────────────────
+what external services does it talk to
+what runs on a schedule
+what endpoints does it expose
+how is it deployed
+
+# ── Traversal: what vector search structurally cannot answer ─────────────────
+what calls the tool registry
+what breaks if I change the config module
+what imports the LLM client
