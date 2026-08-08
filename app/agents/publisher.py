@@ -18,6 +18,7 @@ from app.agents.base import BaseAgent
 from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
 from app.services.site_service import SiteService
+from app.knowledge.grounding import check_page, vocabulary_for
 from app.tracing.artifacts import save_artifact, save_text_artifact
 
 
@@ -111,6 +112,10 @@ class PublisherAgent(BaseAgent):
         # QA ran per page, so its verdict lands on the page. One score for a
         # twenty-page document was decorative; per page it names what to look at.
         reviews = self._reviews(state)
+        # Everything this knowledge base can name, built once for the run. The
+        # check is per page but the vocabulary is not, and assembling it per page
+        # would re-read every module for each one.
+        known = await self._grounding_vocabulary(state)
         for doc in (d for d in docs if d.get("page_id")):
             page_id = doc["page_id"]
             written.add(page_id)
@@ -127,6 +132,9 @@ class PublisherAgent(BaseAgent):
                 commit_sha=state.get("commit_sha"),
                 source_files=doc.get("source_files") or [],
                 qa=reviews.get(doc["address"]),
+                grounding=(
+                    check_page(content, known).to_dict() if known else None
+                ),
             )
             saved.append(page_id)
             await self._emit_log("info", f"Saved page: {doc['address']}", page_id=page_id)
@@ -137,6 +145,24 @@ class PublisherAgent(BaseAgent):
                 await self._emit_log("warning", f"Page {claimed['address']} was never written")
 
         return saved
+
+    async def _grounding_vocabulary(self, state: dict[str, Any]) -> frozenset[str]:
+        """
+        What the codebase can name, or an empty set when there is no KB to ask.
+
+        Empty disables the check rather than failing it: the legacy single-shot
+        pipeline has no knowledge base, and a page written by it is not less
+        trustworthy for our being unable to measure it.
+        """
+        kb_id = state.get("kb_id")
+        project = state.get("project")
+        if not kb_id or project is None:
+            return frozenset()
+        try:
+            return await vocabulary_for(self.db, kb_id, project.id)
+        except Exception as exc:  # pragma: no cover - never fail a publish for this
+            await self._emit_log("info", f"Grounding not measured: {exc}")
+            return frozenset()
 
     @staticmethod
     def _reviews(state: dict[str, Any]) -> dict[str, dict]:

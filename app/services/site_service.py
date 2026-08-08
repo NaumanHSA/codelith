@@ -470,6 +470,7 @@ class SiteService:
         commit_sha: str | None,
         source_files: Sequence[str],
         qa: dict | None = None,
+        grounding: dict | None = None,
     ) -> DocPage | None:
         """
         Record one written page and everything it was written from.
@@ -499,6 +500,11 @@ class SiteService:
         if qa is not None:
             page.qa_score = qa.get("score")
             page.qa_json = qa
+        if grounding is not None:
+            # Stored with the page, not recomputed on read: it describes *this*
+            # generation, and the same markdown checked against a later knowledge
+            # base would score differently.
+            page.grounding_json = grounding
         await self.db.flush()
         return page
 

@@ -37,6 +37,7 @@ import Toc from '../../components/docs/Toc'
  * ------------------------------------------------------------------ */
 
 const DocMarkdown = lazy(() => import('../../components/docs/DocMarkdown'))
+import { Grounding } from '../../components/docs/Grounding'
 
 /** Polled while any page of this site is being written. */
 const REFRESH_MS = 4000
@@ -721,6 +722,7 @@ function PageBody({
               {markdown}
             </DocMarkdown>
           </Suspense>
+          {detail && <Grounding page={detail} />}
         </article>
       ) : (
         <section className="plate p-5">

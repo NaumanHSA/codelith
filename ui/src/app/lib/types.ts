@@ -241,6 +241,15 @@ export interface SitePageDetail extends SitePage {
   content_markdown: string | null
   /** What the page said before its last rewrite — null if written only once. */
   previous_markdown: string | null
+  /** Share of paragraphs naming things that exist, plus the ones that did not. */
+  grounding?: {
+    paragraphs: number
+    grounded: number
+    unverified: number
+    unchecked: number
+    score: number
+    problems: { paragraph: number; excerpt: string; unknown: string[] }[]
+  }
   section_title: string | null
 }
 

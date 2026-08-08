@@ -214,6 +214,12 @@ class DocPage(Base, TimestampMixin):
     #: from `source_files_json`, which records what retrieval actually used.
     key_files_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
 
+    #: How much of this page's prose names things the codebase actually contains,
+    #: and which paragraphs did not. Stored rather than recomputed on read: it is a
+    #: property of *this* generation, and the same markdown checked against a later
+    #: knowledge base would score differently.
+    grounding_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
     #: Why analysis proposed this page, and how sure it was — the same evidence
     #: `suggest_doc_types` attaches to a doc type, one level deeper.
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)

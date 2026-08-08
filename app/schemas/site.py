@@ -59,6 +59,11 @@ class SitePageOut(BaseModel):
     qa_score: float | None = None
     qa: dict = Field(default_factory=dict, validation_alias="qa_json")
 
+    #: How much of this page names things the codebase actually contains, and the
+    #: paragraphs that did not. `{}` on a page written before the check existed, or
+    #: by the legacy pipeline, which has no knowledge base to check against.
+    grounding: dict = Field(default_factory=dict, validation_alias="grounding_json")
+
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True, "populate_by_name": True}
