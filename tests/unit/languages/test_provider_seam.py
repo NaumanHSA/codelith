@@ -77,10 +77,15 @@ class TestEveryProvidedLanguageIsIngestible:
                 assert SUPPORTED_EXTENSIONS[extension.lower()] == provider.language
 
     def test_languages_without_a_provider_are_still_ingested(self) -> None:
-        """"Is this source code?" and "can we parse it?" are different questions. A
-        Go repository is better served by searchable chunks than by being ignored."""
-        assert SUPPORTED_EXTENSIONS.get(".go") == "go"
-        assert registry.for_path("main.go") is None
+        """
+        "Is this source code?" and "can we parse it?" are different questions. A Ruby
+        repository is better served by searchable chunks than by being ignored.
+
+        This used `.go` until the Go provider existed — the test noticing its own
+        premise had expired, for the second time in this phase.
+        """
+        assert SUPPORTED_EXTENSIONS.get(".rb") == "ruby"
+        assert registry.for_path("app.rb") is None
 
 
 class TestNoLanguageSpecificCodeOutsideTheLanguagePackage:

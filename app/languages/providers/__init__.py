@@ -12,12 +12,16 @@ workflow, no branch on a language name anywhere outside this package.
 from __future__ import annotations
 
 from app.languages.base import LanguageProvider
+from app.languages.providers.go import GoProvider
+from app.languages.providers.java import JavaProvider
 from app.languages.providers.python import PythonProvider
 from app.languages.providers.typescript import JavaScriptProvider, TypeScriptProvider
 
 #: Instantiated in registration order.
 BUILTIN_PROVIDERS: tuple[LanguageProvider, ...] = (
     PythonProvider(),
+    GoProvider(),
+    JavaProvider(),
     TypeScriptProvider(),
     JavaScriptProvider(),
 )
@@ -25,6 +29,8 @@ BUILTIN_PROVIDERS: tuple[LanguageProvider, ...] = (
 __all__ = [
     "BUILTIN_PROVIDERS",
     "PythonProvider",
+    "GoProvider",
+    "JavaProvider",
     "TypeScriptProvider",
     "JavaScriptProvider",
 ]
