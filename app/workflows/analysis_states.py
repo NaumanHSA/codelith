@@ -24,6 +24,9 @@ class AnalysisState(TypedDict, total=False):
     ingestion_result: dict
     codebase: Any          # ParsedCodebase
     repo_path: str
+    #: The repository's own prose. Indexed as a router for questions, never as
+    #: evidence for generated documentation — see `app/knowledge/policy.py`.
+    markdown_docs: list
     api_specs: list
     infra_context: list
 

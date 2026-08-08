@@ -73,6 +73,7 @@ class RepoAnalyzerAgent(BaseAgent):
                 "ingestion_result": ingestion_result,
                 "codebase": codebase,
                 "repo_path": repo_path_str,
+                "markdown_docs": getattr(pipeline, "_md_docs", []),
                 "api_specs": getattr(pipeline, "_api_specs", []),
                 "infra_context": getattr(pipeline, "_infra_context", []),
             }

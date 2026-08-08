@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.knowledge import policy
 from app.knowledge.constants import EntityKind
 from app.knowledge.roles import infer_role
 from app.languages import registry
@@ -269,7 +270,90 @@ def chunk_files(
             chunks.extend(
                 _emit(file.path, language, lines, start, end, max_chars, chunk_lines)
             )
+
+        # Docstrings, separately from the code that carries them. They are already in
+        # a code chunk verbatim, but as prose they answer a different kind of question
+        # — intent rather than mechanism — and they have to be *addressable* as prose
+        # for a policy to be able to exclude them. See `app/knowledge/policy.py`.
+        chunks.extend(_docstring_chunks(provider, file, language))
+
     return chunks
+
+
+def chunk_prose(docs: list[SourceFile], max_chars: int = 4000) -> list[dict]:
+    """
+    Markdown split on its own headings.
+
+    A README is a router: it says where to look, not what is true. Splitting on
+    headings keeps each chunk answering one question, which is what makes it useful
+    for pointing at code rather than for being quoted.
+    """
+    chunks: list[dict] = []
+    for doc in docs:
+        if registry.should_skip(doc.path):
+            continue
+        lines = doc.content.splitlines()
+        if not lines:
+            continue
+
+        for start, end in _heading_spans(lines):
+            body = "\n".join(lines[start - 1 : end]).strip()
+            if not body:
+                continue
+            for offset in range(0, len(body), max_chars):
+                piece = body[offset : offset + max_chars]
+                chunks.append({
+                    "source_path": doc.path,
+                    "language": "markdown",
+                    "chunk_type": policy.MARKDOWN,
+                    "content": piece,
+                    "start_line": start,
+                    "end_line": end,
+                })
+    return chunks
+
+
+def _heading_spans(lines: list[str]) -> list[tuple[int, int]]:
+    """`(start, end)` per markdown section, 1-based and inclusive. Fence-aware."""
+    starts: list[int] = []
+    in_fence = False
+    for index, line in enumerate(lines, start=1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence and line.startswith("#"):
+            starts.append(index)
+
+    if not starts:
+        return [(1, len(lines))]
+    # Text before the first heading is a section too — often the whole point of a README.
+    if starts[0] > 1:
+        starts.insert(0, 1)
+    return [
+        (start, (starts[i + 1] - 1) if i + 1 < len(starts) else len(lines))
+        for i, start in enumerate(starts)
+    ]
+
+
+def _docstring_chunks(provider, file: SourceFile, language: str | None) -> list[dict]:
+    """One chunk per documented declaration, plus the module docstring."""
+    if provider is None:
+        return []
+    out: list[dict] = []
+    for symbol in provider.extract_symbols(file.content, file.path):
+        text = (symbol.docstring or "").strip()
+        # One-liners are labels, not intent, and they dilute the prose pool.
+        if len(text) < 80:
+            continue
+        out.append({
+            "source_path": file.path,
+            "language": language,
+            "chunk_type": policy.DOCSTRING,
+            "content": f"{symbol.qualified_name}: {text}",
+            "start_line": symbol.line,
+            "end_line": symbol.end_line or symbol.line,
+        })
+    return out
 
 
 def _symbol_spans(provider, file: SourceFile, total_lines: int) -> list[tuple[int, int]]:
@@ -389,7 +473,7 @@ def _emit(
                 {
                     "source_path": path,
                     "language": language,
-                    "chunk_type": "code",
+                    "chunk_type": policy.CODE,
                     "content": "\n".join(body),
                     "start_line": first,
                     "end_line": first + len(body) - 1,

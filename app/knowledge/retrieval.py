@@ -22,6 +22,13 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.knowledge import KnowledgeRepositories
+from app.knowledge.policy import (
+    CODE,
+    DOCS_GENERATION,
+    PROSE_TRUST,
+    PROSE_TYPES,
+    RetrievalPolicy,
+)
 from app.knowledge.narratives import topics_for_doc_type
 from app.llm.client import create_embedding
 from app.llm.context_manager import count_text_tokens
@@ -40,6 +47,10 @@ _NARRATIVE_CHARS_IN_SECTION = 2000
 #: but they must not crowd out the verbatim source a section is written from.
 _MAX_MODULE_SUMMARIES = 10
 
+#: Prose candidates over-fetched per section. Smaller than the code pool: prose is
+#: a router, and a handful of pointers is all routing needs.
+_PROSE_CANDIDATES = 6
+
 
 @dataclass(slots=True)
 class SectionContext:
@@ -50,6 +61,9 @@ class SectionContext:
     narratives: list[str] = field(default_factory=list)
     source_blocks: list[str] = field(default_factory=list)
     retrieved_blocks: list[str] = field(default_factory=list)
+    #: The repository's own prose. Separate from `retrieved_blocks` so it can never
+    #: be mistaken for source, and so the trim order can drop it first.
+    prose_blocks: list[str] = field(default_factory=list)
     key_files: list[str] = field(default_factory=list)
     tokens: int = 0
 
@@ -70,6 +84,16 @@ class SectionContext:
             parts.append("## Source for this section\n" + "\n\n".join(self.source_blocks))
         if self.retrieved_blocks:
             parts.append("## Additional retrieved source\n" + "\n\n".join(self.retrieved_blocks))
+        if self.prose_blocks:
+            # The heading is the warning. A model that reads this section has been
+            # told, in the payload rather than in a system prompt, that these lines
+            # are claims by a human and not observations of the code.
+            parts.append(
+                "## Existing documentation — UNVERIFIED, use only to locate code\n"
+                "These were written by hand and may be out of date or wrong. Treat "
+                "them as pointers to the source above, never as evidence for a "
+                "statement.\n\n" + "\n\n".join(self.prose_blocks)
+            )
         return "\n\n".join(parts) or "(no context available)"
 
 
@@ -89,13 +113,31 @@ class SectionContextBuilder:
         kb_id: int,
         project_id: int,
         token_budget: int = 6000,
+        retrieval_policy: RetrievalPolicy = DOCS_GENERATION,
     ) -> None:
         self.db = db
         self.kb_id = kb_id
         self.project_id = project_id
         self.token_budget = token_budget
+        # Defaults to code-only, so every existing caller — the writer, the reviser,
+        # the planner — keeps behaving exactly as before. Opting into prose is an
+        # explicit decision made by the consumer that can justify it.
+        self.policy = retrieval_policy
         self.repos = KnowledgeRepositories.for_session(db)
         self.store = VectorStore(db)
+
+    @property
+    def code_budget(self) -> int:
+        """
+        Tokens reserved for code, which prose may not spend.
+
+        This is the whole mechanism. A natural-language query is lexically closer to
+        a paragraph of prose than to the function implementing it, so similarity
+        ranking systematically favours prose — and asking a model to "prefer the
+        code" is a soft constraint that fails exactly when the context is tight.
+        Splitting the budget before retrieval runs makes the preference structural.
+        """
+        return int(self.token_budget * self.policy.code_share)
 
     async def build(
         self,
@@ -148,21 +190,65 @@ class SectionContextBuilder:
                     f"- **{module.name}** ({module.role}): {module.summary}"
                 )
 
-        # 5. Admit retrieved blocks while there is room for them.
-        self._fill(context, [self._format(c) for c in candidates])
+        # 5. Admit retrieved code while there is room for it — capped at the code
+        #    share, so prose has somewhere to go when the policy allows it.
+        self._fill(context, [self._format(c) for c in candidates], self.code_budget)
+
+        # 6. Prose, only if this consumer is allowed it, and only from what the code
+        #    share left behind. Retrieved separately rather than filtered out of one
+        #    ranking: a shared ranking is exactly where prose out-competes code.
+        if self.policy.allow_prose:
+            prose = await self._search_chunks(
+                f"{name}. {focus}", limit=_PROSE_CANDIDATES, chunk_types=PROSE_TYPES
+            )
+            # Its own allowance, added to whatever has been spent — *not* "everything
+            # up to the total budget". Filling to the total would let prose expand
+            # into the slack code did not use, so a section with thin source could
+            # come back mostly unverified prose. The pools are fixed in both
+            # directions: code cannot be crowded out, and prose cannot take more than
+            # its share just because it was available.
+            allowance = self.token_budget - self.code_budget
+            ceiling = min(
+                self.token_budget, count_text_tokens(context.render()) + allowance
+            )
+            self._fill(
+                context,
+                [self._format(c) for c in self._by_trust(prose)],
+                ceiling,
+                into="prose",
+            )
 
         self._trim(context)
         return context
 
-    def _fill(self, context: SectionContext, blocks: list[str]) -> None:
-        """Add blocks one at a time, stopping at the budget instead of at a count."""
+    def _fill(
+        self,
+        context: SectionContext,
+        blocks: list[str],
+        ceiling: int,
+        into: str = "retrieved",
+    ) -> None:
+        """Add blocks one at a time, stopping at `ceiling` instead of at a count."""
+        target = context.prose_blocks if into == "prose" else context.retrieved_blocks
         context.tokens = count_text_tokens(context.render())
         for block in blocks:
             projected = context.tokens + count_text_tokens(block)
-            if projected > self.token_budget:
+            if projected > ceiling:
                 break
-            context.retrieved_blocks.append(block)
+            target.append(block)
             context.tokens = projected
+
+    @staticmethod
+    def _by_trust(chunks: list) -> list:
+        """
+        Docstrings before comments before markdown.
+
+        A docstring ships in the same file as the code it describes and is reviewed
+        in the same diff. A root README can be years older than everything it
+        documents. Both are prose; they are not equally likely to be true.
+        """
+        order = {kind: index for index, kind in enumerate(PROSE_TRUST)}
+        return sorted(chunks, key=lambda c: order.get(c.chunk_type, len(order)))
 
     async def search(
         self, query: str, limit: int = 6, exclude: list[str] | None = None
@@ -176,11 +262,25 @@ class SectionContextBuilder:
         return [self._format(c) for c in await self._search_chunks(query, limit, exclude)]
 
     async def _search_chunks(
-        self, query: str, limit: int, exclude: list[str] | None = None
+        self,
+        query: str,
+        limit: int,
+        exclude: list[str] | None = None,
+        chunk_types: frozenset[str] | None = None,
     ) -> list:
-        """Raw chunks, so callers can look at `source_path` before formatting."""
+        """
+        Raw chunks, so callers can look at `source_path` before formatting.
+
+        Defaults to code. Prose is never returned by accident: a caller that wants it
+        has to name it, and the policy has to allow it.
+        """
         embedding = await create_embedding(query)
         if embedding is None:
+            return []
+        wanted = chunk_types if chunk_types is not None else frozenset({CODE})
+        if not self.policy.allow_prose:
+            wanted = wanted & frozenset({CODE})
+        if not wanted:
             return []
         return await self.store.search(
             project_id=self.project_id,
@@ -188,6 +288,7 @@ class SectionContextBuilder:
             limit=limit,
             kb_id=self.kb_id,
             exclude_paths=exclude or None,
+            chunk_types=wanted,
         )
 
     # ── Internals ─────────────────────────────────────────────────────────────
@@ -209,9 +310,19 @@ class SectionContextBuilder:
 
     @staticmethod
     def _format(chunk) -> str:
+        """
+        One chunk, labelled with where it came from.
+
+        Prose is marked in the block itself rather than only in the section heading,
+        because blocks get reordered, truncated and quoted back — the label has to
+        travel with the text. Code keeps its existing format exactly: every doc prompt
+        in the system is built from it, and churning them buys nothing under a
+        code-only policy.
+        """
         location = f"{chunk.source_path}:{chunk.start_line}-{chunk.end_line}"
-        language = chunk.language or ""
-        return f"--- {location} ---\n```{language}\n{chunk.content}\n```"
+        if (chunk.chunk_type or CODE) in PROSE_TYPES:
+            return f"--- {location} ({chunk.chunk_type}, unverified) ---\n{chunk.content}"
+        return f"--- {location} ---\n```{chunk.language or ''}\n{chunk.content}\n```"
 
     def _trim(self, context: SectionContext) -> None:
         """
@@ -222,7 +333,11 @@ class SectionContextBuilder:
         """
         context.tokens = count_text_tokens(context.render())
         while context.tokens > self.token_budget:
-            if context.retrieved_blocks:
+            if context.prose_blocks:
+                # First to go, always. It is the least certain material in the bundle
+                # and the only kind that can be actively misleading.
+                context.prose_blocks.pop()
+            elif context.retrieved_blocks:
                 context.retrieved_blocks.pop()
             elif len(context.source_blocks) > 1:
                 context.source_blocks.pop()

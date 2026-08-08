@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.base import BaseAgent
-from app.knowledge.builder import SourceFile, chunk_files
+from app.knowledge.builder import SourceFile, chunk_files, chunk_prose
 from app.llm.client import create_embeddings
 from app.memory.vector_store import VectorStore
 from app.tracing.artifacts import save_artifact
@@ -40,6 +40,22 @@ class SemanticIndexerAgent(BaseAgent):
                 for f in (getattr(codebase, "files", None) or [])
             ]
             chunks = chunk_files(files)
+
+            # The repository's own prose, indexed alongside the code but tagged so a
+            # retrieval policy can exclude it. Documentation generation never sees it —
+            # writing a README back out as "generated documentation" is a failure that
+            # looks like success. See `app/knowledge/policy.py`.
+            prose = chunk_prose([
+                SourceFile(path=d.path, content=d.content, language="markdown")
+                for d in (state.get("markdown_docs") or [])
+            ])
+            if prose:
+                await self._emit_log(
+                    "info",
+                    f"Indexing {len(prose)} prose chunk(s) from "
+                    f"{len({p['source_path'] for p in prose})} markdown file(s)",
+                )
+            chunks.extend(prose)
 
             if not chunks:
                 await self._update_step(self.name, "completed", {"chunks": 0})

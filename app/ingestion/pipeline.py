@@ -45,6 +45,9 @@ class IngestionPipeline:
         self.infra_parser = InfraParser()
         self._last_codebase: ParsedCodebase | None = None
         self._last_clone_path: Path | None = None
+        # Retained, not just counted: markdown is the repository's own prose, and
+        # K3 indexes it as a router for questions. It was parsed and discarded.
+        self._md_docs: list = []
         self._api_specs: list[ParsedApiSpec] = []
         self._infra_context: list[ParsedInfra] = []
         self._commit_sha: str | None = None
@@ -97,6 +100,7 @@ class IngestionPipeline:
 
         # ── Markdown docs ──────────────────────────────────────────────────────
         md_docs = self.md_parser.parse_directory(root_path)
+        self._md_docs.extend(md_docs)
         result.markdown_files += len(md_docs)
 
         # ── OpenAPI specs ──────────────────────────────────────────────────────

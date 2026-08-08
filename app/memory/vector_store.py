@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +95,7 @@ class VectorStore:
         chunk_type: str | None = None,
         kb_id: int | None = None,
         exclude_paths: list[str] | None = None,
+        chunk_types: Iterable[str] | None = None,
     ) -> list[CodeChunk]:
         """Return the most semantically similar chunks using cosine distance (<=>)."""
         stmt = (
@@ -108,6 +111,12 @@ class VectorStore:
             stmt = stmt.where(CodeChunk.source_path.notin_(exclude_paths))
         if chunk_type:
             stmt = stmt.where(CodeChunk.chunk_type == chunk_type)
+        if chunk_types is not None:
+            # A set rather than one value, because a retrieval policy asks for "any
+            # kind of prose" or "code only" — never for a single type. An empty set
+            # means nothing is admissible, which must return nothing rather than
+            # silently degrade to no filter at all.
+            stmt = stmt.where(CodeChunk.chunk_type.in_(list(chunk_types)))
 
         # Order by cosine distance (smallest = most similar)
         stmt = stmt.order_by(CodeChunk.embedding.cosine_distance(query_embedding)).limit(limit)
