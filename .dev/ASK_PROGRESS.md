@@ -9,7 +9,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked · ⏭️
 
 | Phase | Scope | Status |
 |---|---|---|
-| Q1 | Streaming from the model | ⬜ |
+| Q1 | Streaming from the model | ✅ |
 | Q2 | The answer, and its citations | ⬜ |
 | Q3 | Threads and messages | ⬜ |
 | Q4 | The page | ⬜ |
@@ -22,14 +22,14 @@ answering; this tracker is the other half.
 
 ---
 
-## Phase Q1 — Streaming from the model ⬜
+## Phase Q1 — Streaming from the model ✅
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| Q1.1 | `stream_completion()` in `app/llm/client.py` — async generator of content deltas | ⬜ | Share parameter assembly with `chat_completion`; do not duplicate the local/hosted branch |
-| Q1.2 | Reasoning deltas counted, never yielded as answer text | ⬜ | The existing code already separates them |
-| Q1.3 | Cancellation mid-stream closes the upstream request | ⬜ | `check_cancelled()` between chunks, as the non-streaming path does |
-| Q1.4 | Verify against both a local and a hosted tier | ⬜ | Exit criterion for Q1 |
+| Q1.1 | `stream_completion()` in `app/llm/client.py` — async generator of content deltas | ✅ | `_completion_params` extracted and shared |
+| Q1.2 | Reasoning deltas counted, never yielded as answer text | ✅ | |
+| Q1.3 | Cancellation mid-stream closes the upstream request | ✅ | The check runs after the yield, as in `chat_completion`, so the chunk in flight is delivered — a test asserted otherwise and was wrong |
+| Q1.4 | Verify against both a local and a hosted tier | ✅ | quality (gpt-5-mini) 59 chunks, first token 3.76s; fast (lfm2.5-1.2b) 59 chunks, 2.88s; cancellation aborted after 3 |
 
 ---
 

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from functools import lru_cache
 
 import structlog
@@ -27,6 +27,104 @@ def get_llm_client(spec: ModelSpec | None = None) -> AsyncOpenAI:
     return _client_for(spec.base_url, spec.api_key)
 
 
+def _completion_params(
+    messages: list[dict],
+    spec: ModelSpec,
+    model: str | None,
+    temperature: float | None,
+    max_tokens: int | None,
+) -> dict:
+    """
+    The request body for one endpoint.
+
+    Shared by `chat_completion` and `stream_completion` rather than written twice,
+    because the differences between tiers are subtle and a second copy is a second
+    place for them to drift: `max_tokens` is a local concern, and the reasoning
+    families reject a temperature outright.
+    """
+    settings = get_settings()
+    params: dict = {
+        "model": model or spec.model,
+        "messages": messages,
+    }
+    if spec.is_local:
+        # `LLM_MAX_TOKENS` is a local concern. A served model has no idea what budget
+        # it is allowed, and without a ceiling one that loops in its own reasoning
+        # generates until something times out. Hosted models stop when they are done
+        # and bill for it, so a ceiling there buys nothing and truncates good answers.
+        params["max_tokens"] = max_tokens or settings.LLM_MAX_TOKENS
+        params["temperature"] = (
+            temperature if temperature is not None else settings.LLM_TEMPERATURE
+        )
+    elif not spec.is_reasoning_model:
+        # Ordinary hosted models still take a temperature, and 0.2 is what keeps the
+        # JSON-returning stages stable. The reasoning families reject anything but
+        # their default, so they are sent nothing at all.
+        params["temperature"] = (
+            temperature if temperature is not None else settings.LLM_TEMPERATURE
+        )
+    return params
+
+
+async def stream_completion(
+    messages: list[dict],
+    model: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    spec: ModelSpec | None = None,
+) -> AsyncIterator[str]:
+    """
+    Content deltas as the model produces them.
+
+    `chat_completion` already streams — it has to, so a cancelled job stops the model
+    rather than draining it — but it accumulates the chunks and returns one string.
+    A reader watching an answer appear needs them as they arrive: a grounded answer
+    takes five to twenty seconds, and a spinner for that long reads as broken.
+
+    Two things it deliberately does not yield:
+
+    * **Reasoning deltas.** The reasoning families stream their thinking on a separate
+      field. It is not the answer, and putting it on screen would show a reader the
+      model's rough working as though it were the reply.
+    * **Anything after cancellation.** The token is checked between chunks and the
+      stream closed, which aborts the underlying HTTP request — that is what actually
+      stops the model generating, rather than just stopping us listening.
+    """
+    from app.core.cancellation import check_cancelled
+
+    spec = spec or spec_for_tier(QUALITY)
+    client = get_llm_client(spec)
+    params = _completion_params(messages, spec, model, temperature, max_tokens)
+
+    reasoning_chars = 0
+    answered = False
+    stream_obj = await client.chat.completions.create(**params, stream=True)  # type: ignore[arg-type]
+    try:
+        async for event in stream_obj:
+            if not event.choices:
+                continue
+            delta = event.choices[0].delta
+            if delta and delta.content:
+                answered = True
+                yield delta.content
+            if delta and (thinking := getattr(delta, "reasoning_content", None)):
+                reasoning_chars += len(thinking)
+            await check_cancelled()
+    finally:
+        await stream_obj.close()
+
+    if not answered and reasoning_chars:
+        # Same failure `chat_completion` logs: "returned nothing" and "thought until
+        # it ran out of budget and then returned nothing" need different fixes, and
+        # the second is invisible without this.
+        logger.warning(
+            "llm_thought_but_did_not_answer",
+            model=params["model"],
+            reasoning_chars=reasoning_chars,
+            streaming=True,
+        )
+
+
 async def chat_completion(
     messages: list[dict],
     model: str | None = None,
@@ -51,26 +149,7 @@ async def chat_completion(
     client = get_llm_client(spec)
     use_stream = settings.LLM_STREAMING if stream is None else stream
 
-    params: dict = {
-        "model": model or spec.model,
-        "messages": messages,
-    }
-    if spec.is_local:
-        # `LLM_MAX_TOKENS` is a local concern. A served model has no idea what budget
-        # it is allowed, and without a ceiling one that loops in its own reasoning
-        # generates until something times out. Hosted models stop when they are done
-        # and bill for it, so a ceiling there buys nothing and truncates good answers.
-        params["max_tokens"] = max_tokens or settings.LLM_MAX_TOKENS
-        params["temperature"] = (
-            temperature if temperature is not None else settings.LLM_TEMPERATURE
-        )
-    elif not spec.is_reasoning_model:
-        # Ordinary hosted models still take a temperature, and 0.2 is what keeps the
-        # JSON-returning stages stable. The reasoning families reject anything but
-        # their default, so they are sent nothing at all.
-        params["temperature"] = (
-            temperature if temperature is not None else settings.LLM_TEMPERATURE
-        )
+    params = _completion_params(messages, spec, model, temperature, max_tokens)
 
     if not use_stream:
         response = await client.chat.completions.create(**params)  # type: ignore[arg-type]
