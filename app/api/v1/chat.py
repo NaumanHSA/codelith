@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 import structlog
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.core.cancellation import JobCancelled
@@ -32,6 +33,9 @@ from app.services.project_service import ProjectService
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/projects/{project_id}/chat", tags=["Chat"])
+
+#: The rail's list is not about one project, so it cannot live under one.
+threads_router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
 class AskIn(BaseModel):
@@ -61,6 +65,18 @@ class ThreadOut(BaseModel):
     context_window: int = 0
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class ThreadSummary(BaseModel):
+    """One row in the rail. No messages — a list of forty conversations should not
+    carry every word of all of them."""
+
+    id: int
+    project_id: int
+    project_name: str
+    title: str
+    message_count: int
+    last_message_at: datetime | None = None
 
 
 def _event(payload: dict) -> str:
@@ -173,3 +189,55 @@ async def clear_thread(
         await ChatService(db).clear(project_id, thread_id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/threads/{thread_id}", status_code=204)
+async def delete_thread(
+    project_id: int, thread_id: int, db: DbSession, user: CurrentUser
+) -> None:
+    """Remove a conversation entirely — the row in the rail as well as its messages."""
+    await ProjectService(db).get(project_id, user)
+    try:
+        await ChatService(db).delete_thread(project_id, thread_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/threads/{thread_id}/export", response_class=PlainTextResponse)
+async def export_thread(
+    project_id: int, thread_id: int, db: DbSession, user: CurrentUser
+) -> PlainTextResponse:
+    """A conversation as Markdown, to keep or to paste somewhere."""
+    project = await ProjectService(db).get(project_id, user)
+    try:
+        thread = await ChatService(db).load(project_id, thread_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    slug = "".join(c if c.isalnum() or c in "-_" else "-" for c in thread.title)[:50]
+    return PlainTextResponse(
+        ChatService.to_markdown(thread, project.name),
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{slug.strip("-") or "conversation"}.md"'
+        },
+    )
+
+
+@threads_router.get("/threads", response_model=list[ThreadSummary])
+async def list_threads(
+    db: DbSession, user: CurrentUser, limit: int = 40
+) -> list[ThreadSummary]:
+    """Recent conversations across the org's projects, newest first."""
+    rows = await ChatService(db).list_threads(user.org_id or 0, limit=limit)
+    return [
+        ThreadSummary(
+            id=thread.id,
+            project_id=thread.project_id,
+            project_name=project_name,
+            title=thread.title,
+            message_count=count,
+            last_message_at=thread.last_message_at,
+        )
+        for thread, count, project_name in rows
+    ]

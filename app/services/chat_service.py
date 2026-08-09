@@ -138,6 +138,106 @@ class ChatService:
             )
         ).scalars().first()
 
+    async def list_threads(
+        self, org_id: int, limit: int = 40
+    ) -> list[tuple[ChatThread, int, str]]:
+        """
+        Recent conversations across an org's projects, for the rail.
+
+        Flat and cross-project on purpose. A thread list nested under whichever
+        project happens to be selected is only reachable once you are already in the
+        right place, which is the opposite of what a "recent" list is for. Each row
+        carries its project name so the reader can tell two similar questions about
+        two repositories apart.
+
+        Empty threads are excluded. A thread exists from the moment somebody presses
+        New Chat, and one that was never asked anything has no title and nothing in
+        it — listing it would put a row called "New conversation" above the real ones
+        every time.
+        """
+        from app.models.project import Project
+
+        counted = (
+            select(
+                ChatMessage.thread_id.label("thread_id"),
+                func.count(ChatMessage.id).label("n"),
+            )
+            .group_by(ChatMessage.thread_id)
+            .subquery()
+        )
+
+        rows = (
+            await self.db.execute(
+                select(ChatThread, counted.c.n, Project.name)
+                .join(Project, Project.id == ChatThread.project_id)
+                .join(counted, counted.c.thread_id == ChatThread.id)
+                .where(Project.org_id == org_id)
+                .order_by(
+                    ChatThread.last_message_at.desc().nullslast(), ChatThread.id.desc()
+                )
+                .limit(limit)
+            )
+        ).all()
+        return [(t, int(n or 0), name) for t, n, name in rows]
+
+    async def delete_thread(self, project_id: int, thread_id: int) -> None:
+        """
+        Remove a conversation entirely.
+
+        Distinct from `clear`, which empties a thread and keeps it. Clearing is for
+        the conversation you are in — the id the studio is holding stays valid.
+        Deleting is for one in the list you are done with.
+        """
+        thread = await self._thread(project_id, thread_id)
+        await self.db.delete(thread)
+        await self.db.commit()
+        logger.info("chat_thread_deleted", thread_id=thread_id, project_id=project_id)
+
+    @staticmethod
+    def to_markdown(thread: ChatThread, project_name: str) -> str:
+        """
+        A conversation as a file somebody can keep.
+
+        Citations are written out under each answer rather than left inline, because
+        the point of exporting is to read it away from the studio, where a chip is
+        not clickable and a list of paths is. Unresolved references are named as
+        such — an export that quietly drops them would be a cleaner document and a
+        less honest one.
+        """
+        when = (thread.last_message_at or thread.created_at)
+        lines = [
+            f"# {thread.title}",
+            "",
+            f"**Repository:** {project_name}  ",
+            f"**Exported:** {datetime.now(UTC):%Y-%m-%d %H:%M} UTC  ",
+            f"**Last message:** {when:%Y-%m-%d %H:%M} UTC" if when else "",
+            "",
+            "---",
+            "",
+        ]
+
+        for message in thread.messages:
+            if message.role == "user":
+                lines += [f"## {message.content.strip()}", ""]
+                continue
+
+            lines += [message.content.strip(), ""]
+            if message.citations_json:
+                lines += ["**Sources**", ""]
+                lines += [f"- `{c}`" for c in message.citations_json]
+                lines += [""]
+            if message.stripped_json:
+                lines += [
+                    "**Unverified references** — named in the answer but not found in "
+                    "the retrieved evidence:",
+                    "",
+                ]
+                lines += [f"- `{c}`" for c in message.stripped_json]
+                lines += [""]
+            lines += ["---", ""]
+
+        return "\n".join(line for line in lines if line is not None).rstrip() + "\n"
+
     async def clear(self, project_id: int, thread_id: int) -> int:
         """
         Empty a thread, keeping the thread itself.

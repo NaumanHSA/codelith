@@ -6,6 +6,7 @@ import { AssistantMessage, UserMessage } from '../../components/chat/Message'
 import { Composer } from '../../components/chat/Composer'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import { SkeletonPanel } from '../../components/States'
+import { useChatThreads } from '../../chat-threads'
 
 /* ------------------------------------------------------------------ *
  * Ask the codebase.
@@ -46,10 +47,18 @@ export default function ChatPage() {
   const [live, setLive] = useState<Live | null>(null)
   const abort = useRef<AbortController | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
+  const { refresh: refreshThreads } = useChatThreads()
 
   const projectId = Number(params.get('project')) || projects?.[0]?.id || null
   const project = projects?.find(p => p.id === projectId) ?? null
+
+  // `new` is a real state, not the absence of one. Without it, pressing New chat
+  // and reloading would silently resume the conversation it was meant to leave.
+  const threadParam = params.get('thread')
+  const wantsNew = threadParam === 'new'
+  const wantedId = Number(threadParam) || null
 
   useEffect(() => {
     api
@@ -58,24 +67,30 @@ export default function ChatPage() {
       .catch(() => setProjects([]))
   }, [])
 
-  // Load whatever conversation this project already had.
+  // Load the conversation the URL names, or the most recent one.
   useEffect(() => {
     if (!projectId) {
       setLoading(false)
       return
     }
-    let live = true
+    if (wantsNew) {
+      setThread(null)
+      setLive(null)
+      setLoading(false)
+      return
+    }
+    let alive = true
     setLoading(true)
     setError(null)
     api
-      .chatThread(projectId)
-      .then(t => live && setThread(t))
-      .catch(() => live && setThread(null))
-      .finally(() => live && setLoading(false))
+      .chatThread(projectId, wantedId ?? undefined)
+      .then(t => alive && setThread(t))
+      .catch(() => alive && setThread(null))
+      .finally(() => alive && setLoading(false))
     return () => {
-      live = false
+      alive = false
     }
-  }, [projectId])
+  }, [projectId, wantedId, wantsNew])
 
   const messages = thread?.messages ?? []
   const empty = messages.length === 0 && !live
@@ -113,6 +128,15 @@ export default function ChatPage() {
                 setThread(t =>
                   t ?? { id: event.thread_id, title: event.title, messages: [], token_count: 0, context_window: 0 },
                 )
+                // A new conversation now has an id. Putting it in the URL is what
+                // makes reload, the back button and the rail's highlight all agree
+                // about which conversation is open.
+                if (wantsNew || !wantedId) {
+                  setParams(
+                    { project: String(projectId), thread: String(event.thread_id) },
+                    { replace: true },
+                  )
+                }
                 break
               case 'evidence':
                 setLive(l => (l ? { ...l, sources: event.sources, counts: event.counts } : l))
@@ -139,18 +163,35 @@ export default function ChatPage() {
         // the authoritative token counts, and guessing them here would show the
         // reader something different from what was kept.
         if (projectId) {
-          api.chatThread(projectId).then(setThread).catch(() => undefined)
+          api.chatThread(projectId, thread?.id).then(setThread).catch(() => undefined)
         }
+        // The rail shows titles and orders by recency; both just changed.
+        void refreshThreads()
       }
     },
-    [projectId, thread?.id, live],
+    [projectId, thread?.id, live, wantsNew, wantedId, setParams, refreshThreads],
   )
 
   const clear = useCallback(async () => {
     if (!projectId || !thread) return
     await api.clearChat(projectId, thread.id)
-    const fresh = await api.chatThread(projectId).catch(() => null)
+    const fresh = await api.chatThread(projectId, thread.id).catch(() => null)
     setThread(fresh)
+    void refreshThreads()
+  }, [projectId, thread, refreshThreads])
+
+  /** Copying the link is the honest version of "share" for something that never
+   *  leaves the machine. Anyone who can reach this studio can open it. */
+  const share = useCallback(async () => {
+    if (!projectId || !thread) return
+    const url = `${window.location.origin}/app/chat?project=${projectId}&thread=${thread.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setError('The link could not be copied. Your browser blocked clipboard access.')
+    }
   }, [projectId, thread])
 
   if (projects === null) return <SkeletonPanel rows={6} />
@@ -165,35 +206,56 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-rule px-1 pb-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-[15px] text-ink">Ask the codebase</h1>
-          <select
-            value={projectId ?? ''}
-            onChange={e => {
-              setParams({ project: e.target.value })
-              setThread(null)
-            }}
-            className="max-w-[220px] truncate border border-rule bg-panel px-2 py-1 text-[12px] text-ink-mid outline-none focus:border-hot"
-          >
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+    <div className="-m-4 flex h-[calc(100vh-3.25rem)] min-h-0 flex-col md:-m-6">
+      {/* The bar had no ground of its own and its one control read as body text.
+          A panel background, a rule under it and real padding give it a shelf to
+          sit on; the actions are bordered so they look like things you press. */}
+      <header className="shrink-0 border-b border-rule bg-panel px-4 py-3">
+        <div className="mx-auto flex max-w-[980px] items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="tag shrink-0 text-ink-dim">Repository</span>
+              <select
+                value={projectId ?? ''}
+                onChange={e => {
+                  setParams({ project: e.target.value, thread: 'new' })
+                  setThread(null)
+                }}
+                className="max-w-[240px] truncate border border-rule bg-paper px-2 py-[3px] text-[11.5px] text-ink outline-none focus:border-hot"
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <h1 className="truncate text-[14px] leading-snug text-ink">
+              {thread && messages.length ? thread.title : 'New conversation'}
+            </h1>
+          </div>
 
-        {!!messages.length && (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="shrink-0 text-[11px] text-ink-dim hover:text-hot-ink"
-          >
-            clear conversation
-          </button>
-        )}
+          <div className="flex shrink-0 items-center gap-2">
+            {!!messages.length && (
+              <button
+                type="button"
+                onClick={share}
+                className="border border-rule px-2.5 py-[5px] text-[11px] text-ink-mid transition-colors hover:border-hot hover:text-hot-ink"
+              >
+                {copied ? 'link copied' : 'share'}
+              </button>
+            )}
+            {!!messages.length && (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="border border-hot bg-hot-wash px-2.5 py-[5px] text-[11px] font-semibold text-hot-ink transition-colors hover:bg-hot hover:text-paper"
+              >
+                clear conversation
+              </button>
+            )}
+          </div>
+        </div>
       </header>
 
       <ConfirmDelete

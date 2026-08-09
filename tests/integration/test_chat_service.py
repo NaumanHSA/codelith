@@ -194,3 +194,128 @@ class TestReloadAndClear:
     async def test_clearing_an_unknown_thread_is_refused(self, chat, project) -> None:
         with pytest.raises(NotFoundError):
             await chat.clear(project.id, 999_999)
+
+
+class TestTheRailsList:
+    """
+    What the sidebar shows. Flat and cross-project, because a list nested under
+    whichever project happens to be selected is only reachable once you are already
+    in the right place — the opposite of what "recent" is for.
+    """
+
+    async def test_a_thread_with_no_messages_is_not_listed(self, chat, project) -> None:
+        """A thread exists from the moment somebody presses New chat. Listing an
+        empty one would put a row called "New conversation" above the real ones
+        every single time."""
+        await chat.get_or_create_thread(project.id, None, None)
+
+        rows = await chat.list_threads(project.org_id)
+
+        assert rows == []
+
+    async def test_a_listed_row_carries_its_project_and_count(self, chat, project) -> None:
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(thread, "what does this do")
+        await chat.add_answer(thread, "it does things", evidence={}, citations=[], stripped=[])
+
+        rows = await chat.list_threads(project.org_id)
+
+        assert len(rows) == 1
+        listed, count, project_name = rows[0]
+        assert listed.id == thread.id
+        assert count == 2
+        assert project_name == project.name
+
+    async def test_the_most_recent_conversation_is_first(self, chat, project) -> None:
+        older = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(older, "asked first")
+        newer = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(newer, "asked second")
+
+        rows = await chat.list_threads(project.org_id)
+
+        assert [t.id for t, _, _ in rows] == [newer.id, older.id]
+
+    async def test_another_org_sees_nothing(self, chat, project) -> None:
+        """The list is the one place a thread is reachable without naming its
+        project, so it is the one place org scoping has to be got right."""
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(thread, "private question")
+
+        assert await chat.list_threads(project.org_id + 9_999) == []
+
+
+class TestDeletingAThread:
+    async def test_delete_removes_the_thread_and_its_messages(self, chat, project) -> None:
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(thread, "a question")
+
+        await chat.delete_thread(project.id, thread.id)
+
+        with pytest.raises(NotFoundError):
+            await chat.load(project.id, thread.id)
+        assert await chat.list_threads(project.org_id) == []
+
+    async def test_delete_is_scoped_to_the_project(self, chat, project, db_session) -> None:
+        thread = await chat.get_or_create_thread(project.id, None, None)
+
+        with pytest.raises(NotFoundError):
+            await chat.delete_thread(project.id + 9_999, thread.id)
+
+
+class TestMarkdownExport:
+    """
+    A conversation as a file somebody keeps. The point of exporting is to read it
+    away from the studio, where a citation chip is not clickable and a list is.
+    """
+
+    async def test_questions_and_answers_both_survive(self, chat, project) -> None:
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(thread, "where is the entry point")
+        await chat.add_answer(
+            thread, "In `app/main.py`.", evidence={}, citations=["app/main.py:1-5"], stripped=[]
+        )
+        loaded = await chat.load(project.id, thread.id)
+
+        md = ChatService.to_markdown(loaded, project.name)
+
+        assert "# where is the entry point" in md
+        assert "## where is the entry point" in md
+        assert "In `app/main.py`." in md
+        assert project.name in md
+
+    async def test_citations_are_listed_under_the_answer(self, chat, project) -> None:
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(thread, "q")
+        await chat.add_answer(
+            thread, "a", evidence={}, citations=["app/db/session.py:12-40"], stripped=[]
+        )
+        loaded = await chat.load(project.id, thread.id)
+
+        md = ChatService.to_markdown(loaded, project.name)
+
+        assert "**Sources**" in md
+        assert "`app/db/session.py:12-40`" in md
+
+    async def test_unverified_references_are_named_not_dropped(self, chat, project) -> None:
+        """An export that quietly drops them would be a cleaner document and a less
+        honest one — the check having happened is part of what is being kept."""
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        await chat.add_user_message(thread, "q")
+        await chat.add_answer(
+            thread, "a", evidence={}, citations=[], stripped=["app/ghost.py:1-2"]
+        )
+        loaded = await chat.load(project.id, thread.id)
+
+        md = ChatService.to_markdown(loaded, project.name)
+
+        assert "Unverified references" in md
+        assert "`app/ghost.py:1-2`" in md
+
+    async def test_an_empty_conversation_still_exports(self, chat, project) -> None:
+        thread = await chat.get_or_create_thread(project.id, None, None)
+        loaded = await chat.load(project.id, thread.id)
+
+        md = ChatService.to_markdown(loaded, project.name)
+
+        assert md.startswith("# ")

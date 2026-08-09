@@ -376,6 +376,16 @@ export interface ChatThread {
   context_window: number
 }
 
+/** One row in the rail. No messages — the list carries forty of these. */
+export interface ChatThreadSummary {
+  id: number
+  project_id: number
+  project_name: string
+  title: string
+  message_count: number
+  last_message_at: string | null
+}
+
 /** One frame of a streamed answer. */
 export type ChatEvent =
   | { type: 'thread'; thread_id: number; title: string }

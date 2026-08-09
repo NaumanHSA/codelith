@@ -10,7 +10,7 @@ import type {
   Doc, Features, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
-  ChatEvent, ChatThread,
+  ChatEvent, ChatThread, ChatThreadSummary,
 } from './types'
 
 export const API_BASE =
@@ -406,6 +406,40 @@ export const api = {
 
   clearChat: (projectId: number, threadId: number) =>
     request<void>(`/projects/${projectId}/chat/thread/${threadId}`, { method: 'DELETE' }),
+
+  /** Recent conversations across every project, for the rail. */
+  chatThreads: (limit = 40) =>
+    request<ChatThreadSummary[]>(`/chat/threads?limit=${limit}`),
+
+  /** Remove a conversation entirely, unlike `clearChat` which empties it. */
+  deleteChatThread: (projectId: number, threadId: number) =>
+    request<void>(`/projects/${projectId}/chat/threads/${threadId}`, { method: 'DELETE' }),
+
+  /**
+   * Download a conversation as Markdown.
+   *
+   * Fetched rather than linked: the export needs the `Authorization` header, and an
+   * `<a download>` cannot send one. The blob is handed to a temporary link so the
+   * browser saves it with the filename the server chose.
+   */
+  exportChatThread: async (projectId: number, threadId: number, fallbackName: string) => {
+    const response = await fetch(
+      `${ROOT}/projects/${projectId}/chat/threads/${threadId}/export`,
+      { headers: { Authorization: `Bearer ${tokenStore.access ?? ''}` } },
+    )
+    if (!response.ok) throw new ApiError(response.status, 'The conversation could not be exported.')
+
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const named = /filename="([^"]+)"/.exec(disposition)?.[1]
+    const url = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a')
+    link.href = url
+    link.download = named || `${fallbackName || 'conversation'}.md`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  },
 
   /**
    * Ask a question and read the answer as it is written.

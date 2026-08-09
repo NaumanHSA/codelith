@@ -6,14 +6,27 @@ import { api } from '../../lib/api'
 import { humanize } from '../../lib/format'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { GitHubMark, Logo } from '../ui'
+import { ChatThreadsProvider } from '../../chat-threads'
+import ThreadRail from './ThreadRail'
 
 const NAV = [
   { to: '/app', index: '01', label: 'Dashboard', end: true },
   { to: '/app/projects', index: '02', label: 'Projects' },
   { to: '/app/documents', index: '03', label: 'Documents' },
   { to: '/app/jobs', index: '04', label: 'Jobs' },
-  { to: '/app/chat', index: '05', label: 'Ask the code' },
 ]
+
+/** A rule with a name on it. The rail has two halves that do different jobs, and
+ *  without the divide "Ask the code" reads as a fifth destination rather than as
+ *  the heading of the conversations under it. */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+      <span className="tag text-ink-dim">{children}</span>
+      <span className="h-px flex-1 bg-rule" />
+    </div>
+  )
+}
 
 /** The banner that makes a running job reachable from every screen. */
 function RunningJobBar() {
@@ -68,6 +81,14 @@ function RunningJobBar() {
 }
 
 export default function Shell() {
+  return (
+    <ChatThreadsProvider>
+      <ShellBody />
+    </ChatThreadsProvider>
+  )
+}
+
+function ShellBody() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -96,7 +117,8 @@ export default function Shell() {
           </span>
         </button>
 
-        <nav className="border-b border-rule py-1.5">
+        <nav className="border-b border-rule pb-1.5">
+          <SectionLabel>Documentation</SectionLabel>
           {NAV.map(n => (
             <NavLink key={n.to} to={n.to} end={n.end} className={linkClass}>
               {({ isActive }) => (
@@ -108,11 +130,14 @@ export default function Shell() {
               )}
             </NavLink>
           ))}
+
+          <SectionLabel>Ask the code</SectionLabel>
+          <ThreadRail />
         </nav>
 
         <div className="min-h-0 flex-1 overflow-y-auto py-2">
           <div className="flex items-center gap-2 px-3 pb-1.5">
-            <span className="tag text-ink-dim">Index</span>
+            <span className="tag text-ink-dim">Projects</span>
             <span className="h-px flex-1 bg-rule" />
             <span className="tag text-ink-dim">{projects?.length ?? '—'}</span>
           </div>
