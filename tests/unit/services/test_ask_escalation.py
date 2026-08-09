@@ -87,6 +87,15 @@ async def _collect(service, messages, bundle):
     return [e async for e in service._answer(messages, bundle, kb_id=1, project_id=1, spec=None)]
 
 
+async def _collect_with(service, spec):
+    return [
+        e
+        async for e in service._answer(
+            _messages(), _bundle(), kb_id=1, project_id=1, spec=spec
+        )
+    ]
+
+
 class TestTheCommonCaseCostsNothing:
     async def test_an_answer_streams_without_a_second_call(self, scripted) -> None:
         """The whole reason the turn is streamed. If this regresses, every question
@@ -173,6 +182,172 @@ class TestEscalation:
 
         assert state["tool_calls"] == [("read_file", {})]
         assert any(e["type"] == "token" for e in events)
+
+
+class TestASilentTurn:
+    """
+    A turn that streams neither content nor a tool call.
+
+    Measured against a local reasoning model, this is what a turn *after a tool
+    result* often looks like: a few hundred characters of reasoning, then
+    `finish_reason: stop` and no content at all. Five of twenty questions came back
+    blank that way, and the run harness reported every one of them as "ok" — the
+    reader would have seen an empty message with nothing to indicate a problem.
+    """
+
+    async def test_an_empty_turn_is_retried_without_tools(self, scripted) -> None:
+        state = scripted([
+            _turn(calls=[{"id": "1", "name": "read_file", "arguments": '{"path": "a.py"}'}]),
+            _turn(),  # thought, then said nothing
+        ])
+
+        events = await _collect(AskService(None), _messages(), _bundle())
+
+        assert [e["text"] for e in events if e["type"] == "token"] == ["fallback answer"]
+        assert state["final_stream"] == 1
+
+    async def test_the_retry_keeps_what_the_tools_found(
+        self, scripted, monkeypatch
+    ) -> None:
+        """Retrying from the original prompt would throw away the lookup that was
+        just paid for, and re-ask a question the transcript can already answer."""
+        seen: dict = {}
+        scripted([
+            _turn(calls=[{"id": "1", "name": "read_file", "arguments": "{}"}]),
+            _turn(),
+        ])
+
+        async def capture(messages, spec=None, **kwargs):
+            seen["messages"] = messages
+            yield "fallback answer"
+
+        monkeypatch.setattr(ask_service, "stream_completion", capture)
+
+        await _collect(AskService(None), _messages(), _bundle())
+
+        assert "tool" in [m["role"] for m in seen["messages"]], (
+            "the tool result must survive into the retry"
+        )
+
+    async def test_the_retry_ends_on_a_question(self, scripted, monkeypatch) -> None:
+        """A transcript ending on a tool result gives the model nothing to reply to,
+        and measured, that is what it does — it reads the result and stops. Two of the
+        five blank answers survived a retry that just replayed the transcript."""
+        seen: dict = {}
+        scripted([
+            _turn(calls=[{"id": "1", "name": "read_file", "arguments": "{}"}]),
+            _turn(),
+        ])
+
+        async def capture(messages, spec=None, **kwargs):
+            seen["messages"] = messages
+            yield "fallback answer"
+
+        monkeypatch.setattr(ask_service, "stream_completion", capture)
+
+        await _collect(AskService(None), _messages(), _bundle())
+
+        assert seen["messages"][-1]["role"] == "user"
+        assert "Answer the question now" in seen["messages"][-1]["content"]
+
+    async def test_the_retry_does_not_mutate_the_transcript(
+        self, scripted, monkeypatch
+    ) -> None:
+        """The nudge is scaffolding for one call, not part of the conversation."""
+        seen: list = []
+        scripted([_turn()])
+
+        async def capture(messages, spec=None, **kwargs):
+            seen.append(messages)
+            yield "x"
+
+        monkeypatch.setattr(ask_service, "stream_completion", capture)
+        original = _messages()
+
+        await _collect(AskService(None), original, _bundle())
+
+        assert len(original) == 2, "the caller's messages were appended to"
+
+    async def test_an_empty_first_turn_is_also_retried(self, scripted) -> None:
+        """No tool call and nothing said on the very first turn. The evidence is
+        already in the prompt, so there is a real answer to give."""
+        state = scripted([_turn()])
+
+        events = await _collect(AskService(None), _messages(), _bundle())
+
+        assert [e["text"] for e in events if e["type"] == "token"] == ["fallback answer"]
+        assert state["tool_calls"] == []
+
+    async def test_a_turn_that_spoke_is_not_retried(self, scripted) -> None:
+        """The guard above must not fire on the common path — that would double the
+        cost of every question that answered first time."""
+        state = scripted([_turn(deltas=["A real answer."])])
+
+        events = await _collect(AskService(None), _messages(), _bundle())
+
+        assert [e["text"] for e in events if e["type"] == "token"] == ["A real answer."]
+        assert state["final_stream"] == 0
+
+
+class TestTheWindowIsABudgetToo:
+    """
+    Capping each tool result and not the total is a cap that does not cap.
+
+    Six results at `_TOOL_RESULT_CHARS` is ~9,000 tokens landing on a prompt already
+    built to `_PROMPT_SHARE` of the window. On a 32k model that leaves nothing to
+    answer in, and the failure is silent — an empty message with `finish_reason:
+    stop`, not an error. That is what the one blank answer that survived the
+    silent-turn retry was doing, six tool calls deep.
+    """
+
+    async def test_results_are_trimmed_to_what_is_left(self, scripted) -> None:
+        spec = SimpleNamespace(context_window=2_000)  # budget: 300 tokens
+        scripted(
+            [
+                _turn(calls=[{"id": "1", "name": "read_file", "arguments": "{}"}]),
+                _turn(deltas=["answer"]),
+            ],
+            tool_result="x " * 20_000,
+        )
+
+        events = [
+            e
+            async for e in AskService(None)._answer(
+                _messages(), _bundle(), kb_id=1, project_id=1, spec=spec
+            )
+        ]
+
+        assert any(e["type"] == "token" for e in events)
+
+    async def test_a_full_window_stops_the_loop(self, scripted) -> None:
+        """Pulling results the model has no room to read is paying for nothing."""
+        spec = SimpleNamespace(context_window=2_000)
+        state = scripted(
+            [_turn(calls=[{"id": "1", "name": "search_code", "arguments": '{"query": "x"}'}])],
+            tool_result="y " * 20_000,
+        )
+
+        await _collect_with(AskService(None), spec)
+
+        assert len(state["tool_calls"]) < ask_service._MAX_TOOL_CALLS, (
+            "the step budget should not be what stops it — the window should"
+        )
+
+    async def test_a_generous_window_does_not_trim(self, scripted) -> None:
+        """The guard must not fire on ordinary questions, or every escalation loses
+        the evidence it just paid to fetch."""
+        spec = SimpleNamespace(context_window=200_000)
+        state = scripted(
+            [
+                _turn(calls=[{"id": "1", "name": "read_file", "arguments": "{}"}]),
+                _turn(deltas=["ok"]),
+            ],
+            tool_result="z " * 100,
+        )
+
+        await _collect_with(AskService(None), spec)
+
+        assert len(state["tool_calls"]) == 1
 
 
 class TestBudget:

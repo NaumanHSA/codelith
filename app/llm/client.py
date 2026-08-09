@@ -176,17 +176,29 @@ async def stream_tool_completion(
 
     # index → {id, name, arguments}. Fragments accumulate here until the turn ends.
     pending: dict[int, dict] = {}
+    spoke = False
+    reasoning_chars = 0
+    finish_reason: str | None = None
 
     try:
         async for event in stream_obj:
             if not event.choices:
                 continue
+            if reason := event.choices[0].finish_reason:
+                finish_reason = reason
             delta = event.choices[0].delta
             if delta is None:
                 continue
 
             if delta.content:
+                spoke = True
                 yield {"delta": delta.content}
+
+            if thinking := getattr(delta, "reasoning_content", None):
+                # Not the answer, and not shown. Counted so that a turn which thought
+                # and then said nothing is distinguishable from one that returned
+                # nothing at all — different causes, different fixes.
+                reasoning_chars += len(thinking)
 
             for call in getattr(delta, "tool_calls", None) or []:
                 slot = pending.setdefault(
@@ -203,11 +215,20 @@ async def stream_tool_completion(
     finally:
         await stream_obj.close()
 
-    yield {
-        "tool_calls": [
-            pending[index] for index in sorted(pending) if pending[index]["name"]
-        ]
-    }
+    calls = [pending[index] for index in sorted(pending) if pending[index]["name"]]
+
+    if not spoke and not calls:
+        # A silent turn. Without this it is invisible: the caller sees an empty
+        # answer and has no way to tell whether the model thought itself into a
+        # corner, was cut off mid-sentence, or the endpoint returned nothing at all.
+        logger.warning(
+            "tool_turn_said_nothing",
+            model=spec.model,
+            finish_reason=finish_reason,
+            reasoning_chars=reasoning_chars,
+        )
+
+    yield {"tool_calls": calls}
 
 
 async def chat_completion(

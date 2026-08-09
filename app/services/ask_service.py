@@ -91,6 +91,18 @@ _MAX_TOOL_CALLS = 6
 #: thousand characters crowds out the evidence the question started from.
 _TOOL_RESULT_CHARS = 6000
 
+#: Share of the context window all tool results together may occupy.
+#:
+#: Capping each result and not the total is a cap that does not cap. Six results at
+#: `_TOOL_RESULT_CHARS` is 36,000 characters — roughly 9,000 tokens — landing on top
+#: of a prompt already built to `_PROMPT_SHARE` of the window. On a 32k model that
+#: leaves the answer no room, and the failure is silent: the model returns an empty
+#: message with `finish_reason: stop`, not an error. Measured, that is exactly what
+#: the one unrecoverable blank answer was doing, six tool calls deep.
+#:
+#: 0.6 + 0.15 leaves a quarter of the window to answer in.
+_TOOL_SHARE = 0.15
+
 
 @dataclass(slots=True)
 class Answer:
@@ -208,6 +220,7 @@ class AskService:
         tools = CodebaseTools(self.db, kb_id, project_id)
         working = list(messages)
         used = 0
+        room = self._tool_budget(spec)
 
         while True:
             spoke = False
@@ -231,6 +244,22 @@ class AskService:
                 return
 
             if not calls:
+                if spoke:
+                    return
+                # Neither an answer nor a tool call: the turn said nothing at all.
+                # Measured against a local reasoning model, this is what a turn *after
+                # a tool result* often looks like — it thinks for a few hundred
+                # characters, stops with `finish_reason: stop`, and streams no content.
+                # Five of twenty questions came back blank that way, and the reader saw
+                # an empty message with no indication anything had gone wrong.
+                #
+                # Asking again without tools is what breaks it: the transcript already
+                # holds the evidence and every tool result, so there is a real answer
+                # to give, and removing the tools removes the option of reaching for
+                # another one instead of replying.
+                logger.info("ask_turn_said_nothing", tool_calls_used=used)
+                async for delta in self._answer_now(working, spec):
+                    yield {"type": "token", "text": delta}
                 return
 
             if spoke:
@@ -238,18 +267,12 @@ class AskService:
                 # the answer — the reader should not keep it.
                 yield {"type": "reset"}
 
-            if used >= _MAX_TOOL_CALLS:
-                # Out of budget. Answer from what has been gathered rather than
-                # leaving the reader with a half-finished search.
-                logger.info("ask_tool_budget_spent", calls=used)
-                working.append({
-                    "role": "user",
-                    "content": (
-                        "You have looked far enough. Answer now from everything above, "
-                        "and say plainly what remains unsettled."
-                    ),
-                })
-                async for delta in stream_completion(working, spec=spec):
+            if used >= _MAX_TOOL_CALLS or room <= 0:
+                # Out of budget — of steps, or of room in the window to put another
+                # result. Answer from what has been gathered rather than leaving the
+                # reader with a half-finished search.
+                logger.info("ask_tool_budget_spent", calls=used, room_left=room)
+                async for delta in self._answer_now(working, spec):
                     yield {"type": "token", "text": delta}
                 return
 
@@ -277,13 +300,63 @@ class AskService:
 
                 text, found = await tools.run(call["name"], args)
                 bundle.items.extend(found)
+
+                # Trimmed against what is left of the window, not just against the
+                # per-result cap. The evidence itself is unaffected — `found` already
+                # joined the bundle in full, so a citation to something trimmed out of
+                # the transcript still resolves.
+                content = text[:_TOOL_RESULT_CHARS]
+                if (cost := count_text_tokens(content)) > room:
+                    content = content[: max(0, room) * 4]
+                    if content:
+                        content += "\n\n[trimmed — the context window is full]"
+                    cost = count_text_tokens(content)
+                room -= cost
+
                 working.append({
                     "role": "tool",
                     "tool_call_id": call["id"],
-                    "content": text[:_TOOL_RESULT_CHARS],
+                    "content": content or "[no room left in the context window]",
                 })
 
+                if room <= 0:
+                    # Stop pulling results the model has no room to read. Breaking
+                    # here rather than looping means the next turn is the answer.
+                    logger.info("ask_tool_window_full", calls=used)
+                    break
+
     # ── Internals ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def _answer_now(working: list[dict], spec) -> AsyncIterator[str]:
+        """
+        Ask for the answer, without tools and with something to answer.
+
+        The nudge is not politeness. A transcript that ends on a tool result gives the
+        model nothing to reply *to*, and measured against a local reasoning model that
+        is what a blank answer looks like: it reads the result, thinks for a couple of
+        hundred characters, and stops with `finish_reason: stop` and no content. Ending
+        on a user turn asks a question, so there is an answer to give.
+
+        Tools are withheld deliberately — offering them here is offering the option of
+        looking again instead of replying, which is the behaviour being recovered from.
+        """
+        return_now = list(working)
+        return_now.append({
+            "role": "user",
+            "content": (
+                "You have looked far enough. Answer the question now from everything "
+                "above, and say plainly what remains unsettled."
+            ),
+        })
+        async for delta in stream_completion(return_now, spec=spec):
+            yield delta
+
+    @staticmethod
+    def _tool_budget(spec) -> int:
+        """Tokens all tool results together may add to the transcript."""
+        window = getattr(spec, "context_window", None) or 32_768
+        return int(window * _TOOL_SHARE)
 
     async def _usable_kb(self, project_id: int) -> KnowledgeBase:
         """
