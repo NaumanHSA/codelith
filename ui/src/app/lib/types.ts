@@ -341,3 +341,53 @@ export interface LLMSettings {
 export interface Features {
   diagrams_enabled: boolean
 }
+
+/* ------------------------------------------------------------------ *
+ * Asking the codebase.
+ * ------------------------------------------------------------------ */
+
+export interface ChatSource {
+  kind: string
+  title: string
+  why: string
+}
+
+export interface ChatMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  token_count: number
+  evidence: {
+    counts?: Record<string, number>
+    intents?: string[]
+    routed_by?: string
+    sources?: ChatSource[]
+  }
+  citations: string[]
+  /** Citations the model produced that did not resolve, and were demoted. */
+  stripped: string[]
+}
+
+export interface ChatThread {
+  id: number
+  title: string
+  messages: ChatMessage[]
+  token_count: number
+  context_window: number
+}
+
+/** One frame of a streamed answer. */
+export type ChatEvent =
+  | { type: 'thread'; thread_id: number; title: string }
+  | {
+      type: 'evidence'
+      counts: Record<string, number>
+      intents: string[]
+      routed_by: string
+      sources: ChatSource[]
+    }
+  | { type: 'token'; text: string }
+  | { type: 'usage'; prompt_tokens: number; answer_tokens: number; context_window: number }
+  | { type: 'done'; text: string; citations: string[]; stripped: string[] }
+  | { type: 'stopped' }
+  | { type: 'error'; message: string }

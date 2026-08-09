@@ -10,6 +10,7 @@ import type {
   Doc, Features, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
+  ChatEvent, ChatThread,
 } from './types'
 
 export const API_BASE =
@@ -396,6 +397,75 @@ export const api = {
     request<Doc>(`/documents/${id}`, { method: 'PATCH', body }),
 
   publishDocument: (id: number) => request<Doc>(`/documents/${id}/publish`, { method: 'POST' }),
+
+  /* --- ask the codebase --- */
+  chatThread: (projectId: number, threadId?: number) =>
+    request<ChatThread | null>(
+      `/projects/${projectId}/chat/thread${threadId ? `?thread_id=${threadId}` : ''}`,
+    ),
+
+  clearChat: (projectId: number, threadId: number) =>
+    request<void>(`/projects/${projectId}/chat/thread/${threadId}`, { method: 'DELETE' }),
+
+  /**
+   * Ask a question and read the answer as it is written.
+   *
+   * Not `EventSource`: it cannot set headers, which is why the job-log stream
+   * puts its JWT in the query string — a credential that then lands in server
+   * logs and browser history. A question is also a body rather than a query
+   * string. So this is a POST read through a stream reader, and the token stays
+   * in the Authorization header.
+   *
+   * The `signal` is what makes the stop button real: aborting the fetch closes
+   * the connection, and the server treats that as a cancellation and stops the
+   * model rather than generating into a void.
+   */
+  askStream: async (
+    projectId: number,
+    body: { question: string; thread_id?: number | null },
+    onEvent: (event: ChatEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const response = await fetch(`${ROOT}/projects/${projectId}/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenStore.access ?? ''}`,
+      },
+      body: JSON.stringify(body),
+      signal,
+    })
+
+    if (!response.ok || !response.body) {
+      const detail = await response.text().catch(() => '')
+      throw new ApiError(response.status, detail || 'The answer could not be started.')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // Events are separated by a blank line. A partial one stays in the buffer
+      // until the rest of it arrives — a token split across two chunks is
+      // ordinary, not an error.
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() ?? ''
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data:')) continue
+        try {
+          onEvent(JSON.parse(line.slice(5).trim()) as ChatEvent)
+        } catch {
+          // A malformed frame is not worth killing the answer for.
+        }
+      }
+    }
+  },
 
   /* --- settings --- */
   // Readable by any signed-in user, unlike the rest of /settings: the pipeline

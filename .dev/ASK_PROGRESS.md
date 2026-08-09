@@ -12,8 +12,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked · ⏭️
 | Q1 | Streaming from the model | ✅ |
 | Q2 | The answer, and its citations | ✅ |
 | Q3 | Threads and messages | ✅ |
-| Q4 | The page | ⬜ |
-| Q5 | Messages and the composer | ⬜ |
+| Q4 | The page | ✅ |
+| Q5 | Messages and the composer | ✅ |
 | Q6 | Tests and verification | ⬜ |
 
 Everything K1–K9 landed before this is in [SUBSTRATE_PLAN.md](SUBSTRATE_PLAN.md).
@@ -61,33 +61,33 @@ answering; this tracker is the other half.
 
 ---
 
-## Phase Q4 — The page ⬜
+## Phase Q4 — The page ✅
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| Q4.1 | Route `/app/chat` + nav entry `05` | ⬜ | `Shell.tsx` nav array |
-| Q4.2 | Three-column layout; thread sidebar as a visual stub | ⬜ | Persistence exists (Q3) but the sidebar is not wired this pass |
-| Q4.3 | Project selector, defaulting to the most recently analysed | ⬜ | Deep-linkable `?project=2` |
-| Q4.4 | Empty state: centred input, greeting, suggested questions | ⬜ | Questions from `scripts/questions.txt` — real ones, already run |
-| Q4.5 | Input docks to the bottom after the first message | ⬜ | The reference behaviour in the screenshots |
-| Q4.6 | A project with no KB says so, with a link to analyse it | ⬜ | |
+| Q4.1 | Route `/app/chat` + nav entry `05` | ✅ | `Shell.tsx` nav array |
+| Q4.2 | Two-column layout; thread sidebar deferred | ⏭️ | Persistence exists (Q3) but the sidebar is not wired this pass |
+| Q4.3 | Project selector, defaulting to the most recently analysed | ✅ | Deep-linkable `?project=2` |
+| Q4.4 | Empty state: centred input, greeting, suggested questions | ✅ | Questions from `scripts/questions.txt` — real ones, already run |
+| Q4.5 | Input docks to the bottom after the first message | ✅ | The reference behaviour in the screenshots |
+| Q4.6 | A project with no KB says so, with a link to analyse it | ✅ | |
 
 ---
 
-## Phase Q5 — Messages and the composer ⬜
+## Phase Q5 — Messages and the composer ✅
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| Q5.1 | Extract a plain `Markdown` primitive | ⬜ | Shared by `DocMarkdown` and chat; chat must not get heading rewrite buttons |
-| Q5.2 | Assistant message: markdown, code blocks, copy button | ⬜ | |
-| Q5.3 | User message: markdown too, so newlines and lists survive | ⬜ | Explicitly asked for |
-| Q5.4 | Streaming cursor while tokens arrive | ⬜ | |
-| Q5.5 | Citations as `file:line` chips | ⬜ | Only ones that survived Q2.5 |
-| Q5.6 | Composer: 1 row → ~200px, own scrollbar | ⬜ | Enter sends, Shift+Enter newline |
-| Q5.7 | Attachment button, disabled, with a tooltip saying why | ⬜ | A dead control that looks live is worse than an honest one |
-| Q5.8 | Context wheel — SVG ring, amber 75%, red 90% | ⬜ | Server counts authoritative; client estimates while typing |
-| Q5.9 | Clear history behind `ConfirmDelete` | ⬜ | |
-| Q5.10 | Stop-generating button while streaming | ⬜ | Falls out of Q1.3 |
+| Q5.1 | Extract a plain `Markdown` primitive | ✅ | Shared by `DocMarkdown` and chat; chat must not get heading rewrite buttons |
+| Q5.2 | Assistant message: markdown, code blocks, copy button | ✅ | |
+| Q5.3 | User message: markdown too, so newlines and lists survive | ✅ | Explicitly asked for |
+| Q5.4 | Streaming cursor while tokens arrive | ✅ | |
+| Q5.5 | Citations as `file:line` chips | ✅ | Only ones that survived Q2.5 |
+| Q5.6 | Composer: 1 row → ~200px, own scrollbar | ✅ | Enter sends, Shift+Enter newline |
+| Q5.7 | Attachment button, disabled, with a tooltip saying why | ✅ | A dead control that looks live is worse than an honest one |
+| Q5.8 | Context wheel — SVG ring, amber 75%, red 90% | ✅ | Server counts authoritative; client estimates while typing |
+| Q5.9 | Clear history behind `ConfirmDelete` | ✅ | |
+| Q5.10 | Stop-generating button while streaming | ✅ | Falls out of Q1.3 |
 
 ---
 

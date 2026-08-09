@@ -23,6 +23,7 @@ import SettingsPage from './pages/app/SettingsPage'
 // The Markdown stack is ~350 kB. Load it only when something is read.
 const DocumentReaderPage = lazy(() => import('./pages/app/DocumentReaderPage'))
 const DocsSitePage = lazy(() => import('./pages/app/DocsSitePage'))
+const ChatPage = lazy(() => import('./pages/app/ChatPage'))
 
 function BootScreen() {
   return (
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path="projects/:projectId/compose" element={<ComposePage />} />
                 <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
                 <Route path="jobs" element={<JobsPage />} />
+                <Route path="chat" element={<ChatPage />} />
                 {/*
                   The documentation site. Section and page are optional: no
                   section shows the coverage view, which is the whole map at a

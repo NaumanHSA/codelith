@@ -12,6 +12,7 @@ const NAV = [
   { to: '/app/projects', index: '02', label: 'Projects' },
   { to: '/app/documents', index: '03', label: 'Documents' },
   { to: '/app/jobs', index: '04', label: 'Jobs' },
+  { to: '/app/chat', index: '05', label: 'Ask the code' },
 ]
 
 /** The banner that makes a running job reachable from every screen. */

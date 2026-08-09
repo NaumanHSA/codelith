@@ -375,3 +375,48 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------
+ * Chat messages.
+ *
+ * `.doc` is the reading surface for a documentation page: generous
+ * heading sizes and paragraph spacing, sized for a column somebody
+ * settles into. A chat turn is read in passing and stacked against
+ * others, so it borrows the type and code styling and tightens
+ * everything vertical.
+ *
+ * The last paragraph loses its bottom margin in both. Without that a
+ * bubble carries a strip of dead space under its final line, which
+ * reads as a rendering bug rather than as breathing room.
+ * --------------------------------------------------------------------- */
+.chat-bubble p,
+.chat-answer p {
+  margin: 0 0 0.6rem;
+}
+.chat-bubble > *:last-child,
+.chat-answer > *:last-child {
+  margin-bottom: 0;
+}
+.chat-answer h1,
+.chat-answer h2,
+.chat-answer h3 {
+  font-size: 13px;
+  margin: 1.1rem 0 0.4rem;
+  color: var(--ink);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.chat-answer ul,
+.chat-answer ol {
+  margin: 0 0 0.6rem;
+}
+.chat-answer li {
+  margin: 0.15rem 0;
+}
+.chat-answer pre {
+  margin: 0.5rem 0 0.75rem;
+}
+/* The question is the reader's own words; it should not shout. */
+.chat-bubble {
+  color: var(--ink);
+}
