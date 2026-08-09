@@ -16,7 +16,7 @@ Decisions taken before writing this:
 | Stream tokens, or return the whole answer? | **Stream.** A grounded answer runs 5–20s; a spinner for that long reads as broken, and the evidence panel can populate while the model writes |
 | Which model tier? | **Quality.** Measured in K4: the 1.2B fast tier answered `datastore` for four of five questions regardless of what was asked. Answers matter more than routing did |
 | Persist messages, or keep them client-side? | **Persist from day one.** The thread sidebar is coming, and retrofitting persistence means redoing the message flow. One table, one migration |
-| Agentic loop, re-querying until satisfied? | **No.** One retrieval pass, one answer. An agent that re-queries is a larger thing, and this should be measured before it is built |
+| Agentic loop, re-querying until satisfied? | **Not in Q1-Q6.** One retrieval pass, one answer, measured first. Q7 adds a loop as an *escalation* rather than a replacement |
 | Reuse `DocMarkdown`? | **Extract a primitive.** It injects per-heading rewrite buttons, which a chat message must not have. Both render from one shared react-markdown config |
 
 ---
@@ -155,3 +155,72 @@ the pipeline's tokenizer; the client estimates live as you type. Amber at 75%, r
   bundles, and label it an estimate.
 - Non-streaming first, for roughly 40% less work? Proposal: no — the latency is the
   reason streaming exists, and retrofitting it touches every message component.
+
+
+---
+
+## Phase Q7 — Escalate to a loop when one pass is not enough
+
+**Why.** Q1-Q6 answer in a straight line: route, retrieve once, answer. A code agent
+does not — it reads a file, follows what it finds, reads another, and answers when it
+has enough. The difference decides which questions are answerable at all.
+
+The boundary, measured on a multi-hop question against neurosurfer:
+
+> *"When a tool call is denied by permissions, what happens to the agent loop after
+> that?"* — answered correctly, tracing `permissions.py` to `tools/base.py` to
+> `loop.py`. But one of its three citations was `loop.py:1-28`, the module
+> **docstring**, which states the behaviour in a sentence.
+
+The answer was already written down. Retrieval found the sentence; it did not trace
+the chain. One pass works when the answer *exists somewhere as text*, and fails when
+the answer must be **assembled** from files that each hold a fragment — with no way
+to recover from a first retrieval that missed.
+
+**Why this does not contradict Phase C.** The writer used to have filesystem tools
+and free rein: 21 `read_text_file` calls, an MCP server per section, 55% of total
+runtime, ignoring the retrieval layer entirely (`app/knowledge/retrieval.py`). That
+was right to remove and does not transfer. A writer is handed a section plan and
+already knows what it needs, so wandering is waste. A question does not know what it
+needs until it looks; wandering is the job.
+
+**Design: one-shot first, loop as escalation.**
+
+The initial evidence is still assembled and put in the prompt — and the model is
+*also* given tools. Most questions answer in one call because what they need is
+already there; a hard one calls a tool, and only that one pays for the extra turns.
+There is no separate "are you satisfied" step to get wrong: calling a tool *is* the
+escalation signal.
+
+Tools query the knowledge base, not the filesystem — analysis and composition are
+separate jobs and the clone is gone by then. Every backing function exists already:
+
+| Tool | Backed by |
+|---|---|
+| `search_code(query)` | `SectionContextBuilder._search_chunks` |
+| `read_file(path)` | `VectorStore.get_by_paths` |
+| `find_callers(symbol)` | `GraphStore.get_callers` |
+| `find_dependents(path)` | `GraphStore.get_dependents` |
+| `blast_radius(path)` | `GraphStore.get_blast_radius` |
+| `list_facts(kind)` | `entities.list_by_kind` |
+
+**Everything a tool returns becomes evidence**, so citations are checked against the
+union of what was pre-loaded and what the loop fetched. The safety property does not
+change; only the size of the pool does.
+
+**Measured by.** The questions one-shot fails, answered — and latency unchanged on
+the questions it already answers.
+
+**The gate, and it is real.** Q7.0 is scoring the 20-question set by hand and sorting
+the failures into *"needed to look further"* and *"looked in the right place and
+answered badly"*. A loop fixes the first and does nothing for the second. If the
+failures are mostly the second kind, this phase should not be built.
+
+**Risks.**
+
+- **Unbounded cost.** A step budget is not optional. Six tool calls is a lot; twenty
+  is a runaway that bills for itself.
+- **Tool-calling is model-dependent.** The quality tier supports it; the 1.2B fast
+  tier does not. Falling back to one-shot must be automatic, not a crash.
+- **A loop that always fires is a slower one-shot.** If escalation is not rare, the
+  prompt is wrong about what it already has.

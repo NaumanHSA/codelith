@@ -15,6 +15,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked · ⏭️
 | Q4 | The page | ✅ |
 | Q5 | Messages and the composer | ✅ |
 | Q6 | Tests and verification | ✅ |
+| Q7 | Escalate to a loop when one pass is not enough | ⬜ |
 
 Everything K1–K9 landed before this is in [SUBSTRATE_PLAN.md](SUBSTRATE_PLAN.md).
 K4 built the retrieval half of this feature and deliberately stopped short of
@@ -106,13 +107,29 @@ answering; this tracker is the other half.
 
 ---
 
+## Phase Q7 — Escalate to a loop when one pass is not enough ⬜
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| Q7.0 | **Score the 20-question set by hand** | ⬜ | The gate. Sort failures into "needed to look further" and "looked in the right place and answered badly" — a loop fixes only the first |
+| Q7.1 | Tool schemas over the KB | ⬜ | search_code, read_file, find_callers, find_dependents, blast_radius, list_facts. Every backing function already exists |
+| Q7.2 | Tool-calling turn in `AskService` | ⬜ | Evidence still pre-loaded, tools offered alongside. Calling one *is* the escalation signal |
+| Q7.3 | Step budget and a hard stop | ⬜ | Six calls |
+| Q7.4 | Tool results join the evidence pool | ⬜ | Citations checked against pre-loaded plus fetched |
+| Q7.5 | Fall back to one-shot when tools are unsupported | ⬜ | Automatic, not a crash |
+| Q7.6 | Stream the loop to the reader | ⬜ | "Reading loop.py...", "Finding callers of run()..." |
+| Q7.7 | Latency unchanged on easy questions | ⬜ | If a simple question starts costing four turns, escalation fires too eagerly |
+| Q7.8 | Tests, including that escalation is *rare* | ⬜ | A loop that always fires is a slower one-shot |
+
+---
+
 ## Deferred, deliberately
 
 | Item | Why |
 |---|---|
 | Thread history sidebar (wired) | Asked to leave for later; the sidebar ships as a visual stub and Q3 stores what it will need |
 | Attachments | Stub only, this pass |
-| Agentic re-querying | One retrieval pass first, measured, before anything cleverer |
+| Agentic re-querying | Promoted to Q7, gated on Q7.0 |
 | Answer regeneration / edit-and-resend | Not asked for; cheap to add on top of Q3 |
 
 ## Notes and contradictions
