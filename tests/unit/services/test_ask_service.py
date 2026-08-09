@@ -121,6 +121,35 @@ class TestCitationsThatResolve:
         assert kept == ["neurosurfer/vectorstores/chroma.py:16"]
         assert stripped == []
 
+    def test_a_module_path_is_not_a_file_citation(self) -> None:
+        """
+        The third bug this caught, and the worst kind.
+
+        `neurosurfer.app.server` is a Python module, and `mount_health_routes.health`
+        is a function. Both match "word, dot, short word" — so the checker read them
+        as files with the extensions `.server` and `.health`, found no such file, and
+        reported them as inventions.
+
+        Measured on one run of the question set against a local model: twenty-two
+        "invented" citations, *all twenty-two* of them module or function names. A
+        check that cries wolf is worse than no check, because it teaches the reader
+        to ignore the warning that matters.
+        """
+        text = (
+            "Routes are mounted by `mount_health_routes.health` inside "
+            "`neurosurfer.app.server`, which is wired up at startup."
+        )
+
+        kept, stripped, cleaned = _check(text, "neurosurfer/app/server/api/router.py:1-9")
+
+        assert stripped == []
+        assert cleaned == text
+
+    def test_a_real_file_with_an_unusual_extension_still_resolves(self) -> None:
+        kept, _, _ = _check("Config lives in `deploy/values.yaml`.", "deploy/values.yaml")
+
+        assert kept == ["deploy/values.yaml"]
+
     def test_prose_abbreviations_are_not_citations(self) -> None:
         """`e.g.` matches "word dot short-extension". Requiring a slash outside
         backticks is what keeps ordinary prose out of the citation list."""

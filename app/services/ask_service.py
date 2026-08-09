@@ -52,9 +52,21 @@ logger = structlog.get_logger(__name__)
 #: Two shapes, with different strictness. Inside backticks the writer has already
 #: marked the token as code, so a bare filename counts. Outside them a slash is
 #: required — otherwise "e.g." and "i.e." are citations, and prose is full of them.
+#: A citation names a *file*, so the suffix has to be a file extension. Matching any
+#: short word after a dot made `neurosurfer.app.server` a citation with the extension
+#: `.server` — and dotted module paths and `Class.method` references are how a model
+#: naturally writes about Python. Measured on one run: 22 of 22 "invented" citations
+#: were module names and function names, not files. The check was crying wolf, which
+#: is worse than not checking, because it teaches a reader to ignore the warning.
+_FILE_SUFFIX = (
+    r"(?:py|pyi|ts|tsx|js|jsx|mjs|cjs|go|java|rb|rs|php|kt|cs|c|h|cpp|hpp|swift|scala"
+    r"|md|mdx|rst|txt|json|ya?ml|toml|ini|cfg|env|sh|bash|sql|html|css|scss|tf|lock)"
+)
+
 _CITATION = re.compile(
-    r"`(?P<quoted>[\w.-]+(?:/[\w.-]+)*\.\w{1,6}(?::\d+(?:-\d+)?)?)`"
-    r"|(?P<bare>(?:[\w.-]+/)+[\w.-]+\.\w{1,6}(?::\d+(?:-\d+)?)?)"
+    rf"`(?P<quoted>[\w.-]+(?:/[\w.-]+)*\.{_FILE_SUFFIX}(?::\d+(?:-\d+)?)?)`"
+    rf"|(?P<bare>(?:[\w.-]+/)+[\w.-]+\.{_FILE_SUFFIX}(?::\d+(?:-\d+)?)?)",
+    re.I,
 )
 
 #: Fenced blocks are samples, not claims. A path inside one is part of the code being
@@ -419,7 +431,7 @@ class AskService:
 
 
 #: A repository path inside a block of evidence.
-_PATH_IN_TEXT = re.compile(r"(?:[\w.-]+/)+[\w.-]+\.\w{1,6}")
+_PATH_IN_TEXT = re.compile(rf"(?:[\w.-]+/)+[\w.-]+\.{_FILE_SUFFIX}", re.I)
 
 
 def _with_extra_evidence(prompt: str, fetched: list) -> str:
