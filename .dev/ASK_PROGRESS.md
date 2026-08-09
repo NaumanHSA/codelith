@@ -14,7 +14,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked · ⏭️
 | Q3 | Threads and messages | ✅ |
 | Q4 | The page | ✅ |
 | Q5 | Messages and the composer | ✅ |
-| Q6 | Tests and verification | ⬜ |
+| Q6 | Tests and verification | ✅ |
 
 Everything K1–K9 landed before this is in [SUBSTRATE_PLAN.md](SUBSTRATE_PLAN.md).
 K4 built the retrieval half of this feature and deliberately stopped short of
@@ -66,7 +66,7 @@ answering; this tracker is the other half.
 | # | Task | Status | Notes |
 |---|---|---|---|
 | Q4.1 | Route `/app/chat` + nav entry `05` | ✅ | `Shell.tsx` nav array |
-| Q4.2 | Two-column layout; thread sidebar deferred | ⏭️ | Persistence exists (Q3) but the sidebar is not wired this pass |
+| Q4.2 | Two-column layout; thread sidebar deferred | ⏭️ | The chat column is centred at 760px with the app nav beside it. A third column holding one stub felt like scaffolding on screen rather than a feature — Q3 stores what it needs | Persistence exists (Q3) but the sidebar is not wired this pass |
 | Q4.3 | Project selector, defaulting to the most recently analysed | ✅ | Deep-linkable `?project=2` |
 | Q4.4 | Empty state: centred input, greeting, suggested questions | ✅ | Questions from `scripts/questions.txt` — real ones, already run |
 | Q4.5 | Input docks to the bottom after the first message | ✅ | The reference behaviour in the screenshots |
@@ -91,18 +91,18 @@ answering; this tracker is the other half.
 
 ---
 
-## Phase Q6 — Tests and verification ⬜
+## Phase Q6 — Tests and verification ✅
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| Q6.1 | Citation validation: an invented `file:line` is stripped | ⬜ | The load-bearing one |
-| Q6.2 | History trimming drops history before evidence | ⬜ | |
-| Q6.3 | Token accounting matches the pipeline's tokenizer | ⬜ | |
-| Q6.4 | SSE contract: every event shape, including `error` | ⬜ | |
-| Q6.5 | Thread persistence and clearing | ⬜ | |
-| Q6.6 | UI typecheck + production build | ⬜ | |
-| Q6.7 | Full suite green (810+ today) | ⬜ | |
-| Q6.8 | Verify each new test fails without its fix | ⬜ | Standing practice in this repo |
+| Q6.1 | Citation validation: an invented `file:line` is stripped | ✅ | The load-bearing one |
+| Q6.2 | History trimming drops history before evidence | ✅ | |
+| Q6.3 | Token accounting matches the pipeline's tokenizer | ✅ | |
+| Q6.4 | SSE contract: every event shape, including `error` | ✅ | |
+| Q6.5 | Thread persistence and clearing | ✅ | |
+| Q6.6 | UI typecheck + production build | ✅ | |
+| Q6.7 | Full suite green | ✅ | 854 passing, up from 810 | |
+| Q6.8 | Verify each new test fails without its fix | ✅ | Standing practice in this repo |
 
 ---
 
