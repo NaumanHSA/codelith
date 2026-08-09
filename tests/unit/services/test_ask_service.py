@@ -206,6 +206,60 @@ class TestCitationsThatDoNot:
         assert stripped == ["app/main.py:1-5"]
 
 
+class TestTheLabelOnACodeSample:
+    """
+    A fence's first line is where a model says where the sample came from, and
+    skipping it penalised exactly the answers that showed their work. Measured across
+    twenty answers, seventeen citations sat in fence labels — and two of the three
+    answers that appeared to cite *nothing at all* had three and four of them.
+    """
+
+    def test_a_label_counts_as_a_citation(self) -> None:
+        text = "The handler:\n\n```python\n# app/main.py:8-73\ndef handler(): ...\n```\n"
+
+        kept, stripped, cleaned = _check(text, "app/main.py:8-73")
+
+        assert kept == ["app/main.py:8-73"]
+        assert cleaned == text, "the sample itself must not be rewritten"
+
+    def test_an_unresolvable_label_is_reported_but_not_rewritten(self) -> None:
+        """There is nothing safe to rewrite: editing inside a fence changes the
+        reader's example, and stripping backticks there is invisible anyway."""
+        text = "```python\n# app/ghost.py:1-9\nx = 1\n```\n"
+
+        kept, stripped, cleaned = _check(text, "app/main.py:1-5")
+
+        assert stripped == ["app/ghost.py:1-9"]
+        assert cleaned == text
+
+    def test_a_path_in_the_body_is_still_not_a_citation(self) -> None:
+        """Only the first line. A path further down is part of the code being shown."""
+        text = "```python\n# app/main.py:1-5\nfrom app.ghost import thing\nopen('a/b.py')\n```\n"
+
+        kept, stripped, _ = _check(text, "app/main.py:1-5")
+
+        assert kept == ["app/main.py:1-5"]
+        assert stripped == []
+
+    def test_a_fence_that_opens_on_code_is_left_entirely_alone(self) -> None:
+        """A sample with no label is a sample all the way down."""
+        text = "```python\nimport app.main\nopen('app/main.py')\n```\n"
+
+        kept, stripped, cleaned = _check(text, "app/main.py:1-5")
+
+        assert kept == [] and stripped == []
+        assert cleaned == text
+
+    def test_a_label_is_not_double_counted_with_the_prose(self) -> None:
+        text = (
+            "See `app/main.py:1-5`.\n\n```python\n# app/main.py:1-5\nx = 1\n```\n"
+        )
+
+        kept, _, _ = _check(text, "app/main.py:1-5")
+
+        assert kept == ["app/main.py:1-5"]
+
+
 class TestWhatIsNotACitation:
     def test_inline_code_that_is_not_a_path_is_untouched(self) -> None:
         text = "Call `make_engine()` and pass a `SessionFactory`."

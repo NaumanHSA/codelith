@@ -183,3 +183,61 @@ def test_entrypoint_detection(provider: PythonProvider) -> None:
     assert provider.is_entrypoint("manage.py", "") is True
     assert provider.is_entrypoint("run.py", 'if __name__ == "__main__":\n    main()') is True
     assert provider.is_entrypoint("app/services/x.py", "x = 1") is False
+
+
+def _env_names(provider: PythonProvider, source: str, path: str = "app/config.py") -> set[str]:
+    symbols = provider.extract_symbols(source, path)
+    return {
+        e.name
+        for e in provider.detect_entities(path, source, symbols)
+        if str(e.kind) == "env_var"
+    }
+
+
+class TestEnvironmentVariablesReadThroughAHelper:
+    """
+    A project that reads more than two variables writes a wrapper, and then
+    `os.getenv` never appears at the call sites again.
+
+    Found by scoring answers against the knowledge base: asked what environment
+    variables neurosurfer needs, the model named `CONTEXT_WINDOW` and
+    `SUPPORTS_VISION`, which the extractor had missed entirely — they are read via
+    `env_int(...)` and `env_bool_opt(...)`. The model had read the file. A
+    question-answering model should not be better informed about the code than the
+    knowledge base it is answering from.
+    """
+
+    def test_a_wrapper_call_is_a_read(self, provider: PythonProvider) -> None:
+        source = textwrap.dedent(
+            """
+            from .base import env_int, env_bool_opt
+
+            def load():
+                return env_int("CONTEXT_WINDOW", 200_000), env_bool_opt("SUPPORTS_VISION")
+            """
+        )
+
+        assert {"CONTEXT_WINDOW", "SUPPORTS_VISION"} <= _env_names(provider, source)
+
+    def test_a_qualified_wrapper_counts(self, provider: PythonProvider) -> None:
+        source = 'import cfg\n\nX = cfg.env_str("SERVICE_NAME")\n'
+
+        assert "SERVICE_NAME" in _env_names(provider, source)
+
+    def test_an_unrelated_function_is_not_a_read(self, provider: PythonProvider) -> None:
+        """The guard has to be narrow, or every constant passed to any function
+        becomes configuration the reader is told they must set."""
+        source = 'setup("PRODUCTION")\nlog.info("STARTING")\nparse("A_CONSTANT")\n'
+
+        assert _env_names(provider, source) == set()
+
+    def test_a_non_literal_argument_is_not_a_read(self, provider: PythonProvider) -> None:
+        source = "def load(key):\n    return env_int(key, 1)\n"
+
+        assert _env_names(provider, source) == set()
+
+    def test_a_lowercase_argument_is_not_a_variable_name(self, provider: PythonProvider) -> None:
+        """`env_int(timeout)` reads a field, not `TIMEOUT`."""
+        source = 'x = env_int("timeout", 30)\n'
+
+        assert _env_names(provider, source) == set()

@@ -150,6 +150,12 @@ def has_main_guard(source: str) -> bool:
     return False
 
 
+def _is_env_helper(callee: str) -> bool:
+    """Whether a call looks like a project's own wrapper around the environment."""
+    tail = (callee or "").rsplit(".", 1)[-1].lower()
+    return tail.startswith("env_") or tail.endswith("_env") or tail in ("env", "getenv")
+
+
 def env_vars(source: str) -> list[DetectedEntity]:
     """
     Environment variables the code reads.
@@ -176,6 +182,19 @@ def env_vars(source: str) -> list[DetectedEntity]:
             callee = _dotted(node.func)
             if callee in ("os.getenv", "os.environ.get", "getenv", "environ.get") and node.args:
                 record(_literal(node.args[0]), node.lineno)
+            # A project that reads more than two variables writes a helper, and then
+            # `os.getenv` never appears at the call sites again. neurosurfer's
+            # `env_int("CONTEXT_WINDOW", …)` and `env_bool_opt("SUPPORTS_VISION")`
+            # were both missed, and a question-answering model that read the file
+            # found them — it should not be better informed than the knowledge base.
+            #
+            # Narrow on purpose: the callee has to be named for the environment, and
+            # the argument has to be a SCREAMING_CASE literal. `env_int(timeout)` and
+            # `prepare_environment("staging")` are not reads.
+            elif node.args and _is_env_helper(callee):
+                name = _literal(node.args[0])
+                if name and name.isupper():
+                    record(name, node.lineno)
         # os.environ["X"]
         elif isinstance(node, ast.Subscript) and _dotted(node.value) == "os.environ":
             record(_literal(node.slice), node.lineno)
