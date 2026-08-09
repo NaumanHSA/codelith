@@ -63,9 +63,16 @@ _FILE_SUFFIX = (
     r"|md|mdx|rst|txt|json|ya?ml|toml|ini|cfg|env|sh|bash|sql|html|css|scss|tf|lock)"
 )
 
+#: The extension has to be the *whole* extension. Alternation is first-match-wins, so
+#: `js` matched inside `mcp.json` and the citation became `.neurosurfer/mcp.js` — a
+#: file that does not exist, duly reported to the reader as an invention. The same
+#: trap sits under `ts`/`tsx`, `md`/`mdx` and `c`/`cpp`. Rather than depend on the
+#: list staying sorted longest-first, require that nothing word-like follows.
+_ENDS = r"(?![A-Za-z0-9])"
+
 _CITATION = re.compile(
-    rf"`(?P<quoted>[\w.-]+(?:/[\w.-]+)*\.{_FILE_SUFFIX}(?::\d+(?:-\d+)?)?)`"
-    rf"|(?P<bare>(?:[\w.-]+/)+[\w.-]+\.{_FILE_SUFFIX}(?::\d+(?:-\d+)?)?)",
+    rf"`(?P<quoted>[\w.-]+(?:/[\w.-]+)*\.{_FILE_SUFFIX}{_ENDS}(?::\d+(?:-\d+)?)?)`"
+    rf"|(?P<bare>(?:[\w.-]+/)+[\w.-]+\.{_FILE_SUFFIX}{_ENDS}(?::\d+(?:-\d+)?)?)",
     re.I,
 )
 

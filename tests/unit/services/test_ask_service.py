@@ -145,6 +145,30 @@ class TestCitationsThatResolve:
         assert stripped == []
         assert cleaned == text
 
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "config/mcp.json",   # `js` matches first inside `json`
+            "src/app.tsx",       # and `ts` inside `tsx`
+            "docs/guide.mdx",    # and `md` inside `mdx`
+            "src/engine.cpp",    # and `c` inside `cpp`
+        ],
+    )
+    def test_the_whole_extension_has_to_match(self, path: str) -> None:
+        """
+        Alternation is first-match-wins, so a shorter extension listed earlier wins
+        inside a longer one. `~/.neurosurfer/mcp.json` was read as
+        `.neurosurfer/mcp.js`, which resolves to nothing and was duly reported to the
+        reader as an invented citation — from an answer that had cited correctly.
+        """
+        # Bare, not backticked. Inside backticks the closing tick already forces the
+        # whole extension to match; unquoted there is nothing to stop the short one,
+        # and unquoted is how the real answer wrote `~/.neurosurfer/mcp.json`.
+        kept, stripped, _ = _check(f"See {path} for that.", path)
+
+        assert kept == [path]
+        assert stripped == []
+
     def test_a_real_file_with_an_unusual_extension_still_resolves(self) -> None:
         kept, _, _ = _check("Config lives in `deploy/values.yaml`.", "deploy/values.yaml")
 
