@@ -15,7 +15,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked · ⏭️
 | Q4 | The page | ✅ |
 | Q5 | Messages and the composer | ✅ |
 | Q6 | Tests and verification | ✅ |
-| Q7 | Escalate to a loop when one pass is not enough | ⬜ |
+| Q7 | Escalate to a loop when one pass is not enough | ✅ |
 
 Everything K1–K9 landed before this is in [SUBSTRATE_PLAN.md](SUBSTRATE_PLAN.md).
 K4 built the retrieval half of this feature and deliberately stopped short of
@@ -107,19 +107,20 @@ answering; this tracker is the other half.
 
 ---
 
-## Phase Q7 — Escalate to a loop when one pass is not enough ⬜
+## Phase Q7 — Escalate to a loop when one pass is not enough ✅
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| Q7.0 | **Score the 20-question set by hand** | ⬜ | The gate. Sort failures into "needed to look further" and "looked in the right place and answered badly" — a loop fixes only the first |
-| Q7.1 | Tool schemas over the KB | ⬜ | search_code, read_file, find_callers, find_dependents, blast_radius, list_facts. Every backing function already exists |
-| Q7.2 | Tool-calling turn in `AskService` | ⬜ | Evidence still pre-loaded, tools offered alongside. Calling one *is* the escalation signal |
-| Q7.3 | Step budget and a hard stop | ⬜ | Six calls |
-| Q7.4 | Tool results join the evidence pool | ⬜ | Citations checked against pre-loaded plus fetched |
-| Q7.5 | Fall back to one-shot when tools are unsupported | ⬜ | Automatic, not a crash |
-| Q7.6 | Stream the loop to the reader | ⬜ | "Reading loop.py...", "Finding callers of run()..." |
-| Q7.7 | Latency unchanged on easy questions | ⬜ | If a simple question starts costing four turns, escalation fires too eagerly |
-| Q7.8 | Tests, including that escalation is *rare* | ⬜ | A loop that always fires is a slower one-shot |
+| Q7.0 | **Score the 20-question set by hand** | ✅ | Objective half done: 6 of 20 answers said the evidence was insufficient (30%), two of those true absences. 146 citations kept, 1 stripped, median 28.0s. The subjective half — is each answer *good* — is still yours |
+| Q7.1 | Tool schemas over the KB | ✅ | search_code, read_file, find_callers, find_dependents, blast_radius, list_facts |
+| Q7.2 | Tool-calling turn in `AskService` | ✅ | Rewritten mid-phase — see the note below |
+| Q7.3 | Step budget and a hard stop | ✅ | Six. Removing it during verification produced a real infinite loop |
+| Q7.4 | Tool results join the evidence pool | ✅ | Tool results extend the bundle, so citations to them resolve |
+| Q7.5 | Fall back to one-shot when tools are unsupported | ✅ | `ToolsUnsupported` falls back to a plain streamed answer |
+| Q7.6 | Stream the loop to the reader | ✅ | `tool` events carry name, args and step |
+| Q7.7 | Latency unchanged on easy questions | ✅ | Fixed for the common path: endpoints 18.3s baseline, 44.6s broken, 19.5s now. The 141s escalation was the unbudgeted transcript — capping it fixed the latency and a correctness bug with it |
+| Q7.8 | Tests, including that escalation is *rare* | ✅ | 27 tests. Each guard verified by disabling it individually |
+| Q7.9 | Switch the quality tier to a local model and re-measure | ✅ | `qwen/qwen3.5-9b`. Found three blank-answer bugs and one false-positive citation check — see the notes |
 
 ---
 
@@ -156,3 +157,75 @@ persist what it streams, so building it before the tables meant building it twic
 because the router makes a quality-tier call and then embeds. The `evidence` event
 fires as soon as retrieval finishes, so the UI has something true to show during the
 wait — but the wait is real and the design should assume it.
+
+
+### Q7 — what the implementation changed about the plan
+
+**The escalation decision cannot be its own turn.** The plan said tools would be
+offered alongside the evidence, which was right, but the first implementation asked
+in a separate non-streaming call and *then* streamed the answer. Measured, that was
+expensive in exactly the wrong place: "what endpoints does it expose" went from 18.3s
+to 44.6s **having made no tool calls at all**. Every question paid a full round-trip
+to hear "no".
+
+Streaming the tool-calling turn fixes it — a turn that does not reach for a tool has
+already delivered the answer. Endpoints returned to 19.5s. The cost of asking is now
+zero on the path that does not need it, which is most of them.
+
+**Escalation is expensive when it fires.** One question measured 141s with three tool
+calls, against 19.6s for the same question on a run where it did not escalate. Each
+tool turn re-sends a transcript that grows by up to `_TOOL_RESULT_CHARS` per result,
+so the turns get slower as the loop goes on.
+
+That was recorded as a latency trade-off and it was not one. Capping each result and
+not the total is a cap that does not cap: six results is ~9,000 tokens landing on a
+prompt already built to `_PROMPT_SHARE` of the window, which on a 32k model leaves no
+room to answer in. The symptom was not slowness, it was **silence** — the model
+returns an empty message with `finish_reason: stop`. Tool results now share
+`_TOOL_SHARE` of the window and the loop stops when it is spent. The evidence bundle
+is untouched by the trim, so a citation to something cut from the transcript still
+resolves.
+
+
+### Q7.9 — what a local model found that a hosted one hid
+
+Switching the quality tier to `qwen/qwen3.5-9b` was meant to be a cost measurement. It
+surfaced four bugs, three of them in code that had passed every test.
+
+**Five of twenty answers were completely empty, and everything said they were fine.**
+The harness printed `ok`, nothing was logged, and the studio would have rendered a
+blank assistant message. Three independent causes:
+
+* `if not calls: return` ended the turn whether or not the model had spoken. A turn
+  *after a tool result* frequently thinks for a few hundred characters and then stops
+  with no content — that is normal behaviour for this model, not a failure, and the
+  loop treated it as the answer.
+* The transcript budget above.
+* The retry replayed a transcript ending on a tool result, which gives the model
+  nothing to reply *to*. The budget-spent path had always appended "answer now", which
+  is precisely why it worked where the plain replay did not. Both paths share
+  `_answer_now` now.
+
+**The citation checker was crying wolf.** 22 of 22 "invented" citations were Python
+module paths (`neurosurfer.app.server`) and method references
+(`mount_health_routes.health`) — the pattern read `.server` as a file extension. The
+first reading of the run was "the local model invents citations", and it was wrong:
+the model was writing about the code correctly and being marked down for it. A check
+that fires on correct output teaches the reader to ignore it.
+
+**Numbers, local vs hosted**, same twenty questions:
+
+| | gpt-5-mini | qwen3.5-9b (before) | qwen3.5-9b (after) |
+|---|---|---|---|
+| blank answers | 0 | **5** | 0 |
+| citations kept / stripped | 146 / 1 | 78 / 22 | 98 / 3 |
+| hedged | 6 (30%) | 0 — *blanks do not hedge* | 3 (15%) |
+| median | 28.0s | 14.8s | 15.3s |
+| escalated | — | 5/20 | 5/20, 8 calls |
+
+Half the local model's latency for a comparable answer, on hardware already paid for.
+
+**Still open, and a quality question rather than a bug:** three answers cite nothing at
+all — substantial replies of 1,900–3,800 characters with no reference a reader can
+check. They are not wrong; they are unverifiable, which is the thing this phase exists
+to prevent. Worth a prompt change, and worth measuring before and after.
