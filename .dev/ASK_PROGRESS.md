@@ -45,7 +45,7 @@ answering; this tracker is the other half.
 | Q2.5 | **Citations validated against the retrieved bundle** | ✅ | An unretrieved citation is stripped. Same rule as the router: the model proposes, the KB disposes |
 | Q2.6 | Streaming endpoint `POST /projects/{id}/chat/stream` | ✅ | Events: `token`, `evidence`, `usage`, `done`, `error`. `?token=` auth like job logs |
 | Q2.7 | A project with no usable KB returns a clear message | ✅ | Not an empty answer |
-| Q2.8 | Run the 20-question set end to end | ✅ | Run against both tiers; latest numbers in the Q7.9 note. Every surviving citation resolves by construction — the useful measure turned out to be how many are *stripped*, and why. Hand-scoring answerability is still yours |
+| Q2.8 | Run the 20-question set end to end | ✅ | Run against both tiers; latest numbers in the Q7.9 note. Every surviving citation resolves by construction — the useful measure turned out to be how many are *stripped*, and why. Hand-scoring is in [ASK_SCORECARD.md](ASK_SCORECARD.md) |
 
 ---
 
@@ -111,7 +111,7 @@ answering; this tracker is the other half.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| Q7.0 | **Score the 20-question set by hand** | ✅ | Objective half done: 6 of 20 answers said the evidence was insufficient (30%), two of those true absences. 146 citations kept, 1 stripped, median 28.0s. The subjective half — is each answer *good* — is still yours |
+| Q7.0 | **Score the 20-question set by hand** | ✅ | Objective half done: 6 of 20 answers said the evidence was insufficient (30%), two of those true absences. 146 citations kept, 1 stripped, median 28.0s. The subjective half is Q7.10 |
 | Q7.1 | Tool schemas over the KB | ✅ | search_code, read_file, find_callers, find_dependents, blast_radius, list_facts |
 | Q7.2 | Tool-calling turn in `AskService` | ✅ | Rewritten mid-phase — see the note below |
 | Q7.3 | Step budget and a hard stop | ✅ | Six. Removing it during verification produced a real infinite loop |
@@ -120,8 +120,8 @@ answering; this tracker is the other half.
 | Q7.6 | Stream the loop to the reader | ✅ | `tool` events carry name, args and step |
 | Q7.7 | Latency unchanged on easy questions | ✅ | Fixed for the common path: endpoints 18.3s baseline, 44.6s broken, 19.5s now. The 141s escalation was the unbudgeted transcript — capping it fixed the latency and a correctness bug with it |
 | Q7.8 | Tests, including that escalation is *rare* | ✅ | 27 tests. Each guard verified by disabling it individually |
-| Q7.10 | **Hand-score the twenty answers** | ✅ | [ASK_SCORECARD.md](ASK_SCORECARD.md). Nothing invented across seven mechanically-checkable questions; scoring found four defects, three of them in the product |
 | Q7.9 | Switch the quality tier to a local model and re-measure | ✅ | `qwen/qwen3.5-9b`. Found three blank-answer bugs and one false-positive citation check — see the notes |
+| Q7.10 | **Hand-score the twenty answers** | ✅ | [ASK_SCORECARD.md](ASK_SCORECARD.md). Nothing invented across seven mechanically-checkable questions; scoring found four defects, three of them in the product |
 
 ---
 
