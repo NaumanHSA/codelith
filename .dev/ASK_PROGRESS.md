@@ -120,6 +120,7 @@ answering; this tracker is the other half.
 | Q7.6 | Stream the loop to the reader | ✅ | `tool` events carry name, args and step |
 | Q7.7 | Latency unchanged on easy questions | ✅ | Fixed for the common path: endpoints 18.3s baseline, 44.6s broken, 19.5s now. The 141s escalation was the unbudgeted transcript — capping it fixed the latency and a correctness bug with it |
 | Q7.8 | Tests, including that escalation is *rare* | ✅ | 27 tests. Each guard verified by disabling it individually |
+| Q7.10 | **Hand-score the twenty answers** | ✅ | [ASK_SCORECARD.md](ASK_SCORECARD.md). Nothing invented across seven mechanically-checkable questions; scoring found four defects, three of them in the product |
 | Q7.9 | Switch the quality tier to a local model and re-measure | ✅ | `qwen/qwen3.5-9b`. Found three blank-answer bugs and one false-positive citation check — see the notes |
 
 ---
@@ -225,7 +226,4 @@ that fires on correct output teaches the reader to ignore it.
 
 Half the local model's latency for a comparable answer, on hardware already paid for.
 
-**Still open, and a quality question rather than a bug:** three answers cite nothing at
-all — substantial replies of 1,900–3,800 characters with no reference a reader can
-check. They are not wrong; they are unverifiable, which is the thing this phase exists
-to prevent. Worth a prompt change, and worth measuring before and after.
+**Three answers cited nothing at all** — and they were citing, in the first line inside a code fence, which is where a model labels a sample with its source. Counting those took kept citations from 98 to 136 and uncited answers from three to one. See [ASK_SCORECARD.md](ASK_SCORECARD.md) for the full scoring pass.
