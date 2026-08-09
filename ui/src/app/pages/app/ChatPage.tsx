@@ -206,7 +206,10 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.25rem)] min-h-0 flex-col md:-m-6">
+    /* `h-full` rather than a viewport calculation: the outlet's container is a
+       flex item with a definite height, so this stays right when the running-job
+       bar appears above it and changes what "the rest of the screen" means. */
+    <div className="flex h-full min-h-0 flex-col">
       {/* The bar had no ground of its own and its one control read as body text.
           A panel background, a rule under it and real padding give it a shelf to
           sit on; the actions are bordered so they look like things you press. */}
