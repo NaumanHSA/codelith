@@ -125,6 +125,91 @@ async def stream_completion(
         )
 
 
+class ToolsUnsupported(RuntimeError):
+    """This endpoint will not take tool definitions. Callers fall back rather than fail."""
+
+
+async def stream_tool_completion(
+    messages: list[dict],
+    tools: list[dict],
+    spec: ModelSpec | None = None,
+    max_tokens: int | None = None,
+) -> AsyncIterator[dict]:
+    """
+    One turn that either answers or asks for a tool — streamed either way.
+
+    Yields `{"delta": str}` as content arrives and finally `{"tool_calls": [...]}`,
+    which is empty when the model chose to answer.
+
+    **Streamed because the common case is the answer.** The first version of this
+    was a plain non-streaming call, on the reasoning that a turn deciding *what to
+    look at* has nothing worth watching. Measured, that was expensive in exactly the
+    wrong place: "what endpoints does it expose" went from 18s to 45s and made *no*
+    tool calls at all. Every question paid a full round-trip for a decision that was
+    almost always "no". Streaming it means a turn that does not call a tool has
+    already delivered the answer, and the escalation check costs nothing.
+
+    Tool-call arguments arrive as fragments across many frames and are reassembled by
+    index — a single call's JSON is routinely split mid-token.
+
+    Raises `ToolsUnsupported` where the endpoint refuses tool definitions, which is
+    the common case for small local models. A caller that cannot loop should answer
+    from what it already has rather than fail.
+    """
+    from app.core.cancellation import check_cancelled
+
+    spec = spec or spec_for_tier(QUALITY)
+    client = get_llm_client(spec)
+    params = _completion_params(messages, spec, None, None, max_tokens)
+
+    try:
+        stream_obj = await client.chat.completions.create(  # type: ignore[arg-type]
+            **params, tools=tools, tool_choice="auto", stream=True
+        )
+    except Exception as exc:
+        text = str(exc).lower()
+        if any(hint in text for hint in ("tool", "function")) and any(
+            hint in text for hint in ("support", "unrecognized", "unknown", "invalid")
+        ):
+            raise ToolsUnsupported(str(exc)[:200]) from exc
+        raise
+
+    # index → {id, name, arguments}. Fragments accumulate here until the turn ends.
+    pending: dict[int, dict] = {}
+
+    try:
+        async for event in stream_obj:
+            if not event.choices:
+                continue
+            delta = event.choices[0].delta
+            if delta is None:
+                continue
+
+            if delta.content:
+                yield {"delta": delta.content}
+
+            for call in getattr(delta, "tool_calls", None) or []:
+                slot = pending.setdefault(
+                    call.index, {"id": "", "name": "", "arguments": ""}
+                )
+                if call.id:
+                    slot["id"] = call.id
+                if call.function and call.function.name:
+                    slot["name"] = call.function.name
+                if call.function and call.function.arguments:
+                    slot["arguments"] += call.function.arguments
+
+            await check_cancelled()
+    finally:
+        await stream_obj.close()
+
+    yield {
+        "tool_calls": [
+            pending[index] for index in sorted(pending) if pending[index]["name"]
+        ]
+    }
+
+
 async def chat_completion(
     messages: list[dict],
     model: str | None = None,

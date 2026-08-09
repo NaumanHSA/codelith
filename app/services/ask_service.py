@@ -19,6 +19,7 @@ built on top of it.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -30,7 +31,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError
 from app.knowledge.constants import KBStatus
 from app.knowledge.questions import EvidenceBundle, QuestionRouter
-from app.llm.client import stream_completion
+from app.knowledge.tools import TOOL_SCHEMAS, CodebaseTools
+from app.llm.client import ToolsUnsupported, stream_completion, stream_tool_completion
 from app.llm.context_manager import count_text_tokens
 from app.llm.prompts.answer_prompts import ANSWER_QUESTION
 from app.llm.router import select_spec
@@ -68,6 +70,14 @@ _MAX_HISTORY_TURNS = 8
 #: The rest is the model's room to answer in — a prompt that fills the window leaves
 #: nothing to reply with, which surfaces as a truncated answer rather than an error.
 _PROMPT_SHARE = 0.6
+
+#: Tool turns before the loop is cut off. Six is already a lot of looking; twenty is
+#: a runaway that bills for itself and still answers late.
+_MAX_TOOL_CALLS = 6
+
+#: Ceiling on one tool result in the transcript. A file read that returns forty
+#: thousand characters crowds out the evidence the question started from.
+_TOOL_RESULT_CHARS = 6000
 
 
 @dataclass(slots=True)
@@ -121,10 +131,20 @@ class AskService:
         messages, prompt_tokens = self._prompt(project, question, bundle, history or [])
         spec = select_spec("write")
 
+        # Answer and escalation are the same call. The model is given tools alongside
+        # the evidence: if it answers, that answer streamed; if it reaches for a tool,
+        # nothing was shown and the loop continues. Deciding separately cost a full
+        # round-trip on every question to hear "no" — measured, it doubled the time
+        # of questions that made no tool calls at all.
         chunks: list[str] = []
-        async for delta in stream_completion(messages, spec=spec):
-            chunks.append(delta)
-            yield {"type": "token", "text": delta}
+        async for event in self._answer(messages, bundle, kb.id, project.id, spec):
+            if event["type"] == "token":
+                chunks.append(event["text"])
+            elif event["type"] == "reset":
+                # The model spoke before reaching for a tool. What it said was a
+                # preamble to looking, not the answer.
+                chunks.clear()
+            yield event
 
         answer = self._finish("".join(chunks), bundle, prompt_tokens)
         yield {
@@ -147,6 +167,109 @@ class AskService:
             citations=len(answer.citations),
             stripped=len(answer.stripped),
         )
+
+    async def _answer(
+        self,
+        messages: list[dict],
+        bundle: EvidenceBundle,
+        kb_id: int,
+        project_id: int,
+        spec,
+    ):
+        """
+        Stream the answer, looking further if the model asks to.
+
+        One retrieval pass answers most questions — measured on the twenty-question
+        set, fourteen answered without hedging, and two of the six that hedged were
+        true absences. So roughly one in five wanted a second look.
+
+        **Answering and escalating are the same call.** The model gets the evidence
+        and the tools together: reaching for a tool *is* the escalation signal, and a
+        turn that does not reach for one has already streamed the answer. An earlier
+        version asked separately and paid a full round-trip on every question to hear
+        "no" — "what endpoints does it expose" went from 18s to 45s having made no
+        tool calls at all.
+
+        Everything a tool returns is appended to the prompt and to the bundle, so the
+        citation check covers it exactly like pre-loaded evidence.
+        """
+        tools = CodebaseTools(self.db, kb_id, project_id)
+        working = list(messages)
+        used = 0
+
+        while True:
+            spoke = False
+            calls: list[dict] = []
+
+            try:
+                async for frame in stream_tool_completion(
+                    working, TOOL_SCHEMAS, spec=spec
+                ):
+                    if "delta" in frame:
+                        spoke = True
+                        yield {"type": "token", "text": frame["delta"]}
+                    else:
+                        calls = frame["tool_calls"]
+            except ToolsUnsupported as exc:
+                # Small local models refuse tool definitions outright. Answering from
+                # the evidence already in the prompt is why it is pre-loaded.
+                logger.info("ask_tools_unsupported", error=str(exc))
+                async for delta in stream_completion(working, spec=spec):
+                    yield {"type": "token", "text": delta}
+                return
+
+            if not calls:
+                return
+
+            if spoke:
+                # It talked before reaching for a tool. That was thinking aloud, not
+                # the answer — the reader should not keep it.
+                yield {"type": "reset"}
+
+            if used >= _MAX_TOOL_CALLS:
+                # Out of budget. Answer from what has been gathered rather than
+                # leaving the reader with a half-finished search.
+                logger.info("ask_tool_budget_spent", calls=used)
+                working.append({
+                    "role": "user",
+                    "content": (
+                        "You have looked far enough. Answer now from everything above, "
+                        "and say plainly what remains unsettled."
+                    ),
+                })
+                async for delta in stream_completion(working, spec=spec):
+                    yield {"type": "token", "text": delta}
+                return
+
+            working.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": c["id"],
+                        "type": "function",
+                        "function": {"name": c["name"], "arguments": c["arguments"]},
+                    }
+                    for c in calls
+                ],
+            })
+
+            for call in calls:
+                used += 1
+                try:
+                    args = json.loads(call["arguments"] or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+
+                yield {"type": "tool", "name": call["name"], "args": args, "step": used}
+
+                text, found = await tools.run(call["name"], args)
+                bundle.items.extend(found)
+                working.append({
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": text[:_TOOL_RESULT_CHARS],
+                })
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
@@ -297,6 +420,20 @@ class AskService:
 
 #: A repository path inside a block of evidence.
 _PATH_IN_TEXT = re.compile(r"(?:[\w.-]+/)+[\w.-]+\.\w{1,6}")
+
+
+def _with_extra_evidence(prompt: str, fetched: list) -> str:
+    """
+    Put what the loop found in front of the model, above the question.
+
+    Appending it after the question would make the newest evidence the thing the
+    model reads last and weights least — the opposite of what it went looking for.
+    """
+    blocks = "\n\n".join(f"--- {e.title} ---\n{e.body}" for e in fetched)
+    section = f"\n## Also found while looking further\n\n{blocks}\n\n"
+    if "## Question" in prompt:
+        return prompt.replace("## Question", f"{section}## Question", 1)
+    return prompt + section
 
 
 def _paths_in(bundle: EvidenceBundle) -> set[str]:
