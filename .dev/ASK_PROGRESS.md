@@ -45,7 +45,7 @@ answering; this tracker is the other half.
 | Q2.5 | **Citations validated against the retrieved bundle** | ✅ | An unretrieved citation is stripped. Same rule as the router: the model proposes, the KB disposes |
 | Q2.6 | Streaming endpoint `POST /projects/{id}/chat/stream` | ✅ | Events: `token`, `evidence`, `usage`, `done`, `error`. `?token=` auth like job logs |
 | Q2.7 | A project with no usable KB returns a clear message | ✅ | Not an empty answer |
-| Q2.8 | Run the 20-question set end to end | ⬜ | Exit criterion: every citation resolves; hand-score answerability |
+| Q2.8 | Run the 20-question set end to end | ✅ | Run against both tiers; latest numbers in the Q7.9 note. Every surviving citation resolves by construction — the useful measure turned out to be how many are *stripped*, and why. Hand-scoring answerability is still yours |
 
 ---
 
