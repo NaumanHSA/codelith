@@ -340,9 +340,13 @@ class JavaProvider(LanguageProvider):
             seen.add((str(kind), name))
             found.append(DetectedEntity(kind=kind, name=name, data=data, line=line))
 
-        for match in _ENV_VAR.finditer(source):
-            if clean[match.start() : match.start() + 6].strip():
-                record(EntityKind.ENV_VAR, match.group(1), {}, _line_of(source, match.start()))
+        # Not from tests. A test sets whatever names it needs to exercise the loader,
+        # and those names are not configuration the application requires. The same
+        # reasoning already excludes tests from `is_entrypoint`.
+        if not self.is_test_file(relative_path):
+            for match in _ENV_VAR.finditer(source):
+                if clean[match.start() : match.start() + 6].strip():
+                    record(EntityKind.ENV_VAR, match.group(1), {}, _line_of(source, match.start()))
 
         for match in _ROUTE.finditer(source):
             if clean[match.start() : match.start() + 4].strip():

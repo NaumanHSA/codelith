@@ -412,7 +412,14 @@ class PythonProvider(LanguageProvider):
         # Environment variables the code reads. Read off the AST rather than the raw
         # text: a regex also matches the comment *documenting* the pattern, and this
         # file's own `#: os.getenv("X")` was being extracted as an env var called X.
-        found.extend(python_entities.env_vars(source))
+        #
+        # Not from tests. A test sets whatever names it needs to exercise the loader —
+        # neurosurfer's `tests/test_config.py` sets `A`, `B`, `C` and `D` — and those
+        # were surfacing in the answer to "what environment variables does it need"
+        # alongside `OPENAI_API_KEY`, with nothing to tell the reader which was which.
+        # The same reasoning already excludes tests from `is_entrypoint`.
+        if not self.is_test_file(relative_path):
+            found.extend(python_entities.env_vars(source))
 
         if self.is_entrypoint(relative_path, source):
             found.append(

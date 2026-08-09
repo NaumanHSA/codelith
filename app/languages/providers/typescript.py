@@ -471,10 +471,14 @@ class TypeScriptProvider(LanguageProvider):
         # comment mentioning it in passing does not produce in this exact shape...
         # except it can. So each match is checked against the blanked copy: if the
         # prefix survived stripping, it was code.
-        for pattern in (_ENV_VAR, _ENV_VAR_INDEXED):
-            for match in pattern.finditer(source):
-                if "env" in clean[match.start() : match.start() + 20]:
-                    record(EntityKind.ENV_VAR, match.group(1), {}, _line_of(source, match.start()))
+        # Not from tests. A test sets whatever names it needs to exercise the loader,
+        # and those names are not configuration the application requires. The same
+        # reasoning already excludes tests from `is_entrypoint`.
+        if not self.is_test_file(relative_path):
+            for pattern in (_ENV_VAR, _ENV_VAR_INDEXED):
+                for match in pattern.finditer(source):
+                    if "env" in clean[match.start() : match.start() + 20]:
+                        record(EntityKind.ENV_VAR, match.group(1), {}, _line_of(source, match.start()))
 
         for match in _ROUTE.finditer(source):
             if not clean[match.start() : match.start() + 6].strip():

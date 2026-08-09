@@ -222,6 +222,35 @@ class TestEntities:
 
         assert case.expect_env_var in names, f"got {sorted(names)}"
 
+    def test_an_environment_variable_read_by_a_test_is_not_configuration(
+        self, case: ConformanceCase
+    ) -> None:
+        """
+        Same source, test path, no env var.
+
+        A test sets whatever names it needs to exercise the loader. neurosurfer's
+        `tests/test_config.py` sets `A`, `B`, `C` and `D`, and all four were being
+        answered to "what environment variables does it need" alongside
+        `OPENAI_API_KEY`, with nothing to tell the reader which was which.
+
+        The identical reasoning already excludes tests from `is_entrypoint`, where it
+        is written down: noise gets "echoed into the architecture map and the diagram
+        prompt as a fact about the system". It was never applied here.
+        """
+        if not case.expect_env_var or not case.test_path:
+            pytest.skip("no env var in this fixture")
+
+        provider = _provider(case)
+        source = case.files[case.main_path]
+        symbols = provider.extract_symbols(source, case.test_path)
+        names = {
+            e.name
+            for e in provider.detect_entities(case.test_path, source, symbols)
+            if str(e.kind) == str(EntityKind.ENV_VAR)
+        }
+
+        assert case.expect_env_var not in names, f"got {sorted(names)}"
+
     def test_an_environment_variable_named_only_in_prose_is_not(
         self, case: ConformanceCase
     ) -> None:
