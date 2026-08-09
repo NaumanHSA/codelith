@@ -61,6 +61,39 @@ async def clear_cancel(job_id: int) -> None:
         await redis.aclose()
 
 
+async def clear_stale_cancel(job_id: int) -> bool:
+    """
+    Clear a leftover flag at the start of a run — unless the job is cancelled.
+
+    Clearing unconditionally erases the very signal it exists to deliver, and there
+    are two ordinary ways to hit it:
+
+    * **Redelivery.** `task_acks_late=True` means a task interrupted by a worker
+      restart goes back on the queue. It comes back, wipes its own cancellation, and
+      runs the work the user already stopped.
+    * **Cancelling something queued.** The API sets the flag and revokes the task, but
+      revoke is best-effort — a worker that has already prefetched the message starts
+      anyway, clears the flag, and never sees the request.
+
+    The database is what makes the difference decidable. `JobService.cancel()` writes
+    `status="cancelled"` durably, so a flag belonging to a cancelled job is a live
+    instruction, and one belonging to any other job is debris. Returns whether the
+    flag was cleared.
+    """
+    from app.db.repositories.job_repo import JobRepository
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        job = await JobRepository(db).get_by_id(job_id)
+
+    if job is not None and job.status == "cancelled":
+        logger.info("cancel_flag_kept", job_id=job_id, status=job.status)
+        return False
+
+    await clear_cancel(job_id)
+    return True
+
+
 class CancellationToken:
     """
     Polled by long-running work to find out whether it should stop.
@@ -135,6 +168,7 @@ __all__ = [
     "JobCancelled",
     "check_cancelled",
     "clear_cancel",
+    "clear_stale_cancel",
     "get_token",
     "request_cancel",
     "set_token",

@@ -40,11 +40,14 @@ async def _run_revision(job_id: int) -> dict:
     from app.core.cancellation import (
         CancellationToken,
         JobCancelled,
-        clear_cancel,
+        clear_stale_cancel,
         set_token,
     )
 
-    await clear_cancel(job_id)
+    # A stale flag from a previous job with this id would kill the new run instantly —
+    # but a flag belonging to *this* job is the user's cancellation, and clearing it
+    # would run work they already stopped. See `clear_stale_cancel`.
+    await clear_stale_cancel(job_id)
 
     async with AsyncSessionLocal() as db, CancellationToken(job_id) as token:
         set_token(token)
