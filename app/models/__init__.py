@@ -8,6 +8,7 @@ from app.models.knowledge import KnowledgeBase, KBModule, KBEntity, KBNarrative
 from app.models.site import DocSite, DocPage, DocSiteVersion
 from app.models.audit import AuditLog
 from app.models.setting import SystemSetting
+from app.models.chat import ChatThread, ChatMessage
 
 __all__ = [
     "Organization",
@@ -31,4 +32,6 @@ __all__ = [
     "DocSiteVersion",
     "AuditLog",
     "SystemSetting",
+    "ChatThread",
+    "ChatMessage",
 ]
