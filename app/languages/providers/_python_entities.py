@@ -156,6 +156,86 @@ def _is_env_helper(callee: str) -> bool:
     return tail.startswith("env_") or tail.endswith("_env") or tail in ("env", "getenv")
 
 
+#: Base classes that make a class's fields into environment variables. The
+#: pydantic-settings convention, and the `BaseSettings` name is stable across v1 and
+#: v2 — the import path is not, so it is matched on the name.
+_SETTINGS_BASES = frozenset({"BaseSettings", "PydanticBaseSettingsSource"})
+
+#: Fields that are configuration of the settings mechanism, not settings themselves.
+_SETTINGS_META = frozenset({"model_config", "Config", "__slots__"})
+
+
+def _settings_prefix(node: ast.ClassDef) -> str | None:
+    """
+    The `env_prefix` a settings class declares, or `""` if it declares none.
+
+    `None` means this is not a settings class at all — the caller needs to tell
+    "no prefix" apart from "not applicable", and both are falsy.
+    """
+    bases = {_dotted(b).rsplit(".", 1)[-1] for b in node.bases}
+    if not bases & _SETTINGS_BASES:
+        return None
+
+    for item in node.body:
+        # v2: `model_config = SettingsConfigDict(env_prefix="NS_")`, annotated or not
+        # — `model_config: SettingsConfigDict = ...` is an `AnnAssign` and reading
+        # only `Assign` dropped the prefix silently, which is worse than dropping the
+        # class: every field came back unprefixed and therefore wrong.
+        targets = (
+            item.targets if isinstance(item, ast.Assign)
+            else [item.target] if isinstance(item, ast.AnnAssign)
+            else []
+        )
+        if any(isinstance(t, ast.Name) and t.id == "model_config" for t in targets):
+            if isinstance(getattr(item, "value", None), ast.Call):
+                for keyword in item.value.keywords:
+                    if keyword.arg == "env_prefix":
+                        return _literal(keyword.value) or ""
+        # v1: `class Config: env_prefix = "NS_"`
+        if isinstance(item, ast.ClassDef) and item.name == "Config":
+            for inner in item.body:
+                if isinstance(inner, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "env_prefix" for t in inner.targets
+                ):
+                    return _literal(inner.value) or ""
+    return ""
+
+
+def settings_env_vars(tree: ast.Module) -> list[tuple[str, int]]:
+    """
+    Variables declared by a settings class, which name themselves nowhere.
+
+    `class ServerSettings(BaseSettings)` with `env_prefix="NS_"` and a field `port`
+    declares `NS_PORT`. The string never appears in the source — it is assembled at
+    runtime from the prefix and the field name — so no pattern over call sites can
+    find it, however clever.
+
+    Found by scoring answers: asked what environment variables neurosurfer needs, the
+    model named `NS_HOST`, `NS_PORT` and `NS_LOG_LEVEL`. All three are real, none
+    were in the knowledge base, and all three were reported to the reader as invented
+    citations. document-anything uses the same idiom in `app/config.py`, so until now
+    it could not document its own configuration.
+    """
+    found: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        prefix = _settings_prefix(node)
+        if prefix is None:
+            continue
+
+        for item in node.body:
+            # An annotated field is the declaration. A bare assignment is usually
+            # metadata, and `x: int = 5` and `x: int` are both settings.
+            if not isinstance(item, ast.AnnAssign) or not isinstance(item.target, ast.Name):
+                continue
+            name = item.target.id
+            if name in _SETTINGS_META or name.startswith("_"):
+                continue
+            found.append((f"{prefix}{name}".upper(), item.lineno))
+    return found
+
+
 def env_vars(source: str) -> list[DetectedEntity]:
     """
     Environment variables the code reads.
@@ -175,6 +255,9 @@ def env_vars(source: str) -> list[DetectedEntity]:
         if name and name not in seen and name.replace("_", "").isalnum():
             seen.add(name)
             out.append(DetectedEntity(kind=EntityKind.ENV_VAR, name=name, line=line))
+
+    for name, line in settings_env_vars(tree):
+        record(name, line)
 
     for node in ast.walk(tree):
         # os.getenv("X") / os.environ.get("X")

@@ -40,6 +40,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.knowledge import KnowledgeRepositories
+from app.knowledge import artefacts
 from app.knowledge.narratives import topics_for_doc_type
 from app.knowledge.policy import QUESTION_ANSWERING, PROSE_TYPES
 from app.knowledge.retrieval import SectionContextBuilder
@@ -431,6 +432,7 @@ class QuestionRouter:
 
         if "entities" in plan.intents:
             await self._add_entities(bundle)
+            await self._add_artefact_profile(bundle)
         if "narrative" in plan.intents:
             await self._add_narratives(bundle)
 
@@ -505,6 +507,37 @@ class QuestionRouter:
                 if name := symbol.get("name"):
                     out.add(name)
         return out
+
+    async def _add_artefact_profile(self, bundle: EvidenceBundle) -> None:
+        """
+        What conventional files this repository has, and which it does not.
+
+        Only for questions already routed at the file-shaped kinds — deployment,
+        configuration, how to run it. On a question about datastores this would be
+        noise, and the entity budget is tight enough already.
+
+        Absence is why it exists. Retrieval returns what exists, so a question about
+        deployment gets whatever deployment-ish material is nearby and nothing can
+        contradict it: asked how neurosurfer is deployed, an answer described a
+        container image the repository does not build, from documentation that
+        recommends one. This is the evidence that says so.
+        """
+        wanted = set(bundle.plan.entity_kinds) & set(artefacts.FILE_ENTITY_KINDS)
+        if not wanted:
+            return
+
+        paths: list[str] = []
+        for kind in artefacts.FILE_ENTITY_KINDS:
+            rows = await self.repos.entities.list_by_kind(self.kb_id, kind, limit=100)
+            paths.extend(row.source_path or row.name for row in rows)
+
+        present, absent = artefacts.profile(paths)
+        bundle.items.append(Evidence(
+            kind="entity",
+            title="repository artefacts",
+            body=artefacts.render(present, absent),
+            why="question is about how the repository is built, run or configured",
+        ))
 
     async def _add_entities(self, bundle: EvidenceBundle) -> None:
         """

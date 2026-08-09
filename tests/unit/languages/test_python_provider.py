@@ -241,3 +241,100 @@ class TestEnvironmentVariablesReadThroughAHelper:
         source = 'x = env_int("timeout", 30)\n'
 
         assert _env_names(provider, source) == set()
+
+
+class TestEnvironmentVariablesDeclaredByASettingsClass:
+    """
+    Variables that name themselves nowhere.
+
+    `class ServerSettings(BaseSettings)` with `env_prefix="NS_"` and a field `port`
+    declares `NS_PORT`. The string never appears in the source — it is assembled at
+    runtime from the prefix and the field name — so no pattern over call sites can
+    find it, however clever.
+
+    Found by scoring answers: asked what environment variables neurosurfer needs, the
+    model named `NS_HOST`, `NS_PORT` and `NS_LOG_LEVEL`. All three real, none in the
+    knowledge base, all three reported to the reader as invented citations.
+    document-anything uses the same idiom in `app/config.py`, so until this it could
+    not document its own configuration.
+    """
+
+    def test_a_prefix_and_a_field_make_a_variable(self, provider: PythonProvider) -> None:
+        source = textwrap.dedent(
+            """
+            from pydantic_settings import BaseSettings, SettingsConfigDict
+
+            class ServerSettings(BaseSettings):
+                model_config = SettingsConfigDict(env_prefix="NS_", env_file=".env")
+
+                host: str = "0.0.0.0"
+                port: int = 8000
+                log_level: str = "info"
+            """
+        )
+
+        assert _env_names(provider, source) == {"NS_HOST", "NS_PORT", "NS_LOG_LEVEL"}
+
+    def test_the_pydantic_v1_spelling_works_too(self, provider: PythonProvider) -> None:
+        """`class Config: env_prefix = ...` is v1. Plenty of code still uses it, and
+        it declares exactly the same variables."""
+        source = textwrap.dedent(
+            """
+            from pydantic import BaseSettings
+
+            class Settings(BaseSettings):
+                class Config:
+                    env_prefix = "APP_"
+
+                database_url: str
+            """
+        )
+
+        assert _env_names(provider, source) == {"APP_DATABASE_URL"}
+
+    def test_no_prefix_means_the_field_name_is_the_variable(
+        self, provider: PythonProvider
+    ) -> None:
+        source = textwrap.dedent(
+            """
+            from pydantic_settings import BaseSettings
+
+            class Settings(BaseSettings):
+                openai_api_key: str = ""
+            """
+        )
+
+        assert _env_names(provider, source) == {"OPENAI_API_KEY"}
+
+    def test_an_ordinary_class_declares_nothing(self, provider: PythonProvider) -> None:
+        """Annotated fields are how every dataclass in Python is written. Without the
+        base-class check this would turn every model in a repository into
+        configuration the reader is told they must set."""
+        source = textwrap.dedent(
+            """
+            from dataclasses import dataclass
+
+            @dataclass
+            class Point:
+                host: str = "x"
+                port: int = 1
+            """
+        )
+
+        assert _env_names(provider, source) == set()
+
+    def test_the_settings_mechanism_is_not_itself_a_setting(
+        self, provider: PythonProvider
+    ) -> None:
+        source = textwrap.dedent(
+            """
+            from pydantic_settings import BaseSettings, SettingsConfigDict
+
+            class Settings(BaseSettings):
+                model_config: SettingsConfigDict = SettingsConfigDict(env_prefix="X_")
+                _cache: dict = {}
+                real_setting: str = "y"
+            """
+        )
+
+        assert _env_names(provider, source) == {"X_REAL_SETTING"}
