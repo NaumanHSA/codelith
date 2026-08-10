@@ -128,7 +128,7 @@ to everybody, not to QA.
 | Q0 | Prove the seam | ✅ |
 | Q1 | Run the tools that already exist | ✅ |
 | Q2 | Give every finding an impact | ✅ |
-| Q3 | Surface coverage | ⬜ |
+| Q3 | Surface coverage | ✅ |
 | Q4 | Dependency audit, offline only | ⬜ |
 | Q5 | Architecture drift | ⬜ |
 | Q6 | Test generation, write-only | ⬜ |
@@ -223,12 +223,23 @@ rather than making every project's analysis carry.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q3.1 | The surface | ⬜ | `route`, `cli_command`, `scheduled_task`, `entrypoint` entities |
-| Q3.2 | Test association | ⬜ | Which test files name each one — graph edge first, then name match |
-| Q3.3 | The number | ⬜ | "6 of 28 routes are named in no test", with the six listed |
-| Q3.4 | Honesty about the method | ⬜ | Name matching is evidence, not proof. Say so in the UI or it reads as coverage |
+| Q3.1 | The surface | ✅ | Routes, CLI commands, scheduled tasks, entrypoints. Not every entity kind — "this datastore has no test" is not a sentence anybody acts on |
+| Q3.2 | Test association | ✅ | Name matching against test-file chunks, per kind. A route matches its *path*, not its verb |
+| Q3.3 | The number | ✅ | On neurosurfer: **9 of 9 named in no test**, all nine listed |
+| Q3.4 | Honesty about the method | ✅ | Every string says "named in a test", never "covered". Four tests pin the wording |
 
-**Exit:** a number more meaningful than line coverage, that does not overclaim.
+**Exit — met**, and the number is real: neurosurfer has 30 test files and not one
+contains the string `health`, so its four routes genuinely have no test naming them.
+
+**One false positive, found and fixed.** The CLI command is `neurosurfer`, which appears
+in every import line of every test — a substring search reported it covered by
+`tests/fakes.py`, which tests nothing of the sort. Command names are now matched
+**quoted only**, because a test that invokes a command passes its name as a string.
+
+**The wording is load-bearing.** Name matching finds a route nobody mentions reliably
+and never finds one exercised through a fixture, so this is a *floor on what is
+untested*, not a measure of what is tested. A number people trust that does not mean
+what they think is worse than no number — which is why nothing here says "covered".
 
 ### Q4 — Dependency audit, offline only
 
