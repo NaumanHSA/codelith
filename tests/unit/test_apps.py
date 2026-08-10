@@ -95,28 +95,42 @@ class TestTheRegistryItself:
 
 class TestAPlannedApp:
     """
-    QA is registered before it is built, which is the point: the card is how the shape
-    of the product becomes legible without marketing copy. A planned app must never
-    look clickable, however ready the knowledge base is.
+    An app registered before it is built. QA was one for a day — the card is how the
+    shape of the product becomes legible without marketing copy — and the property
+    outlives any particular app, so it is tested with a synthetic one rather than
+    whichever app happens to be unbuilt this week.
     """
 
-    def test_qa_is_registered_and_planned(self) -> None:
-        qa = APPS_BY_ID["qa"]
+    @staticmethod
+    def _planned():
+        from dataclasses import replace
 
-        assert qa.built is False
-        assert state_for(qa, "ready")[0] is AppState.PLANNED
+        return replace(APPS[0], id="planned-thing", built=False)
 
     def test_a_planned_app_is_never_available(self) -> None:
-        qa = APPS_BY_ID["qa"]
+        """However ready the knowledge base is. A card that looks clickable and is
+        not is worse than one that says "soon"."""
+        planned = self._planned()
 
         for status in ("ready", "stale", "degraded", "running", "failed", None):
-            assert state_for(qa, status)[0] is AppState.PLANNED, status
+            assert state_for(planned, status)[0] is AppState.PLANNED, status
 
     def test_a_planned_app_is_not_offered_as_available(self) -> None:
-        assert "qa" not in available_ids("ready")
+        planned = self._planned()
 
-    def test_it_still_declares_what_it_would_read(self) -> None:
-        """A planned app with no `needs` is a name on a card. Deciding what it reads
-        from the knowledge base is the design work — it is what says whether the base
-        already holds enough, or whether analysis has to change for it."""
-        assert APPS_BY_ID["qa"].needs
+        assert state_for(planned, "ready")[0] is not AppState.AVAILABLE
+
+    def test_every_registered_app_declares_what_it_would_read(self) -> None:
+        """An app with no `needs` is a name on a card. Deciding what it reads from the
+        knowledge base is the design work — it is what says whether the base already
+        holds enough, or whether analysis has to change for it."""
+        for app in APPS:
+            assert app.needs, app.id
+
+    def test_quality_is_built_and_available(self) -> None:
+        """Q0 registered it as planned; Q1-Q8 built it. The registry has to say so, or
+        the studio still renders it dimmed."""
+        qa = APPS_BY_ID["qa"]
+
+        assert qa.built is True
+        assert state_for(qa, "ready")[0] is AppState.AVAILABLE

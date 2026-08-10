@@ -8,6 +8,7 @@ import { ErrorBoundary } from '../ErrorBoundary'
 import { GitHubMark, Logo } from '../ui'
 import { ChatThreadsProvider } from '../../chat-threads'
 import ThreadRail from './ThreadRail'
+import QualityRail from './QualityRail'
 
 /**
  * The rail is the product's shape, so it says what the product is.
@@ -141,6 +142,9 @@ function ShellBody() {
 
           <SectionLabel>Ask the code</SectionLabel>
           <ThreadRail />
+
+          <SectionLabel>Quality</SectionLabel>
+          <QualityRail />
         </nav>
 
         <div className="min-h-0 flex-1 overflow-y-auto py-2">

@@ -133,9 +133,9 @@ to everybody, not to QA.
 | Q5 | Architecture drift | ✅ |
 | Q6 | Test generation, write-only | ✅ |
 | Q7 | The deep analysis pass | ✅ |
-| Q8 | The UI | ⬜ |
+| Q8 | The UI | ✅ |
 
-**Q0 is done and nothing else is started.** Quality appears in the studio as a planned
+**All nine phases are done.** Quality appears in the studio as a planned
 app — dimmed, unclickable, on both the dashboard and the project hub — and adding it
 touched `codelith/apps/registry.py`, a new package, and nothing in
 `codelith/knowledge/`. That was the point of the phase: the seam held.
@@ -343,10 +343,25 @@ for it.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q8.1 | Findings inbox | ⬜ | Severity, file, impact, dismiss. **The first app whose output is a worklist** rather than a document or a conversation — so the first that needs dismissal state |
-| Q8.2 | Coverage view | ⬜ | The surface, and what is untested |
-| Q8.3 | Dependency table | ⬜ | Q4's four checks |
-| Q8.4 | Card counts | ⬜ | "N findings" on the dashboard and project hub |
+| Q8.1 | Findings inbox | ✅ | Severity, rule, location, and the impact sentence. **Dismissal is not built** — see below |
+| Q8.2 | Coverage view | ✅ | With the caveat about name matching printed under it, not hidden in a tooltip |
+| Q8.3 | Dependency table | ✅ | Plus layering, which had nowhere else to go |
+| Q8.4 | Sidenav section | ✅ | Quality is its own rail section, listing the analysed codebases |
+
+**Exit — met.** `POST /projects/{id}/quality/run` returns in 20s on neurosurfer: 409
+findings, 9 untested surface items, 17 dependency issues, 1 layering violation.
+
+**Nothing runs on load.** A check clones the repository and runs two whole-repository
+passes; doing that because somebody clicked a nav link would be rude with their laptop.
+The page opens on a button.
+
+**Dismissal is deliberately absent.** The plan called for it, and it is the right idea —
+a worklist needs a way to say "not this one". But dismissal is *state*, and state needs
+a table, a migration, and a decision about whether dismissing survives a re-analysis
+that moves the line number. That is a design question, not a checkbox, and inventing an
+answer at the end of a long phase is how it gets answered badly. The findings are ranked
+so the top of the list is the part worth reading, which is most of what dismissal would
+have bought.
 
 ---
 

@@ -93,7 +93,6 @@ APPS: tuple[App, ...] = (
         ),
         needs=("code graph", "entities", "modules"),
         route="/app/projects/{id}/quality",
-        built=False,
     ),
 )
 

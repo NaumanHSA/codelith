@@ -435,3 +435,67 @@ export interface AppCatalogItem {
   route_template: string
   built: boolean
 }
+
+/* ------------------------------------------------------------------ *
+ * Quality — findings, and what each one touches.
+ * ------------------------------------------------------------------ */
+
+export interface QualityFinding {
+  tool: string
+  rule: string
+  path: string
+  line: number
+  message: string
+  severity: 'error' | 'warning' | 'info'
+  /** The sentence no linter can produce. Empty when there is nothing true to say. */
+  impact: string
+  reached_files: number
+  documented_in: string[]
+}
+
+export interface QualityTool {
+  tool: string
+  findings: number
+  seconds: number
+  /** Set when it could not run — "clean" and "nothing looked" must be distinguishable. */
+  unavailable: string | null
+}
+
+export interface QualitySurfaceItem {
+  kind: string
+  name: string
+  where: string
+  named_in: string[]
+}
+
+export interface QualityDependency {
+  issue: 'undeclared' | 'unused' | 'unpinned' | 'conflicting'
+  package: string
+  detail: string
+  where: string
+}
+
+export interface QualityLayering {
+  source_role: string
+  target_role: string
+  count: number
+  is_new: boolean
+  summary: string
+  examples: string[][]
+}
+
+export interface QualityReport {
+  kb_id: number
+  /** False when no tool ran. An empty findings list then means nothing. */
+  checked: boolean
+  counts: Record<string, number>
+  findings: QualityFinding[]
+  tools: QualityTool[]
+  drift_note: string
+  coverage_summary: string
+  surface: QualitySurfaceItem[]
+  dependency_summary: string
+  dependencies: QualityDependency[]
+  layering_summary: string
+  layering: QualityLayering[]
+}
