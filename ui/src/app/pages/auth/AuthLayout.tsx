@@ -19,7 +19,7 @@ export default function AuthLayout({
         <Link to="/" className="flex w-fit items-center gap-2">
           <Logo size={17} />
           <span className="text-[11.5px] font-bold tracking-tight text-ink">
-            document<span className="text-hot">·</span>anything
+            code<span className="text-hot">·</span>lith
           </span>
         </Link>
 
@@ -50,12 +50,12 @@ export default function AuthLayout({
         </div>
 
         <a
-          href="https://github.com/document-anything"
+          href="https://github.com/codelith"
           target="_blank"
           rel="noreferrer"
           className="tag flex w-fit items-center gap-1.5 text-ink-dim transition-colors hover:text-ink"
         >
-          <GitHubMark size={12} /> github.com/document-anything
+          <GitHubMark size={12} /> github.com/codelith
         </a>
       </section>
 
@@ -64,7 +64,7 @@ export default function AuthLayout({
         <Link to="/" className="mb-8 flex w-fit items-center gap-2 lg:hidden">
           <Logo size={17} />
           <span className="text-[11.5px] font-bold tracking-tight text-ink">
-            document<span className="text-hot">·</span>anything
+            code<span className="text-hot">·</span>lith
           </span>
         </Link>
 

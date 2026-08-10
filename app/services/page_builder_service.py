@@ -119,7 +119,7 @@ class PageBuilderService:
 
         repos = KnowledgeRepositories.for_session(self.db)
         kb = await repos.bases.get_latest_usable(project_id)
-        if kb is None or kb.status not in (KBStatus.READY, KBStatus.STALE, KBStatus.DEGRADED):
+        if kb is None or not KBStatus(kb.status).can_serve_features:
             raise ValidationError(
                 "This project has no usable knowledge base. Analyse it first — a new "
                 "page is written from the same evidence as every other page."

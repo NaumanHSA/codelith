@@ -55,7 +55,7 @@ const STAGES = [
 ]
 
 const TERMINAL = [
-  { t: 'cmd', s: '$ document-anything analyse github.com/acme/neurosurfer' },
+  { t: 'cmd', s: '$ codelith analyse github.com/acme/neurosurfer' },
   { t: 'ok', s: '  ✓ repo_analyzer        257 files · 45 modules          3.7s' },
   { t: 'ok', s: '  ✓ structured_extractor 45 modules · 77 facts          141ms' },
   { t: 'ok', s: '  ✓ semantic_indexer     1,103 chunks · pgvector          21s' },
@@ -212,7 +212,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 flex items-center gap-3 border-b border-rule bg-paper/95 px-4 py-2 backdrop-blur">
         <Logo size={17} />
         <span className="text-[11.5px] font-bold tracking-tight text-ink">
-          document<span className="text-hot">·</span>anything
+          code<span className="text-hot">·</span>lith
         </span>
         <Chip>v0.4.1</Chip>
         <div className="ml-auto flex items-center gap-3">
@@ -220,7 +220,7 @@ export default function LandingPage() {
             Pipeline
           </a>
           <a
-            href="https://github.com/document-anything"
+            href="https://github.com/codelith"
             target="_blank"
             rel="noreferrer"
             className="tag flex items-center gap-1.5 text-ink-dim transition-colors hover:text-ink"
@@ -276,7 +276,7 @@ export default function LandingPage() {
                 {enterLabel}
               </Link>
               <a
-                href="https://github.com/document-anything"
+                href="https://github.com/codelith"
                 target="_blank"
                 rel="noreferrer"
                 className={`${cta} border-rule bg-panel px-3 py-[10px] text-ink-mid hover:border-ink hover:text-ink`}
@@ -457,14 +457,14 @@ export default function LandingPage() {
 
       <footer className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-3 px-5 py-5">
         <Logo size={15} />
-        <span className="tag text-ink-dim">document-anything · MIT licence · free forever</span>
+        <span className="tag text-ink-dim">codelith · MIT licence · free forever</span>
         <a
-          href="https://github.com/document-anything"
+          href="https://github.com/codelith"
           target="_blank"
           rel="noreferrer"
           className="tag ml-auto flex items-center gap-1.5 text-ink-dim transition-colors hover:text-ink"
         >
-          <GitHubMark size={12} /> github.com/document-anything
+          <GitHubMark size={12} /> github.com/codelith
         </a>
       </footer>
     </div>

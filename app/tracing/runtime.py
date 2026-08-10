@@ -39,7 +39,7 @@ def create_tracer(
         config=cfg,
         span_tracer=span_tracer,
         meta={
-            "project": "document-anything",
+            "project": "codelith",
             "job_id": job_id,
             "workflow_type": workflow_type,
             "run_dir": str(run_dir),

@@ -8,6 +8,7 @@ reused across every document type.
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -82,7 +83,7 @@ class KnowledgeService:
             if req.kb_id
             else await self.repos.bases.get_latest_usable(project_id)
         )
-        if kb is None or not KBStatus(kb.status).is_usable:
+        if kb is None or not KBStatus(kb.status).can_serve_features:
             raise NotFoundError("Knowledge base for project", project_id)
 
         page_slugs: list[str] = []
@@ -121,6 +122,26 @@ class KnowledgeService:
         return await self.jobs.get(job.id)
 
     # ── Reads ─────────────────────────────────────────────────────────────────
+
+    async def latest_status(self, project_id: int) -> str | None:
+        """
+        The status of this project's most recent knowledge base, or None if it has
+        never been analysed.
+
+        Deliberately not `_current`, which filters to usable builds — the feature
+        registry has to tell "never analysed" apart from "analysis running" and
+        "analysis failed", and each of those tells the reader to do something
+        different.
+        """
+        kb = (
+            await self.db.execute(
+                select(KnowledgeBase)
+                .where(KnowledgeBase.project_id == project_id)
+                .order_by(KnowledgeBase.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return kb.status if kb else None
 
     async def get_summary(self, project_id: int, user: User) -> KnowledgeBaseSummary | None:
         """

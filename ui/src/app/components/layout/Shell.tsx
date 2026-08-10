@@ -113,7 +113,7 @@ function ShellBody() {
         >
           <Logo size={17} />
           <span className="text-[11px] font-bold tracking-tight text-ink">
-            document<span className="text-hot">·</span>anything
+            code<span className="text-hot">·</span>lith
           </span>
         </button>
 
@@ -202,7 +202,7 @@ function ShellBody() {
 
         <div className="grid grid-cols-2 gap-px border-t border-rule bg-rule">
           <a
-            href="https://github.com/document-anything"
+            href="https://github.com/codelith"
             target="_blank"
             rel="noreferrer"
             className="tag flex items-center justify-center gap-1.5 bg-panel py-2 text-ink-dim transition-colors hover:bg-sunk hover:text-ink"

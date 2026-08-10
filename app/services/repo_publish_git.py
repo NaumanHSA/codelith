@@ -63,7 +63,7 @@ def apply_plan(
     *,
     branch: str,
     message: str,
-    author: str = "document-anything <noreply@document-anything.local>",
+    author: str = "Codelith <noreply@codelith.local>",
 ) -> PublishResult:
     """
     Write the plan onto a new branch and commit it.
@@ -127,7 +127,7 @@ def _current_branch(repo: Path) -> str:
 def _email(author: str) -> str:
     if "<" in author and ">" in author:
         return author.split("<", 1)[1].split(">", 1)[0]
-    return "noreply@document-anything.local"
+    return "noreply@codelith.local"
 
 
 __all__ = ["apply_plan", "PublishResult", "GitError"]

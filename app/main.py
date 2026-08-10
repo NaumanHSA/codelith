@@ -13,7 +13,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Document Anything",
+        title="Codelith",
         description="AI-Powered Documentation Generation Platform",
         version="0.1.0",
         debug=settings.APP_DEBUG,

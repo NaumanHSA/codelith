@@ -213,7 +213,7 @@ def settings_env_vars(tree: ast.Module) -> list[tuple[str, int]]:
     Found by scoring answers: asked what environment variables neurosurfer needs, the
     model named `NS_HOST`, `NS_PORT` and `NS_LOG_LEVEL`. All three are real, none
     were in the knowledge base, and all three were reported to the reader as invented
-    citations. document-anything uses the same idiom in `app/config.py`, so until now
+    citations. Codelith uses the same idiom in `app/config.py`, so until now
     it could not document its own configuration.
     """
     found: list[tuple[str, int]] = []

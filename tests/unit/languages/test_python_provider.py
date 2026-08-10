@@ -255,7 +255,7 @@ class TestEnvironmentVariablesDeclaredByASettingsClass:
     Found by scoring answers: asked what environment variables neurosurfer needs, the
     model named `NS_HOST`, `NS_PORT` and `NS_LOG_LEVEL`. All three real, none in the
     knowledge base, all three reported to the reader as invented citations.
-    document-anything uses the same idiom in `app/config.py`, so until this it could
+    Codelith uses the same idiom in `app/config.py`, so until this it could
     not document its own configuration.
     """
 

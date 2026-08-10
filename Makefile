@@ -7,7 +7,7 @@ PROD       := docker compose -f docker-compose.prod.yml
 
 help:
 	@echo ""
-	@echo "document-anything — available targets:"
+	@echo "codelith — available targets:"
 	@echo ""
 	@echo "  Local development (API runs on your machine):"
 	@echo "    make infra          Start infra services only (postgres, redis, minio, neo4j, ...)"

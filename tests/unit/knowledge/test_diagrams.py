@@ -158,7 +158,7 @@ class TestModuleMap:
 
 class TestSystemContext:
     def test_datastores_and_apis_are_drawn(self) -> None:
-        source = system_context(ENTITIES, "document-anything")
+        source = system_context(ENTITIES, "codelith")
 
         assert source is not None
         assert "Redis" in source and "Neo4j" in source

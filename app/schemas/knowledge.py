@@ -209,3 +209,20 @@ __all__ = [
     "DocTypeSuggestion",
     "AnalyzeRequest",
 ]
+
+
+class FeatureOut(BaseModel):
+    """
+    One thing a codebase unlocks, and whether this project can do it yet.
+
+    `reason` is shown to the reader when the feature is not available, so it says what
+    to do rather than what went wrong.
+    """
+
+    id: str
+    label: str
+    blurb: str
+    needs: list[str] = Field(default_factory=list)
+    route: str
+    state: str
+    reason: str = ""

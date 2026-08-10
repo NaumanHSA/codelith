@@ -1,16 +1,35 @@
-# document-anything — Codebase Guide
+# Codelith — Codebase Guide
 
 ## What This Is
 
-Open-source documentation generation platform. Ingests repos/files, runs multi-agent
-LangGraph workflows, produces structured documentation in Markdown/DOCX/MkDocs/Docusaurus.
+Open-source platform for **understanding a codebase and doing things with that
+understanding**. Ingests repos/files, runs multi-agent LangGraph workflows to build a
+knowledge base, then offers features that consume it.
 
-**Two phases, and the split drives most of the design:**
+**Analysis is the product; features are what it unlocks.** Read that sentence before
+changing anything structural — the repository was originally built documentation-first
+and named for it, and code written under the old premise couples the two. It should
+not.
+
+Two features exist today:
+
+- **Documentation** — structured documents in Markdown/DOCX/MkDocs/Docusaurus
+- **Ask the code** — grounded question answering with checked citations
+
+**Three phases, and the split drives most of the design:**
 
 1. **Analyse** (`app/workflows/analysis_workflow.py`) — build a knowledge base from the
-   code, once per commit SHA. Takes no document type.
-2. **Compose** (`app/workflows/composition_workflow.py`) — write the requested documents
-   from the stored KB, retrieve-then-write per section. Never re-reads the repository.
+   code, once per commit SHA. Takes no document type, and must never take one.
+2. **Compose** (`app/workflows/composition_workflow.py`) — the documentation feature:
+   write the requested documents from the stored KB, retrieve-then-write per section.
+   Never re-reads the repository.
+3. **Ask** (`app/services/ask_service.py`) — the second feature on the same KB, proving
+   the pattern: it needed nothing from the doc pipeline.
+
+A feature is defined by *what it needs from the knowledge base*. Adding one should mean
+one entry in `app/features/registry.py` and one page — never a change to analysis. If
+you find yourself editing an analysis agent to add a feature, stop; the feature is
+asking for something the KB should hold for everyone.
 
 `documentation_workflow.py` is the legacy single-shot pipeline, kept working for the
 `POST /projects/{id}/jobs` endpoint. New work goes in the two-phase graphs.

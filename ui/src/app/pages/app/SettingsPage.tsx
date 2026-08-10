@@ -329,7 +329,7 @@ export default function SettingsPage() {
         <div className="flex items-start gap-2.5">
           <span className="block size-[7px] rotate-45 bg-hot shrink-0 mt-1" />
           <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
-            Document Anything connects to any OpenAI-compatible LLM endpoint.
+            Codelith connects to any OpenAI-compatible LLM endpoint.
             Configure Ollama locally or point at a hosted provider.
             Changes take effect for the next job run.
           </p>

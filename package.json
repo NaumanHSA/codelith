@@ -1,5 +1,5 @@
 {
-  "name": "document-anything-tools",
+  "name": "codelith-tools",
   "private": true,
   "description": "Node tooling the Python backend shells out to. Not an application — the studio lives in ui/.",
   "//": "mermaid-cli renders generated diagrams to PNG locally. Installed rather than npx'd so a job never needs the network at runtime, which is the product's core claim.",

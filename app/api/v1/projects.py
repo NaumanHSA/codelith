@@ -7,7 +7,9 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, Response, Up
 from app.config import get_settings
 from app.dependencies import CurrentUser, DbSession, ManagerUser
 from app.schemas.job import JobCreate, JobOut
+from app.features import FEATURES, state_for
 from app.schemas.knowledge import (
+    FeatureOut,
     AddPageRequest,
     AnalyzeRequest,
     ComposeRequest,
@@ -176,6 +178,34 @@ async def get_knowledge_base(project_id: int, db: DbSession, user: CurrentUser):
     action instead of a document-type picker.
     """
     return await KnowledgeService(db).get_summary(project_id, user)
+
+
+@router.get("/{project_id}/features", response_model=list[FeatureOut])
+async def get_features(project_id: int, db: DbSession, user: CurrentUser):
+    """
+    What this codebase currently unlocks, and what it does not.
+
+    Every feature is returned, including the ones this project cannot run yet, because
+    the locked ones are how a reader learns the shape of the product without being
+    sold it. The reason says what to do rather than what went wrong — a project that
+    has never been analysed is not an error, it is a first step nobody has taken.
+    """
+    await ProjectService(db).get(project_id, user)
+    kb = await KnowledgeService(db).latest_status(project_id)
+
+    return [
+        FeatureOut(
+            id=f.id,
+            label=f.label,
+            blurb=f.blurb,
+            needs=list(f.needs),
+            route=f.route.format(id=project_id),
+            state=state,
+            reason=reason,
+        )
+        for f in FEATURES
+        for state, reason in [state_for(f, kb)]
+    ]
 
 
 @router.get("/{project_id}/site", response_model=SiteOut | None)

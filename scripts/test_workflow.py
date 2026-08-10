@@ -196,7 +196,7 @@ async def main(
     name = project_name or _project_name_from_path(path)
 
     print(f"\n{'='*62}")
-    print("  document-anything — end-to-end workflow test")
+    print("  codelith — end-to-end workflow test")
     print(f"{'='*62}")
 
     if job_id is None:

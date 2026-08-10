@@ -380,7 +380,7 @@ class RevisionService:
     async def _usable_kb(self, project_id: int):
         bases = KnowledgeRepositories.for_session(self.db).bases
         kb = await bases.get_latest_usable(project_id)
-        if kb is None or kb.status not in (KBStatus.READY, KBStatus.STALE, KBStatus.DEGRADED):
+        if kb is None or not KBStatus(kb.status).can_serve_features:
             raise ValidationError(
                 "This project has no usable knowledge base. Analyse it first — a "
                 "revision is grounded in the same evidence the page was written from."

@@ -401,7 +401,7 @@ class AskService:
                 "This project has not been analysed yet, so there is nothing to ask "
                 "about. Run an analysis first."
             )
-        if kb.status not in (KBStatus.READY, KBStatus.STALE, KBStatus.DEGRADED):
+        if not KBStatus(kb.status).can_serve_features:
             raise ValidationError(
                 f"This project's knowledge base is {kb.status}. Wait for the analysis "
                 "to finish, or run it again."

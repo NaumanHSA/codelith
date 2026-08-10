@@ -31,6 +31,23 @@ class KBStatus(StrEnum):
         return self in (KBStatus.READY, KBStatus.DEGRADED)
 
     @property
+    def can_serve_features(self) -> bool:
+        """
+        Whether a feature may run against this build.
+
+        Wider than `is_usable` by one status, deliberately. A `STALE` build has been
+        superseded by a newer one for the same project — the code has moved on, and
+        what it holds is a true account of an older commit. Refusing to answer from it
+        would mean the studio goes dark the moment somebody pushes, which is worse
+        than answering from a KB whose age the reader can see.
+
+        Three services had each written this triple out by hand, and one of them had
+        drifted to `is_usable` and quietly refused stale builds. This is the one
+        definition.
+        """
+        return self in (KBStatus.READY, KBStatus.DEGRADED, KBStatus.STALE)
+
+    @property
     def is_terminal(self) -> bool:
         return self in (KBStatus.READY, KBStatus.DEGRADED, KBStatus.FAILED, KBStatus.STALE)
 

@@ -1,30 +1,31 @@
-# Document Anything
+# Codelith
 
-Open-source documentation generation for codebases. Point it at a repository, it reads
-the code and builds a knowledge base, then writes the documents you choose from it —
-Markdown, DOCX, MkDocs or Docusaurus.
+Open-source platform for understanding a codebase — and then doing things with that
+understanding. Point it at a repository; it reads the code once, builds a knowledge
+base, and everything after that is a feature consuming it.
 
 It runs entirely on your machine against [LM Studio](https://lmstudio.ai/) (or any
 OpenAI-compatible endpoint). Nothing leaves your box.
 
 ---
 
-## How it works
+## Read once, use many times
 
-Documentation is generated in **two phases**, and the split is the point of the design.
+**Analysis is the product.** Clone the source, parse it, extract facts (routes,
+entrypoints, dependencies, env vars, datastores), summarise every module, synthesise
+the architecture, embed everything for retrieval, and persist it as a **knowledge
+base** tied to the commit SHA.
 
-**Phase 1 — Analyse (once per commit).** Clone the source, parse it, extract facts
-(routes, entrypoints, dependencies, env vars, datastores), summarise every module,
-synthesise the architecture, embed everything for retrieval, and persist it as a
-**knowledge base** tied to the commit SHA.
+That happens once per commit. Everything below is a feature built on it, and none of
+them re-read the repository.
 
-**Phase 2 — Compose (as often as you like).** Pick document types from an
-evidence-backed menu — the options are derived from what analysis actually found, so a
-project with no HTTP routes is never offered an API Reference — and each section is
-written by retrieving the relevant slice of the knowledge base.
+| Feature | What it does | What it needs from the KB |
+|---|---|---|
+| **Documentation** | Structured documents in Markdown, DOCX, MkDocs or Docusaurus. Document types are offered from an evidence-backed menu, so a project with no HTTP routes is never offered an API Reference | retrieval, narratives |
+| **Ask the code** | Grounded question answering. Every citation is checked against the evidence actually retrieved, and one that does not resolve is stripped | retrieval, code graph |
 
-Analysing once and composing many times is what makes the second and third document
-cheap: composition never re-reads the repository.
+Analysing once is what makes the second and third thing you ask for cheap — and it is
+why adding a feature never means touching analysis.
 
 ```
   repository
@@ -79,8 +80,8 @@ cheap: composition never re-reads the repository.
 ### 2. Clone & configure
 
 ```bash
-git clone https://github.com/NaumanHSA/document-anything.git
-cd document-anything
+git clone https://github.com/NaumanHSA/codelith.git
+cd codelith
 cp .env.example .env
 ```
 
@@ -244,7 +245,7 @@ just relabels a job that keeps generating.
 ### Project Layout
 
 ```
-document-anything/
+codelith/
 ├── app/
 │   ├── main.py                     FastAPI app factory
 │   ├── config.py                   All settings (env-driven via pydantic-settings)
