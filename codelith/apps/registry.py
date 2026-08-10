@@ -83,6 +83,18 @@ APPS: tuple[App, ...] = (
         needs=("retrieval", "code graph", "entities"),
         route="/app/chat?project={id}&thread=new",
     ),
+    App(
+        id="qa",
+        label="Quality",
+        blurb=(
+            "Findings from the tools that already know — ruff, mypy — with the part "
+            "they cannot tell you: what each one touches. Plus which routes and "
+            "commands no test names, and what the dependency manifests get wrong."
+        ),
+        needs=("code graph", "entities", "modules"),
+        route="/app/projects/{id}/quality",
+        built=False,
+    ),
 )
 
 APPS_BY_ID = {f.id: f for f in APPS}

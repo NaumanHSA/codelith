@@ -91,3 +91,32 @@ class TestTheRegistryItself:
 
         assert state_for(planned, "ready")[0] is AppState.PLANNED
         assert state_for(planned, None)[0] is AppState.PLANNED
+
+
+class TestAPlannedApp:
+    """
+    QA is registered before it is built, which is the point: the card is how the shape
+    of the product becomes legible without marketing copy. A planned app must never
+    look clickable, however ready the knowledge base is.
+    """
+
+    def test_qa_is_registered_and_planned(self) -> None:
+        qa = APPS_BY_ID["qa"]
+
+        assert qa.built is False
+        assert state_for(qa, "ready")[0] is AppState.PLANNED
+
+    def test_a_planned_app_is_never_available(self) -> None:
+        qa = APPS_BY_ID["qa"]
+
+        for status in ("ready", "stale", "degraded", "running", "failed", None):
+            assert state_for(qa, status)[0] is AppState.PLANNED, status
+
+    def test_a_planned_app_is_not_offered_as_available(self) -> None:
+        assert "qa" not in available_ids("ready")
+
+    def test_it_still_declares_what_it_would_read(self) -> None:
+        """A planned app with no `needs` is a name on a card. Deciding what it reads
+        from the knowledge base is the design work — it is what says whether the base
+        already holds enough, or whether analysis has to change for it."""
+        assert APPS_BY_ID["qa"].needs

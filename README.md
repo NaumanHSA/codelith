@@ -2,7 +2,7 @@
 
 Open-source platform for understanding a codebase — and then doing things with that
 understanding. Point it at a repository; it reads the code once, builds a knowledge
-base, and everything after that is a feature consuming it.
+base, and everything after that is an app consuming it.
 
 It runs entirely on your machine against [LM Studio](https://lmstudio.ai/) (or any
 OpenAI-compatible endpoint). Nothing leaves your box.
@@ -16,16 +16,16 @@ entrypoints, dependencies, env vars, datastores), summarise every module, synthe
 the architecture, embed everything for retrieval, and persist it as a **knowledge
 base** tied to the commit SHA.
 
-That happens once per commit. Everything below is a feature built on it, and none of
+That happens once per commit. Everything below is an app built on it, and none of
 them re-read the repository.
 
-| Feature | What it does | What it needs from the KB |
+| App | What it does | What it needs from the KB |
 |---|---|---|
 | **Documentation** | Structured documents in Markdown, DOCX, MkDocs or Docusaurus. Document types are offered from an evidence-backed menu, so a project with no HTTP routes is never offered an API Reference | retrieval, narratives |
 | **Ask the code** | Grounded question answering. Every citation is checked against the evidence actually retrieved, and one that does not resolve is stripped | retrieval, code graph |
 
 Analysing once is what makes the second and third thing you ask for cheap — and it is
-why adding a feature never means touching analysis.
+why adding an app never means touching analysis.
 
 ```
   repository
@@ -182,13 +182,13 @@ Open `http://localhost:8000/docs` for the interactive Swagger UI.
 ### Layered Structure
 
 ```
-API routes (app/api/v1/)
+API routes (codelith/api/v1/)
     ↓
-Services (app/services/)
+Services (codelith/services/)
     ↓
-Agents (app/agents/)   ←→   LangGraph Workflows (app/workflows/)
+Agents (codelith/agents/)   ←→   LangGraph Workflows (codelith/workflows/)
     ↓                            ↕
-Repositories (app/db/repositories/)   Language providers (app/languages/)
+Repositories (codelith/db/repositories/)   Language providers (codelith/languages/)
     ↓
 PostgreSQL + pgvector / Neo4j / MinIO
 ```
@@ -225,10 +225,10 @@ tracked as E4 in [.dev/PLAN.md](.dev/PLAN.md).
 
 ### Language support
 
-Everything language-specific lives behind `LanguageProvider` in `app/languages/`.
+Everything language-specific lives behind `LanguageProvider` in `codelith/languages/`.
 Symbol extraction, manifest parsing, test/entrypoint detection and framework entity
 detection are provider hooks; the knowledge base itself speaks a neutral vocabulary
-(`app/knowledge/constants.py`) so a route is a route whether it came from a FastAPI
+(`codelith/knowledge/constants.py`) so a route is a route whether it came from a FastAPI
 decorator, an Express call or a Spring annotation.
 
 **Python ships today** (stdlib `ast`). Adding a language means implementing one class
@@ -245,59 +245,33 @@ just relabels a job that keeps generating.
 ### Project Layout
 
 ```
-codelith/
-├── app/
-│   ├── main.py                     FastAPI app factory
-│   ├── config.py                   All settings (env-driven via pydantic-settings)
-│   ├── dependencies.py             FastAPI DI (db session, current_user)
-│   ├── api/v1/                     Route handlers (thin layer)
-│   │   ├── auth.py                 /auth/register|login|refresh|me
-│   │   ├── organizations.py        /organizations CRUD
-│   │   ├── projects.py             /projects CRUD, sources, analyze, compose
-│   │   ├── jobs.py                 /jobs status|logs|stream|approve|cancel
-│   │   ├── documents.py            /documents list|get|publish|export
-│   │   └── settings.py             /settings LLM config
-│   ├── core/                       Security, logging, exceptions, middleware
-│   │   └── cancellation.py         Redis-backed CancellationToken + JobCancelled
-│   ├── db/                         SQLAlchemy session + repositories
-│   ├── models/                     ORM models (User, Org, Project, Job, Document, KB)
-│   ├── schemas/                    Pydantic v2 request/response schemas
-│   ├── services/                   Business logic (auth, project, job, document,
-│   │                               knowledge, source)
-│   ├── knowledge/                  KB vocabulary, builder, retrieval, doc-type roles
-│   ├── languages/                  Language abstraction — the multi-language seam
-│   │   ├── taxonomy.py             Language-neutral symbol kinds
-│   │   ├── base.py                 LanguageProvider ABC
-│   │   ├── registry.py             Path → provider resolution
-│   │   └── providers/python.py     Python provider (stdlib ast)
-│   ├── agents/                     Agent classes (see below)
-│   │   ├── analysis/               7 analysis-phase agents
-│   │   └── composition/            4 composition-phase agents
-│   ├── workflows/                  LangGraph StateGraphs + state TypedDicts
-│   ├── ingestion/                  Repo cloners + file parsers
-│   ├── llm/                        LLM client, model router, prompt templates
-│   ├── memory/                     Short/long-term memory, vector + graph stores
-│   ├── tools/                      Agent tools (file, git, search, diagram)
-│   ├── tracing/                    Per-job trace artifacts under ./runs/{job_id}/
-│   ├── formatters/                 Output format converters
-│   ├── storage/                    S3/MinIO client
-│   ├── workers/                    Celery app + task definitions
-│   └── observability/              OpenTelemetry + Prometheus metrics
-├── ui/                             React studio (Vite + Tailwind, light theme)
-├── alembic/                        DB migrations
-├── tests/
-│   ├── unit/                       Unit tests (no DB required)
-│   └── integration/                Integration tests (needs Docker infra)
-├── scripts/
-│   └── seed_dev.py                 Dev DB seeder
-├── docker/
-│   └── prometheus.yml              Prometheus scrape config
-├── .dev/                           Architecture + UX plans and progress logs
-├── docker-compose.yml
-├── Dockerfile
-├── pyproject.toml
-├── Makefile
-└── PROGRESS.md                     Build phase tracker
+codelith/                       the importable package
+├── main.py                     FastAPI app factory
+├── config.py                   All settings (env-driven via pydantic-settings)
+├── api/v1/                     Route handlers (thin) — mounts each app's router
+├── core/                       Security, logging, exceptions, middleware
+│   └── cancellation.py         Redis-backed CancellationToken + JobCancelled
+├── db/ models/ schemas/        Persistence and contracts, shared by every app
+├── services/                   Shared logic only — auth, audit, job, project,
+│                               source, knowledge. An app's services live with it
+├── knowledge/                  THE BASE: KB vocabulary, builder, retrieval,
+│                               questions, artefacts, tools
+├── languages/                  The multi-language seam
+│   └── providers/              python · typescript · go · java
+├── agents/analysis/            Analysis-phase agents
+├── workflows/                  analysis_workflow + states
+├── apps/                       ── THE APPS ─────────────────────────────
+│   ├── registry.py             What exists, and what unlocks it
+│   ├── ask/                    Answers, threads, routes
+│   └── documentation/          Agents, workflows, services, tasks,
+│                               formatters, routes
+├── ingestion/ memory/ llm/     Cloning, stores, model client
+├── storage/ workers/ tracing/  MinIO, Celery, per-job artifacts
+└── observability/              OpenTelemetry + Prometheus
+
+ui/                             React studio (Vite)
+tests/                          unit/ + integration/
+.dev/                           Plans and progress logs
 ```
 
 ### Agents

@@ -86,6 +86,7 @@ function SourcePanel({ project }: { project: Project }) {
  * something written to read.
  */
 function DocumentationProgress({ projectId }: { projectId: number }) {
+  const navigate = useNavigate()
   const { data: site } = useAsync(s => api.site(projectId, null, s), [projectId])
   const c = coverage(site ?? null)
   const outstanding = c.planned + c.stale + c.failed
@@ -105,13 +106,20 @@ function DocumentationProgress({ projectId }: { projectId: number }) {
         <span className="mt-1.5 flex items-center gap-2">
           <Meter pct={c.pct} segments={18} />
           <span className="tag text-ink-dim">{c.pct}% written</span>
-          <Link
-            to={`/app/projects/${projectId}/docs`}
-            onClick={e => e.stopPropagation()}
+          {/* A button, not a Link: this sits inside the app card, which is itself
+              a Link, and an anchor inside an anchor is invalid HTML — React warns
+              and the browser is free to reparent it, which breaks both. */}
+          <button
+            type="button"
+            onClick={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              navigate(`/app/projects/${projectId}/docs`)
+            }}
             className="tag ml-auto text-ink-dim underline-offset-2 hover:text-hot-ink hover:underline"
           >
             read
-          </Link>
+          </button>
         </span>
       )}
     </span>

@@ -121,19 +121,114 @@ to everybody, not to QA.
 
 ---
 
-## Sketch of the phases
+## Phases
 
-| # | Phase | Notes |
-|---|---|---|
-| Q1 | Runner for existing tools | ruff, mypy; capture structured output. Repo-agnostic, so language providers decide which tools apply |
-| Q2 | Findings joined to the graph | Every finding gets an impact: what imports it, what documentation cites it |
-| Q3 | Surface coverage | Routes, CLI commands and scheduled tasks named in no test. Cheap, and a more meaningful number than line coverage |
-| Q4 | Dependency audit, offline slice | Unpinned, conflicting, imported-but-undeclared, declared-but-unused |
-| Q5 | Architecture drift | Role violations against the import graph — `api` reaching into `data_access` |
-| Q6 | Test generation, write-only | Measured the same way: does the test reference code that exists |
+Nothing below is built. Every row starts ⬜, and the Notes column says what the phase
+*contains* rather than what it is called — a phase whose scope is one line is a phase
+somebody will discover the scope of halfway through.
 
-**Prerequisite:** the feature-module restructure. QA is the third feature and the first
-one built into the new structure — which makes it the test of whether the seam holds.
+Legend: ⬜ not started · 🟨 in progress · ✅ done · ⏭️ deferred
+
+### Q0 — Prove the seam (prerequisite)
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q0.1 | Register `qa` in `codelith/apps/registry.py` | ⬜ | id, label, blurb, `needs`, route, `built=False` |
+| Q0.2 | It renders as a planned card | ⬜ | Dashboard and project hub, dimmed, not clickable |
+| Q0.3 | `codelith/apps/qa/` skeleton | ⬜ | Package, `__init__`, empty router mounted |
+
+**Exit:** QA appears in the studio as "soon", and adding it touched the registry, the
+router, and nothing in `codelith/knowledge/`.
+
+### Q1 — Run the tools that already exist
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q1.1 | `ToolRunner` | ⬜ | Subprocess with a timeout, working directory, captured stdout/stderr, non-zero exit is data not an error |
+| Q1.2 | ruff adapter | ⬜ | `--output-format json` → `Finding(rule, path, line, col, message, severity)` |
+| Q1.3 | mypy adapter | ⬜ | `--no-error-summary` line parsing → the same `Finding` |
+| Q1.4 | Which tools apply | ⬜ | The `LanguageProvider` decides — Python gets ruff/mypy; a Go repo must not be run through ruff |
+| Q1.5 | The repository is not on disk | ⬜ | **The hard part.** Analysis clones and discards. Either re-clone at the analysed SHA, or reconstruct from chunks — chunks are lossy (module-level code is missing), so re-clone |
+| Q1.6 | Tests | ⬜ | A tool that is not installed, one that times out, one that returns garbage — none may fail the run |
+
+**Exit:** a findings list from a real repository, with nothing interpreted yet.
+
+### Q2 — Give every finding an impact
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q2.1 | Finding → symbol | ⬜ | `path:line` to the enclosing symbol via `KBModule.symbols_json` |
+| Q2.2 | Blast radius per finding | ⬜ | `get_dependents` and `get_blast_radius`, cached per path within a run |
+| Q2.3 | Documentation impact | ⬜ | Site pages whose `source_files` include the path — "3 written pages cite this" |
+| Q2.4 | Ranking | ⬜ | Severity × reach. A `F821` in a leaf script is not a `F821` in the composition workflow |
+| Q2.5 | Tests | ⬜ | The ranking is the product; a finding with no impact data must degrade, not vanish |
+
+**Exit:** *"`F821` at `diagram.py:442` — runs in the composition workflow, so this breaks
+every documentation job; 3 pages cite the file."* That sentence is the whole feature.
+
+### Q3 — Surface coverage
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q3.1 | The surface | ⬜ | `route`, `cli_command`, `scheduled_task`, `entrypoint` entities |
+| Q3.2 | Test association | ⬜ | Which test files name each one — graph edge first, then name match |
+| Q3.3 | The number | ⬜ | "6 of 28 routes are named in no test", with the six listed |
+| Q3.4 | Honesty about the method | ⬜ | Name matching is evidence, not proof. Say so in the UI or it reads as coverage |
+
+**Exit:** a number more meaningful than line coverage, that does not overclaim.
+
+### Q4 — Dependency audit, offline only
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q4.1 | Declared vs imported | ⬜ | `dependency` entities against the import graph, both directions |
+| Q4.2 | Unpinned | ⬜ | No version constraint at all |
+| Q4.3 | Conflicting constraints | ⬜ | The same package pinned differently in two manifests |
+| Q4.4 | No network | ⬜ | Deliberate: "nothing leaves your box" is the headline claim. Latest-version checks are a later, opt-in addition |
+
+**Exit:** four checks, no socket opened.
+
+### Q5 — Architecture drift
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q5.1 | Role rules | ⬜ | Which `ModuleRole` may import which. Derived from what the codebase already does, not imposed |
+| Q5.2 | Violations | ⬜ | `api` reaching into `data_access` past the service layer |
+| Q5.3 | New since last KB | ⬜ | Two knowledge bases, two graphs, diff the edges. **The only thing here that uses per-commit pinning**, which nothing else does |
+| Q5.4 | Tests | ⬜ | A rule nobody can satisfy produces noise; each rule needs a real violation and a real pass |
+
+**Exit:** "this edge is new since last week" — architectural regression testing.
+
+### Q6 — Test generation, write-only
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q6.1 | What to test | ⬜ | Uncovered surface from Q3 — generation aimed at a gap that was measured |
+| Q6.2 | Retrieve then write | ⬜ | Same shape as the documentation writer: the KB slice for the symbol, then the test |
+| Q6.3 | Grounding check | ⬜ | Does the test import and call things that exist? Same rule as citations: the model proposes, the KB disposes |
+| Q6.4 | Write only, no run | ⬜ | Running generated code needs a sandbox. Deliberately out of scope until somebody asks |
+
+**Exit:** a test file a developer runs themselves, that references real code.
+
+### Q7 — The deep analysis pass
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q7.1 | What QA needs the base does not hold | ⬜ | Decide from Q1–Q6, not before. Likely: deeper call edges, symbol↔test association |
+| Q7.2 | Job or lazy step | ⬜ | A job type is more honest about costing minutes, which it will |
+| Q7.3 | Keyed to the commit | ⬜ | Same SHA as the base KB, invalidated together |
+| Q7.4 | Stays out of the base | ⬜ | The isolation test is what proves it |
+
+**Exit:** QA deepens the KB for itself, and no other app pays for it.
+
+### Q8 — The UI
+
+| # | Task | Status | What it contains |
+|---|---|---|---|
+| Q8.1 | Findings inbox | ⬜ | Severity, file, impact, dismiss. **The first app whose output is a worklist** rather than a document or a conversation — so the first that needs dismissal state |
+| Q8.2 | Coverage view | ⬜ | The surface, and what is untested |
+| Q8.3 | Dependency table | ⬜ | Q4's four checks |
+| Q8.4 | Card counts | ⬜ | "N findings" on the dashboard and project hub |
 
 ---
 
