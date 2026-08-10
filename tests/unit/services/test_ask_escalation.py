@@ -22,8 +22,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.llm.client import ToolsUnsupported
-from app.services import ask_service
-from app.services.ask_service import AskService
+from app.features.ask import service as ask_service
+from app.features.ask.service import AskService
 from app.knowledge.questions import Evidence, EvidenceBundle, QuestionPlan
 
 

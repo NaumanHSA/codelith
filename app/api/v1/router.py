@@ -4,9 +4,9 @@ from app.api.v1.organizations import router as org_router
 from app.api.v1.projects import router as project_router
 from app.api.v1.jobs import router as job_router
 from app.api.v1.documents import router as document_router
-from app.api.v1.chat import router as chat_router
+from app.features.ask import router as chat_router
 from app.api.v1.features import router as features_router
-from app.api.v1.chat import threads_router as chat_threads_router
+from app.features.ask import threads_router as chat_threads_router
 from app.api.v1.retrieval import router as retrieval_router
 from app.api.v1.settings import router as settings_router
 

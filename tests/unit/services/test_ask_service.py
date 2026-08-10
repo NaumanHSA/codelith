@@ -21,7 +21,7 @@ from __future__ import annotations
 import pytest
 
 from app.knowledge.questions import Evidence, EvidenceBundle, QuestionPlan
-from app.services.ask_service import AskService
+from app.features.ask.service import AskService
 
 
 def _bundle(*titles: str) -> EvidenceBundle:

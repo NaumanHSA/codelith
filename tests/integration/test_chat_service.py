@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.models.organization import Organization
 from app.models.project import Project
-from app.services.chat_service import ChatService
+from app.features.ask.threads import ChatService
 
 
 @pytest_asyncio.fixture

@@ -26,8 +26,8 @@ from pydantic import BaseModel, Field
 from app.core.cancellation import JobCancelled
 from app.core.exceptions import NotFoundError, ValidationError
 from app.dependencies import CurrentUser, DbSession
-from app.services.ask_service import AskService
-from app.services.chat_service import ChatService
+from app.features.ask.service import AskService
+from app.features.ask.threads import ChatService
 from app.services.project_service import ProjectService
 
 logger = structlog.get_logger(__name__)
