@@ -127,7 +127,7 @@ to everybody, not to QA.
 |---|---|---|
 | Q0 | Prove the seam | ✅ |
 | Q1 | Run the tools that already exist | ✅ |
-| Q2 | Give every finding an impact | ⬜ |
+| Q2 | Give every finding an impact | ✅ |
 | Q3 | Surface coverage | ⬜ |
 | Q4 | Dependency audit, offline only | ⬜ |
 | Q5 | Architecture drift | ⬜ |
@@ -197,14 +197,27 @@ reports both SHAs and `drift_note` says so rather than pretending they match.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q2.1 | Finding → symbol | ⬜ | `path:line` to the enclosing symbol via `KBModule.symbols_json` |
-| Q2.2 | Blast radius per finding | ⬜ | `get_dependents` and `get_blast_radius`, cached per path within a run |
-| Q2.3 | Documentation impact | ⬜ | Site pages whose `source_files` include the path — "3 written pages cite this" |
-| Q2.4 | Ranking | ⬜ | Severity × reach. A `F821` in a leaf script is not a `F821` in the composition workflow |
-| Q2.5 | Tests | ⬜ | The ranking is the product; a finding with no impact data must degrade, not vanish |
+| Q2.1 | Finding → symbol | 🟨 | **Only where unambiguous.** See the note |
+| Q2.2 | Blast radius per finding | ✅ | Cached per path, not per finding: 409 findings across dozens of files is dozens of traversals, not 409 |
+| Q2.3 | Documentation impact | ✅ | Written pages only — a planned page cites nothing yet, and naming it would be a claim about the future |
+| Q2.4 | Ranking | ✅ | Severity dominates; reach breaks ties; a cited page counts for five importers. Reach is capped at 40 |
+| Q2.5 | Tests | ✅ | 19. Including that a finding with no impact keeps its place in the list |
 
-**Exit:** *"`F821` at `diagram.py:442` — runs in the composition workflow, so this breaks
-every documentation job; 3 pages cite the file."* That sentence is the whole feature.
+**Exit — met.** On neurosurfer: 409 findings, and the top of the list is
+`union-attr` in `observability/logging.py` — *46 files reach it* — above two hundred
+others.
+
+**Why reach is capped.** A file 200 modules import is not twice as urgent as one 100
+import; both mean load-bearing. Uncapped, the single most-imported file takes every
+slot at the top and nothing else is ever read.
+
+**Q2.1 is partial, and the reason is the case for Q7.** The knowledge base stores
+symbols per *module*, and a module is usually several files — so a symbol at line 47
+could belong to any of them. Attributing anyway would put a finding inside a function
+from a different file, and a reader cannot tell a confident wrong answer from a right
+one. Only single-file modules are attributed, which on neurosurfer is almost none.
+Per-symbol file attribution is exactly what a QA-specific analysis pass should derive
+rather than making every project's analysis carry.
 
 ### Q3 — Surface coverage
 

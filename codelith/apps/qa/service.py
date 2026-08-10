@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.apps.qa.checkout import checkout
 from codelith.apps.qa.findings import Finding, Severity, ToolReport
+from codelith.apps.qa.impact import ImpactResolver
 from codelith.apps.qa.runner import run_tool
 from codelith.apps.qa.tools import ToolSpec, tools_for
 from codelith.db.repositories.knowledge import KnowledgeRepositories
@@ -43,6 +44,12 @@ class QAReport:
     #: Tools that apply to this codebase but are not installed. Named so a reader
     #: knows the difference between "clean" and "nothing looked".
     missing_tools: list[str] = field(default_factory=list)
+    #: Kept so the caller can ask for a finding's impact sentence without
+    #: reimplementing the phrasing.
+    resolver: object | None = None
+
+    def explain(self, finding: Finding) -> str:
+        return self.resolver.explain(finding) if self.resolver else ""  # type: ignore[attr-defined]
 
     @property
     def counts(self) -> dict[str, int]:
@@ -93,9 +100,13 @@ class QAService:
             if not tool_report.ran:
                 report.missing_tools.append(tool_report.tool)
 
-        report.findings.sort(
-            key=lambda f: (-f.severity.rank, f.path, f.line)
-        )
+        # Q2: reach, then rank by it. Severity alone puts a missing annotation in a
+        # throwaway script above an undefined name in the composition workflow.
+        resolver = ImpactResolver(self.db, project.id, kb.id)
+        await resolver.prepare({f.path for f in report.findings})
+        report.findings = [resolver.resolve(f) for f in report.findings]
+        report.findings.sort(key=resolver.rank)
+        report.resolver = resolver
         logger.info(
             "qa_run_complete",
             project_id=project.id,
