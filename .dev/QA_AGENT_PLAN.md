@@ -126,7 +126,7 @@ to everybody, not to QA.
 | Phase | Scope | Status |
 |---|---|---|
 | Q0 | Prove the seam | ✅ |
-| Q1 | Run the tools that already exist | ⬜ |
+| Q1 | Run the tools that already exist | ✅ |
 | Q2 | Give every finding an impact | ⬜ |
 | Q3 | Surface coverage | ⬜ |
 | Q4 | Dependency audit, offline only | ⬜ |
@@ -169,14 +169,29 @@ the page that answers it.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q1.1 | `ToolRunner` | ⬜ | Subprocess with a timeout, working directory, captured stdout/stderr, non-zero exit is data not an error |
-| Q1.2 | ruff adapter | ⬜ | `--output-format json` → `Finding(rule, path, line, col, message, severity)` |
-| Q1.3 | mypy adapter | ⬜ | `--no-error-summary` line parsing → the same `Finding` |
-| Q1.4 | Which tools apply | ⬜ | The `LanguageProvider` decides — Python gets ruff/mypy; a Go repo must not be run through ruff |
-| Q1.5 | The repository is not on disk | ⬜ | **The hard part.** Analysis clones and discards. Either re-clone at the analysed SHA, or reconstruct from chunks — chunks are lossy (module-level code is missing), so re-clone |
-| Q1.6 | Tests | ⬜ | A tool that is not installed, one that times out, one that returns garbage — none may fail the run |
+| Q1.1 | `run_tool` | ✅ | `codelith/apps/qa/runner.py`. Timeout, cwd, captured output; a killed process is reaped so cleanup can delete the checkout |
+| Q1.2 | ruff adapter | ✅ | JSON → `Finding`. `E9`/`F81`/`F82` are errors — they break at runtime — everything else is a warning |
+| Q1.3 | mypy adapter | ✅ | Line parsing. `note:` lines are continuations, not findings; counting them tripled the number and buried the errors |
+| Q1.4 | Which tools apply | ✅ | **QA maps language → tools, not the provider.** A `qa_tools()` method on `LanguageProvider` would put this app's vocabulary in the base |
+| Q1.5 | The repository is not on disk | ✅ | `checkout.py` re-clones. Chunks were rejected: reconstructing a file from them loses module-level code — measured, five real `os.getenv` calls went missing |
+| Q1.6 | Tests | ✅ | 33. Not-installed, timeout, non-zero exit, binary output, unparseable JSON |
 
-**Exit:** a findings list from a real repository, with nothing interpreted yet.
+**Exit — met.** 468 ruff findings and 1,539 mypy findings from Codelith itself.
+
+**Two things the first real run exposed.** Ruff reports **absolute** paths even when
+invoked as `.`, and the knowledge base stores repository-relative ones — every join in
+Q2 matches on that string, so the mismatch produces findings with no impact rather
+than an error. Silent, so it is pinned by four tests.
+
+And mypy returned **0 findings, exit 2**: Codelith keeps `repos/` and `runs/` for
+clones and job artifacts, mypy walked into them, found four copies of the same
+analysed project and gave up with "duplicate module". A report that reads clean
+because nothing looked is the worst possible output. Both tools now exclude the base's
+`DEFAULT_IGNORED_DIRS` — reused rather than restated, so the two lists cannot drift.
+
+**Known gap, carried forward.** The checkout is not pinned to the analysed commit: the
+ingesters take a branch, not a revision, so a re-clone gets the branch head. `Checkout`
+reports both SHAs and `drift_note` says so rather than pretending they match.
 
 ### Q2 — Give every finding an impact
 
