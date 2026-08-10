@@ -131,7 +131,7 @@ to everybody, not to QA.
 | Q3 | Surface coverage | ✅ |
 | Q4 | Dependency audit, offline only | ✅ |
 | Q5 | Architecture drift | ✅ |
-| Q6 | Test generation, write-only | ⬜ |
+| Q6 | Test generation, write-only | ✅ |
 | Q7 | The deep analysis pass | ⬜ |
 | Q8 | The UI | ⬜ |
 
@@ -295,12 +295,22 @@ rules and no findings, which is the right answer for one that has none.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q6.1 | What to test | ⬜ | Uncovered surface from Q3 — generation aimed at a gap that was measured |
-| Q6.2 | Retrieve then write | ⬜ | Same shape as the documentation writer: the KB slice for the symbol, then the test |
-| Q6.3 | Grounding check | ⬜ | Does the test import and call things that exist? Same rule as citations: the model proposes, the KB disposes |
-| Q6.4 | Write only, no run | ⬜ | Running generated code needs a sandbox. Deliberately out of scope until somebody asks |
+| Q6.1 | What to test | ✅ | Q3's uncovered list, nothing else. Generating tests for tested code is volume, not value |
+| Q6.2 | Retrieve then write | ✅ | Same shape as the documentation writer — a model asked to test a route it has not seen invents a handler signature |
+| Q6.3 | Grounding check | ✅ | Every first-party import checked against the KB. Third-party and stdlib are not judged, or every generated test would look broken |
+| Q6.4 | Write only, no run | ✅ | Nothing is executed, and every summary says so |
 
-**Exit:** a test file a developer runs themselves, that references real code.
+**Exit — met.** Generated for `GET /` on neurosurfer: a pytest file with a `TestClient`
+fixture, importing `neurosurfer.app.server.gateway` — which resolved against the
+knowledge base.
+
+**The failure this guards against.** A generated test that imports a module which does
+not exist is worse than no test: it fails on the first run and the reader concludes the
+feature is broken rather than that the guess was. So imports are checked and what does
+not resolve is reported *before* anybody runs it — the same rule citations follow.
+
+**Nothing is executed, and the summary always says so.** A generated test that looks
+like a passing test is a lie about the state of the codebase.
 
 ### Q7 — The deep analysis pass
 
