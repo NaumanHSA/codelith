@@ -121,9 +121,28 @@ to everybody, not to QA.
 
 ---
 
+## Progress
+
+| Phase | Scope | Status |
+|---|---|---|
+| Q0 | Prove the seam | ✅ |
+| Q1 | Run the tools that already exist | ⬜ |
+| Q2 | Give every finding an impact | ⬜ |
+| Q3 | Surface coverage | ⬜ |
+| Q4 | Dependency audit, offline only | ⬜ |
+| Q5 | Architecture drift | ⬜ |
+| Q6 | Test generation, write-only | ⬜ |
+| Q7 | The deep analysis pass | ⬜ |
+| Q8 | The UI | ⬜ |
+
+**Q0 is done and nothing else is started.** Quality appears in the studio as a planned
+app — dimmed, unclickable, on both the dashboard and the project hub — and adding it
+touched `codelith/apps/registry.py`, a new package, and nothing in
+`codelith/knowledge/`. That was the point of the phase: the seam held.
+
 ## Phases
 
-Nothing below is built. Every row starts ⬜, and the Notes column says what the phase
+Only Q0 is built. Every row starts ⬜, and the Notes column says what the phase
 *contains* rather than what it is called — a phase whose scope is one line is a phase
 somebody will discover the scope of halfway through.
 
@@ -133,12 +152,18 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · ⏭️ deferred
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q0.1 | Register `qa` in `codelith/apps/registry.py` | ⬜ | id, label, blurb, `needs`, route, `built=False` |
-| Q0.2 | It renders as a planned card | ⬜ | Dashboard and project hub, dimmed, not clickable |
-| Q0.3 | `codelith/apps/qa/` skeleton | ⬜ | Package, `__init__`, empty router mounted |
+| Q0.1 | Register `qa` in `codelith/apps/registry.py` | ✅ | `built=False`, `needs=(code graph, entities, modules)`, route `/app/projects/{id}/quality` |
+| Q0.2 | It renders as a planned card | ✅ | Dimmed on the dashboard and the project hub. Four tests pin it: a planned app is `PLANNED` for *every* KB status, so a ready knowledge base can never make an unbuilt app look live |
+| Q0.3 | `codelith/apps/qa/` skeleton | ✅ | Package and `__init__` exist, so the isolation rules apply from the first line. **The router is deliberately not mounted** — see below |
 
-**Exit:** QA appears in the studio as "soon", and adding it touched the registry, the
-router, and nothing in `codelith/knowledge/`.
+**Exit — met.** Quality appears in the studio as "soon", and adding it touched the
+registry, a new package, and nothing in `codelith/knowledge/`.
+
+**On the router.** The original plan said "empty router mounted". It is not, and should
+not be until Q8: a mounted router with no endpoints is dead wiring that reads as a
+feature somebody forgot to finish, and the app's route (`/app/projects/{id}/quality`)
+does not exist yet either. The card is a placeholder by design; the route arrives with
+the page that answers it.
 
 ### Q1 — Run the tools that already exist
 
