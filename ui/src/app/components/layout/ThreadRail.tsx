@@ -168,13 +168,13 @@ export default function ThreadRail() {
     <>
       <button
         onClick={() => navigate(NEW_CHAT(activeProject))}
-        className="flex w-full items-center gap-2 py-[7px] pr-2 pl-4 text-left text-[11.5px] text-ink-mid transition-colors hover:bg-sunk hover:text-ink"
+        className="flex w-full items-center gap-2 py-[6px] pr-2 pl-4 text-left text-[12px] text-ink-mid transition-colors hover:bg-sunk hover:text-ink"
       >
-        <span className="text-[13px] leading-none text-hot">+</span>
+        <span className="text-[14px] leading-none text-hot">+</span>
         New chat
       </button>
 
-      <div className="max-h-[34vh] overflow-y-auto">
+      <div className="max-h-[30vh] overflow-y-auto">
         {loading && <p className="px-4 py-1 text-[10.5px] text-ink-dim">Loading…</p>}
 
         {!loading && threads.length === 0 && (
@@ -199,13 +199,13 @@ export default function ThreadRail() {
                 className="min-w-0 flex-1 py-[5px] text-left"
               >
                 <span
-                  className={`block truncate text-[11px] ${
+                  className={`block truncate text-[12px] ${
                     active ? 'font-semibold text-hot-ink' : 'text-ink-mid'
                   }`}
                 >
                   {t.title}
                 </span>
-                <span className="block truncate text-[9.5px] text-ink-dim">
+                <span className="block truncate text-[10px] text-ink-dim">
                   {t.project_name}
                 </span>
               </button>
