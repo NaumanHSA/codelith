@@ -255,6 +255,27 @@ body {
   outline-offset: 1px;
 }
 
+/*
+ * Opt an element out when its *container* shows the focus instead.
+ *
+ * An outline follows the focused element's own border-radius, so a square
+ * textarea inside a rounded panel draws a rectangle that cuts across the
+ * corners — which is what the chat composer looked like: two rings, an inner
+ * sharp one and an outer rounded one.
+ *
+ * Tailwind's `outline-none` cannot win this on its own: the rule above is
+ * unlayered and utilities are layered, so the global ring takes precedence
+ * however the element is classed. Hence a class here rather than there.
+ *
+ * Only use it where something else visibly marks focus — the composer's
+ * wrapper carries `focus-within:border-hot`, so the whole control lights up.
+ * Removing the ring without a replacement makes the field invisible to
+ * keyboard users.
+ */
+.focus-ring-inherit:focus-visible {
+  outline: none;
+}
+
 /* --- scrollbars: hidden until scroll ---------------------------------- */
 * {
   scrollbar-width: thin;

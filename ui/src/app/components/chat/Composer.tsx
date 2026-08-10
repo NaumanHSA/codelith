@@ -56,7 +56,10 @@ export function Composer({
   const canSend = value.trim().length > 0 && !busy
 
   return (
-    <div className="rounded-xl border border-rule bg-panel shadow-sm focus-within:border-hot">
+    // The wrapper carries the focus state, not the textarea. An outline follows
+    // the focused element's own radius, so a square field inside a rounded panel
+    // drew a rectangle cutting across the corners — see `.focus-ring-inherit`.
+    <div className="rounded-xl border border-rule bg-panel shadow-sm transition-colors focus-within:border-hot focus-within:ring-1 focus-within:ring-hot/25">
       <textarea
         ref={ref}
         value={value}
@@ -71,7 +74,7 @@ export function Composer({
         }}
         rows={1}
         placeholder={placeholder}
-        className="block w-full resize-none bg-transparent px-4 pt-3.5 text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-dim"
+        className="focus-ring-inherit block w-full resize-none bg-transparent px-4 pt-3.5 text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-dim"
         style={{ maxHeight: MAX_HEIGHT, overflowY: 'auto' }}
       />
 
