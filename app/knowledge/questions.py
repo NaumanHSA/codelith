@@ -432,9 +432,15 @@ class QuestionRouter:
 
         if "entities" in plan.intents:
             await self._add_entities(bundle)
-            await self._add_artefact_profile(bundle)
         if "narrative" in plan.intents:
             await self._add_narratives(bundle)
+
+        # Unconditional, and it took two narrower gates to get here. Keyed on the
+        # file-shaped entity kinds it fired once in two; keyed on the `entities`
+        # intent, twice in three. Both times the failure was the same and the
+        # correlation exact — no profile, and the answer described a container image
+        # the repository does not build.
+        await self._add_artefact_profile(bundle)
 
         # Semantic first when a traversal is wanted but nothing traversable was
         # named. Measured on the question set: all three of "what calls the tool
@@ -512,19 +518,23 @@ class QuestionRouter:
         """
         What conventional files this repository has, and which it does not.
 
-        Only for questions already routed at the file-shaped kinds — deployment,
-        configuration, how to run it. On a question about datastores this would be
-        noise, and the entity budget is tight enough already.
+        Included whenever the router asked for facts at all, not only when it picked
+        one of the file-shaped kinds. That narrower gate was tried first and it
+        failed the case it was built for: asked "how is it deployed" twice, the
+        router chose the `entities` intent both times but named kinds that did not
+        include `infra_resource` on the second, so the profile vanished and the
+        answer went straight back to describing a container image the repository
+        does not build. A safeguard that holds only when a model happens to pick the
+        right word is not a safeguard.
+
+        It costs about two hundred tokens against a six-thousand-token budget, and
+        it is true of every question — knowing there is no compose file matters to
+        "what database does it use" as much as to "how is it deployed".
 
         Absence is why it exists. Retrieval returns what exists, so a question about
         deployment gets whatever deployment-ish material is nearby and nothing can
-        contradict it: asked how neurosurfer is deployed, an answer described a
-        container image the repository does not build, from documentation that
-        recommends one. This is the evidence that says so.
+        contradict it.
         """
-        wanted = set(bundle.plan.entity_kinds) & set(artefacts.FILE_ENTITY_KINDS)
-        if not wanted:
-            return
 
         paths: list[str] = []
         for kind in artefacts.FILE_ENTITY_KINDS:
@@ -536,7 +546,7 @@ class QuestionRouter:
             kind="entity",
             title="repository artefacts",
             body=artefacts.render(present, absent),
-            why="question is about how the repository is built, run or configured",
+            why="conventional files this repository has, and the ones it does not",
         ))
 
     async def _add_entities(self, bundle: EvidenceBundle) -> None:
