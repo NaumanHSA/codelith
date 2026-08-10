@@ -135,10 +135,29 @@ to everybody, not to QA.
 | Q7 | The deep analysis pass | ✅ |
 | Q8 | The UI | ✅ |
 
-**All nine phases are done.** Quality appears in the studio as a planned
-app — dimmed, unclickable, on both the dashboard and the project hub — and adding it
-touched `codelith/apps/registry.py`, a new package, and nothing in
-`codelith/knowledge/`. That was the point of the phase: the seam held.
+**Not built, deliberately.** Full reasoning in *Not built* below — none of these is an
+oversight, and none should be assumed done.
+
+| | Why not |
+|---|---|
+| Test execution | Needs a sandbox, and a product decision about executing code in a user's checkout |
+| Dismissal state | Needs a table, a migration, and an answer to "does dismissing survive a re-analysis that moves the line?" |
+| Latest-version checks | Would send every package name to a third party; "nothing leaves your box" is the headline claim |
+| Checkout pinned to the analysed SHA | Ingesters take a branch, not a revision. Reported via `drift_note` rather than hidden |
+| Languages other than Python | `TOOLS_BY_LANGUAGE` has one entry. A Go repo is checked by nothing, and says so |
+
+**All nine phases are done, and Quality is live.** On neurosurfer, one run takes
+20s and returns 409 findings ranked by what they touch, 9 untested surface items, 17
+dependency issues and 1 layering violation.
+
+**The seam held.** Building an entire app touched `codelith/apps/registry.py`, one new
+package, two lines of router wiring — and *nothing* in `codelith/knowledge/`. That was
+the claim the app split was built on, and this is the first real test of it.
+
+Each phase found a bug, and every one was found by running the thing rather than
+reading it. Two of them — Q1's mypy exit-2 and Q5's rule ordering — produced output
+that *looked like a pass*, which is the failure mode this app exists to prevent in
+other people's code.
 
 ## Phases
 
@@ -197,7 +216,7 @@ reports both SHAs and `drift_note` says so rather than pretending they match.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q2.1 | Finding → symbol | 🟨 | **Only where unambiguous.** See the note |
+| Q2.1 | Finding → symbol | ✅ | Partial at the time — resolved by Q7, which derives per-file symbol spans. See the note |
 | Q2.2 | Blast radius per finding | ✅ | Cached per path, not per finding: 409 findings across dozens of files is dozens of traversals, not 409 |
 | Q2.3 | Documentation impact | ✅ | Written pages only — a planned page cites nothing yet, and naming it would be a claim about the future |
 | Q2.4 | Ranking | ✅ | Severity dominates; reach breaks ties; a cited page counts for five importers. Reach is capped at 40 |
@@ -211,13 +230,14 @@ others.
 import; both mean load-bearing. Uncapped, the single most-imported file takes every
 slot at the top and nothing else is ever read.
 
-**Q2.1 is partial, and the reason is the case for Q7.** The knowledge base stores
+**Q2.1 was partial, and that is what made the case for Q7.** The knowledge base stores
 symbols per *module*, and a module is usually several files — so a symbol at line 47
 could belong to any of them. Attributing anyway would put a finding inside a function
 from a different file, and a reader cannot tell a confident wrong answer from a right
-one. Only single-file modules are attributed, which on neurosurfer is almost none.
+one. Only single-file modules could be attributed, which on neurosurfer was almost none.
 Per-symbol file attribution is exactly what a QA-specific analysis pass should derive
-rather than making every project's analysis carry.
+rather than making every project's analysis carry — so Q7 built it, and the sentence
+now reads *in `configure_logging` · 46 files reach it*.
 
 ### Q3 — Surface coverage
 
@@ -365,11 +385,74 @@ have bought.
 
 ---
 
-## The first thing to do when this starts
+## Not built — deliberately, and what it would take
 
-Run `ruff check app/ --select F821` and fix what it finds, then decide whether ruff
-belongs in CI. The only current hits are SQLAlchemy `Mapped["Project"]` forward
-references, which are false positives and need silencing first.
+Each of these was in scope at some point and is not in the product. None is an
+oversight, and none should be assumed done.
 
-It is a small task, and it is this whole feature in miniature: the tool already exists,
-the answer is already available, and nobody is looking at it.
+### Test execution — ⏭️ deferred, needs a decision that is not ours
+
+Q6 writes test files and runs none of them. Every summary says so.
+
+Running generated code against somebody's repository needs process isolation, a
+dependency install, a time limit and a filesystem boundary — and it is the point at
+which Codelith stops being read-only about the user's machine. That is a product
+decision, not a missing function. **What it would take:** a sandbox, and an explicit
+answer to "may this tool execute code we wrote, in your checkout".
+
+### Dismissal state — ⏭️ deferred, a design question
+
+Q8.1 called for "dismiss" on a finding and the page has no such control. A worklist
+wants one.
+
+It is not a checkbox: dismissal is *state*, so it needs a table, a migration, and an
+answer to the question that decides the whole design — **does dismissing survive a
+re-analysis that moves the line number?** If yes, a finding needs an identity that is
+not `path:line`, and that is a real piece of work. Ranking buys most of what dismissal
+would, which is why it was not rushed.
+
+### Latest-version checking — ⏭️ deliberately out, protects the headline claim
+
+Q4 opens no socket. Asking PyPI what the current version of each package is would send
+the name of every dependency the user has — a fingerprint of their codebase — to a
+third party, and "nothing leaves your box" is the landing page's headline claim.
+
+**What it would take:** an opt-in that is off by default and states plainly what leaves
+the machine, or a shipped advisory database refreshed out of band.
+
+### Pinning the checkout to the analysed commit — 🟨 known gap, reported not hidden
+
+Q1 re-clones, and the ingesters take a *branch* rather than a revision — so the files
+checked may be ahead of the commit the knowledge base describes. `Checkout.drift_note`
+says so and the studio shows it, rather than pretending the two line up.
+
+**What it would take:** a `revision` argument through `BaseRepoIngester.clone` and its
+four implementations.
+
+### Languages other than Python — 🟨 by construction
+
+`TOOLS_BY_LANGUAGE` maps Python to ruff and mypy and nothing else, so a Go or
+TypeScript repository is checked by nothing. That is correct behaviour rather than a
+silent pass — running ruff over Go would produce no findings and read as "clean".
+
+**What it would take:** one entry per language, plus a `ToolSpec` with a parser. The
+seam is already there; it is the parsers that are the work.
+
+### Symbol attribution for non-Python files — 🟨
+
+Q7's index is an `ast` parse, so it knows Python. A finding in a `.ts` file gets reach
+and documentation impact but no enclosing symbol.
+
+---
+
+## If somebody picks this up next
+
+Two things worth doing before adding capability:
+
+1. **Wire ruff into CI.** The app now runs it on other people's code and Codelith's own
+   is unchecked. `F821` is already selected; the only blocker is that the SQLAlchemy
+   `Mapped["Project"]` forward references are false positives and need silencing first.
+2. **Watch a Quality run on a repository that is not neurosurfer.** Every number in this
+   plan came from one codebase. The false positives that were fixed — plugin packages,
+   namespace packages, the CLI command matching every import — were all found that way,
+   and the next repository will have its own.

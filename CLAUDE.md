@@ -11,11 +11,14 @@ changing anything structural — the repository was originally built documentati
 and named for it, and code written under the old premise couples the two. It should
 not.
 
-Two apps exist today, and one is planned:
+Three apps exist today:
 
 - **Documentation** — structured documents in Markdown/DOCX/MkDocs/Docusaurus
 - **Ask the code** — grounded question answering with checked citations
-- **Quality** — planned; see `.dev/QA_AGENT_PLAN.md`
+- **Quality** — findings from ruff and mypy, ranked by what each one *touches*;
+  surface with no test; an offline dependency audit; derived layering rules.
+  It writes tests and runs none of them — see `.dev/QA_AGENT_PLAN.md` for what is
+  deliberately not built
 
 `codelith/mcp/` is **not** an app. It adds nothing of its own — it is a second
 transport over `codelith/knowledge/tools.py`, so other agents (Claude Code, Cursor)
@@ -30,6 +33,12 @@ can query the knowledge base directly.
    Never re-reads the repository.
 3. **Ask** (`codelith/apps/ask/service.py`) — the second app on the same KB, proving
    the pattern: it needed nothing from the doc pipeline.
+
+An app is defined by *what it reads from the knowledge base* and, optionally, *what it
+derives for itself*. Quality is the first with two stages: `codelith/apps/qa/deep.py`
+parses the checkout for per-file symbol spans, because the KB stores symbols per module
+and records only where they start. Derived data stays inside the app — a project that
+never opens Quality never pays for it.
 
 An app is defined by *what it needs from the knowledge base*. Adding one should mean
 one entry in `codelith/apps/registry.py` and one page — never a change to analysis. If
@@ -117,6 +126,8 @@ codelith/                 the importable package (distribution name: codelith)
     registry.py      App, AppState, APPS — what exists and what unlocks it
     ask/             service (answers), threads (persistence), api
     documentation/   agents, workflows, services, tasks, formatters, api
+    qa/              tools + runner, impact, coverage, dependencies, drift,
+                     testgen, deep (its own analysis pass), api
   mcp/             The KB over MCP — a second transport, not an app
   ingestion/       Repo cloning + file parsers
   memory/          Short/long-term, pgvector, Neo4j
