@@ -130,7 +130,7 @@ to everybody, not to QA.
 | Q2 | Give every finding an impact | ✅ |
 | Q3 | Surface coverage | ✅ |
 | Q4 | Dependency audit, offline only | ✅ |
-| Q5 | Architecture drift | ⬜ |
+| Q5 | Architecture drift | ✅ |
 | Q6 | Test generation, write-only | ⬜ |
 | Q7 | The deep analysis pass | ⬜ |
 | Q8 | The UI | ⬜ |
@@ -271,12 +271,25 @@ unused". The first is what was measured.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q5.1 | Role rules | ⬜ | Which `ModuleRole` may import which. Derived from what the codebase already does, not imposed |
-| Q5.2 | Violations | ⬜ | `api` reaching into `data_access` past the service layer |
-| Q5.3 | New since last KB | ⬜ | Two knowledge bases, two graphs, diff the edges. **The only thing here that uses per-commit pinning**, which nothing else does |
-| Q5.4 | Tests | ⬜ | A rule nobody can satisfy produces noise; each rule needs a real violation and a real pass |
+| Q5.1 | Role rules | ✅ | Derived at 10:1 over at least 8 edges. Below that it is two conventions coexisting, and picking a winner is an opinion |
+| Q5.2 | Violations | ✅ | On neurosurfer: `service → cli`, one import, against 33 the other way — with the file pair |
+| Q5.3 | New since last KB | ✅ | Compares against the previous build's roles. `None` when there is no earlier build, so a first run never claims something is "new" |
+| Q5.4 | Tests | ✅ | 12, including the ordering bug below |
 
-**Exit:** "this edge is new since last week" — architectural regression testing.
+**Exit — met.** Two rules derived from neurosurfer (`cli → service` ×33,
+`cli → config` ×8) and one violation found: `neurosurfer/__main__.py` imports
+`neurosurfer/app/cli/__init__.py`.
+
+**A real bug, and the first run hid it completely.** Rules were tested in whichever
+direction the counter yielded first, so meeting `service → cli` (1 edge) before
+`cli → service` (33) discarded the pair — the clearest rule in the codebase was
+invisible because of dict ordering, and the run reported *no violations at all*. The
+dominant direction is now chosen explicitly, and a test asserts both orderings agree.
+
+**Rules are derived, never imposed.** A layering rule written into this file would be
+a judgement about somebody else's architecture, and the first thing anybody does with
+an opinionated linter is turn it off. A codebase with no discernible layering gets no
+rules and no findings, which is the right answer for one that has none.
 
 ### Q6 — Test generation, write-only
 
