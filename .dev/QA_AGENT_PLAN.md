@@ -142,9 +142,9 @@ touched `codelith/apps/registry.py`, a new package, and nothing in
 
 ## Phases
 
-Only Q0 is built. Every row starts ⬜, and the Notes column says what the phase
-*contains* rather than what it is called — a phase whose scope is one line is a phase
-somebody will discover the scope of halfway through.
+Only Q0 is built; everything below it is untouched. The Notes column says what each
+phase *contains* rather than what it is called — a phase whose scope is one line is a
+phase somebody discovers the scope of halfway through.
 
 Legend: ⬜ not started · 🟨 in progress · ✅ done · ⏭️ deferred
 
