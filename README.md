@@ -177,6 +177,43 @@ Open `http://localhost:8000/docs` for the interactive Swagger UI.
 
 ---
 
+## Use it from your editor (MCP)
+
+Codelith has already read your repository — chunked, embedded, with an import graph,
+pinned to a commit. Coding agents re-derive that by grepping, from scratch, every
+session. The MCP server lets them ask instead.
+
+```jsonc
+// .mcp.json — Claude Code, Cursor, and anything else speaking MCP
+{
+  "mcpServers": {
+    "codelith": {
+      "command": "python",
+      "args": ["-m", "codelith.mcp"],
+      "env": { "PYTHONPATH": "." }
+    }
+  }
+}
+```
+
+Seven tools. `list_codebases` first — every other one takes a `codebase_id`, and the
+ids are not guessable:
+
+| Tool | Answers |
+|---|---|
+| `list_codebases` | What has been analysed, with commit and size |
+| `search_code` | Semantic search over the source |
+| `read_file` | A file as the knowledge base holds it |
+| `find_callers` | Who calls a symbol — **no embedding encodes this** |
+| `find_dependents` | Which files import a file |
+| `blast_radius` | Everything that transitively reaches a file, with distance |
+| `list_facts` | Routes, datastores, env vars, entrypoints and the rest |
+
+Read-only, and local: nothing writes, and nothing is sent anywhere Codelith does not
+already talk to.
+
+---
+
 ## Architecture
 
 ### Layered Structure

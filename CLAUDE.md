@@ -11,10 +11,15 @@ changing anything structural — the repository was originally built documentati
 and named for it, and code written under the old premise couples the two. It should
 not.
 
-Two apps exist today:
+Two apps exist today, and one is planned:
 
 - **Documentation** — structured documents in Markdown/DOCX/MkDocs/Docusaurus
 - **Ask the code** — grounded question answering with checked citations
+- **Quality** — planned; see `.dev/QA_AGENT_PLAN.md`
+
+`codelith/mcp/` is **not** an app. It adds nothing of its own — it is a second
+transport over `codelith/knowledge/tools.py`, so other agents (Claude Code, Cursor)
+can query the knowledge base directly.
 
 **Three phases, and the split drives most of the design:**
 
@@ -112,6 +117,7 @@ codelith/                 the importable package (distribution name: codelith)
     registry.py      App, AppState, APPS — what exists and what unlocks it
     ask/             service (answers), threads (persistence), api
     documentation/   agents, workflows, services, tasks, formatters, api
+  mcp/             The KB over MCP — a second transport, not an app
   ingestion/       Repo cloning + file parsers
   memory/          Short/long-term, pgvector, Neo4j
   llm/             LLM client, model router, prompt templates

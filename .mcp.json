@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codelith": {
+      "command": "python",
+      "args": ["-m", "codelith.mcp"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
