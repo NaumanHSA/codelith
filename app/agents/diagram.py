@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.agents.base import BaseAgent
+from app.db.repositories.knowledge import KnowledgeRepositories
 from app.config import get_settings
 from app.core.cancellation import JobCancelled
 from app.knowledge.constants import EntityKind
@@ -221,8 +222,6 @@ class DiagramAgent(BaseAgent):
         Falls back to module names when the architecture map names no services, so a
         degraded map produces a smaller diagram rather than an invented one.
         """
-        from app.db.repositories.knowledge import KnowledgeRepositories
-
         kb_id = state.get("kb_id")
         services = [
             s.get("name") for s in (architecture_map.get("services") or []) if s.get("name")
