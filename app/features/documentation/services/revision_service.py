@@ -31,7 +31,7 @@ from app.models.user import User
 from app.schemas.job import JobConfig, JobCreate
 from app.services.job_service import JobService
 from app.services.project_service import ProjectService
-from app.services.site_service import SiteService
+from app.features.documentation.services.site_service import SiteService
 
 logger = structlog.get_logger(__name__)
 
@@ -137,7 +137,7 @@ class RevisionService:
             scope=scope,
         )
 
-        from app.workers.tasks.revision_tasks import run_revision
+        from app.features.documentation.tasks.revision_tasks import run_revision
 
         task = run_revision.delay(job.id)
         await self.jobs.start(job.id, task.id)

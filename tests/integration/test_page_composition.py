@@ -20,12 +20,12 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis import StructuredExtractorAgent
-from app.agents.composition import (
+from app.features.documentation.agents import (
     CompositionPlannerAgent,
     CompositionWriterAgent,
     KBLoaderAgent,
 )
-from app.agents.publisher import PublisherAgent
+from app.features.documentation.agents.publisher import PublisherAgent
 from app.core.exceptions import ValidationError
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
@@ -35,7 +35,7 @@ from app.models.job import Job
 from app.models.organization import Organization
 from app.models.project import Project
 from app.models.user import User
-from app.services.site_service import SiteService
+from app.features.documentation.services.site_service import SiteService
 
 ROUTES = textwrap.dedent(
     '''
@@ -891,7 +891,7 @@ class TestExport:
 
 class TestFanOut:
     def test_the_graph_sends_one_writer_per_page(self, kb) -> None:
-        from app.workflows.composition_workflow import CompositionWorkflow
+        from app.features.documentation.workflows.composition_workflow import CompositionWorkflow
 
         workflow = CompositionWorkflow(project=kb["project"], job=kb["job"], db=None)
         sends = workflow._fan_out_writers(
@@ -903,7 +903,7 @@ class TestFanOut:
         ]
 
     def test_without_pages_it_still_sends_one_writer_per_doc_type(self, kb) -> None:
-        from app.workflows.composition_workflow import CompositionWorkflow
+        from app.features.documentation.workflows.composition_workflow import CompositionWorkflow
 
         workflow = CompositionWorkflow(project=kb["project"], job=kb["job"], db=None)
         sends = workflow._fan_out_writers({"doc_types": ["architecture", "api"]})

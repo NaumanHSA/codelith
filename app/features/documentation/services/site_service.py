@@ -41,7 +41,7 @@ from app.db.repositories.site_repo import (
     DocSiteRepository,
     DocSiteVersionRepository,
 )
-from app.formatters.site_tree import (
+from app.features.documentation.formatters.site_tree import (
     ExportPage,
     ExportSection,
     SiteTree,
@@ -788,11 +788,11 @@ class SiteService:
             stem = f"{stem}-{slugify_filename(tree.version_label)}"
 
         if fmt == "mkdocs":
-            from app.formatters.mkdocs import MkDocsFormatter
+            from app.features.documentation.formatters.mkdocs import MkDocsFormatter
 
             return MkDocsFormatter().format_site_tree(tree), f"{stem}-mkdocs.zip", "application/zip"
         if fmt == "docusaurus":
-            from app.formatters.docusaurus import DocusaurusFormatter
+            from app.features.documentation.formatters.docusaurus import DocusaurusFormatter
 
             return (
                 DocusaurusFormatter().format_site_tree(tree),
@@ -800,7 +800,7 @@ class SiteService:
                 "application/zip",
             )
         if fmt == "html":
-            from app.formatters.static_site import StaticSiteFormatter
+            from app.features.documentation.formatters.static_site import StaticSiteFormatter
 
             return (
                 StaticSiteFormatter().format_site_tree(tree),

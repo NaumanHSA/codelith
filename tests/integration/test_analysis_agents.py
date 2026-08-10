@@ -359,7 +359,7 @@ class TestSitePlanner:
     async def test_it_plans_a_site_and_merges_it(
         self, db_session, job, state, monkeypatch
     ) -> None:
-        from app.services.site_service import SiteService
+        from app.features.documentation.services.site_service import SiteService
 
         result = await self._plan(db_session, job, state, monkeypatch, self._proposal())
 
@@ -375,7 +375,7 @@ class TestSitePlanner:
         self, db_session, job, state, monkeypatch
     ) -> None:
         """A path the KB has never seen retrieves nothing and must not be stored."""
-        from app.services.site_service import SiteService
+        from app.features.documentation.services.site_service import SiteService
 
         await self._plan(db_session, job, state, monkeypatch, self._proposal())
 
@@ -395,7 +395,7 @@ class TestSitePlanner:
         self, db_session, job, state, monkeypatch
     ) -> None:
         """The done-when for this phase, end to end."""
-        from app.services.site_service import SiteService
+        from app.features.documentation.services.site_service import SiteService
 
         await self._plan(db_session, job, state, monkeypatch, self._proposal())
         site = await SiteService(db_session).sites.get_with_pages(job.project_id)
@@ -411,7 +411,7 @@ class TestSitePlanner:
         self, db_session, job, state, monkeypatch
     ) -> None:
         """A failed plan must cost site quality, not the site."""
-        from app.services.site_service import SiteService
+        from app.features.documentation.services.site_service import SiteService
 
         result = await self._plan(db_session, job, state, monkeypatch, None)
 

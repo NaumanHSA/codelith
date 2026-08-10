@@ -18,18 +18,18 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.composition import (
+from app.features.documentation.agents import (
     CompositionPlannerAgent,
     CompositionStrategyAgent,
     CompositionWriterAgent,
     KBLoaderAgent,
     LinkerAgent,
 )
-from app.agents.diagram import DiagramAgent
-from app.agents.formatter import FormatterAgent
-from app.agents.publisher import PublisherAgent
-from app.agents.qa import QAAgent
-from app.workflows.composition_states import CompositionState
+from app.features.documentation.agents.diagram import DiagramAgent
+from app.features.documentation.agents.formatter import FormatterAgent
+from app.features.documentation.agents.publisher import PublisherAgent
+from app.features.documentation.agents.qa import QAAgent
+from app.features.documentation.workflows.composition_states import CompositionState
 
 logger = structlog.get_logger(__name__)
 

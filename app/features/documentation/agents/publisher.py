@@ -16,8 +16,8 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.services.audit_service import AuditService
-from app.services.document_service import DocumentService
-from app.services.site_service import SiteService
+from app.features.documentation.services.document_service import DocumentService
+from app.features.documentation.services.site_service import SiteService
 from app.knowledge.grounding import check_page, vocabulary_for
 from app.tracing.artifacts import save_artifact, save_text_artifact
 

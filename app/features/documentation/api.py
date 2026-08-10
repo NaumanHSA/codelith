@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 from app.dependencies import DbSession, CurrentUser
 from app.schemas.document import DocumentOut, DocumentUpdate, ExportUrlOut
-from app.services.document_service import DocumentService
+from app.features.documentation.services.document_service import DocumentService
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -42,7 +42,7 @@ async def export_document(
     user: CurrentUser,
     format: str = Query(..., description="pdf | docx | html | mkdocs | docusaurus"),
 ):
-    from app.workers.tasks.export_tasks import export_document_task
+    from app.features.documentation.tasks.export_tasks import export_document_task
 
     export_document_task.delay(document_id, format)
     # Return a polling URL — the worker will upload and record the real path when done

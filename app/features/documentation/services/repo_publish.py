@@ -29,7 +29,7 @@ from pathlib import Path, PurePosixPath
 
 import structlog
 
-from app.formatters.site_tree import SiteTree
+from app.features.documentation.formatters.site_tree import SiteTree
 
 logger = structlog.get_logger(__name__)
 

@@ -54,8 +54,8 @@ async def _run_revision(job_id: int) -> dict:
         from app.db.repositories.job_repo import JobRepository
         from app.db.repositories.project_repo import ProjectRepository
         from app.services.job_service import JobService
-        from app.services.revision_service import RevisionService
-        from app.workflows.revision_workflow import RevisionWorkflow
+        from app.features.documentation.services.revision_service import RevisionService
+        from app.features.documentation.workflows.revision_workflow import RevisionWorkflow
 
         job_svc = JobService(db)
         with time_job(), workflow_span(job_id):

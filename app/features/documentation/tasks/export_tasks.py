@@ -19,7 +19,7 @@ async def _export(document_id: int, format: str) -> dict:
                 DocumentExportRepository,
                 DocumentRepository,
             )
-            from app.formatters.markdown import MarkdownFormatter
+            from app.features.documentation.formatters.markdown import MarkdownFormatter
             from app.storage.s3 import StorageClient
 
             doc = await DocumentRepository(db).get_by_id(document_id)

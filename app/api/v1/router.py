@@ -3,7 +3,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.organizations import router as org_router
 from app.api.v1.projects import router as project_router
 from app.api.v1.jobs import router as job_router
-from app.api.v1.documents import router as document_router
+from app.features.documentation.api import router as document_router
 from app.features.ask import router as chat_router
 from app.api.v1.features import router as features_router
 from app.features.ask import threads_router as chat_threads_router

@@ -15,11 +15,11 @@ Order in the graph:
     diagram → qa → gate → formatter → publisher   [reused from the original pipeline]
 """
 
-from app.agents.composition.kb_loader import KBLoaderAgent
-from app.agents.composition.linker import LinkerAgent
-from app.agents.composition.planner import CompositionPlannerAgent
-from app.agents.composition.strategy import CompositionStrategyAgent
-from app.agents.composition.writer import CompositionWriterAgent
+from app.features.documentation.agents.kb_loader import KBLoaderAgent
+from app.features.documentation.agents.linker import LinkerAgent
+from app.features.documentation.agents.planner import CompositionPlannerAgent
+from app.features.documentation.agents.strategy import CompositionStrategyAgent
+from app.features.documentation.agents.writer import CompositionWriterAgent
 
 __all__ = [
     "KBLoaderAgent",

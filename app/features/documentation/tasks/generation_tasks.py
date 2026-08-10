@@ -44,7 +44,7 @@ async def _run_workflow(job_id: int) -> dict:
             try:
                 from app.db.repositories.job_repo import JobRepository
                 from app.db.repositories.project_repo import ProjectRepository
-                from app.workflows.documentation_workflow import DocumentationWorkflow
+                from app.features.documentation.workflows.documentation_workflow import DocumentationWorkflow
 
                 job = await JobRepository(db).get_with_steps(job_id)
                 if not job:

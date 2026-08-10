@@ -93,7 +93,7 @@ class FormatterAgent(BaseAgent):
         pname = project.name
 
         if fmt == "docx":
-            from app.formatters.docx import DocxFormatter
+            from app.features.documentation.formatters.docx import DocxFormatter
             formatter = DocxFormatter()
             for doc_dict in docs:
                 # Build a lightweight Document-like object
@@ -104,7 +104,7 @@ class FormatterAgent(BaseAgent):
                 keys.append(key)
 
         elif fmt == "mkdocs":
-            from app.formatters.mkdocs import MkDocsFormatter
+            from app.features.documentation.formatters.mkdocs import MkDocsFormatter
             docs_objs = [_DictDoc(d) for d in docs]
             data = MkDocsFormatter().format_site(docs_objs, pname)
             key = f"exports/{pid}/mkdocs-site.zip"
@@ -112,7 +112,7 @@ class FormatterAgent(BaseAgent):
             keys.append(key)
 
         elif fmt == "docusaurus":
-            from app.formatters.docusaurus import DocusaurusFormatter
+            from app.features.documentation.formatters.docusaurus import DocusaurusFormatter
             docs_objs = [_DictDoc(d) for d in docs]
             data = DocusaurusFormatter().format_site(docs_objs, pname)
             key = f"exports/{pid}/docusaurus-site.zip"

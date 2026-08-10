@@ -42,7 +42,7 @@ from app.knowledge.sites import (
     derive_site_map,
 )
 from app.llm.prompts.analysis_prompts import SITE_PLAN
-from app.services.site_service import SiteService
+from app.features.documentation.services.site_service import SiteService
 from app.tracing.artifacts import save_artifact, save_input_artifact
 
 #: How much of each module summary survives into a downstream prompt.

@@ -5,7 +5,7 @@ import zipfile
 
 import yaml
 
-from app.formatters.site_tree import SiteTree, rewrite_links, slugify_filename
+from app.features.documentation.formatters.site_tree import SiteTree, rewrite_links, slugify_filename
 from app.models.document import Document
 
 _NAV_LABEL = {

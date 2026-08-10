@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import base64
 
-from app.agents.formatter import FormatterAgent
+from app.features.documentation.agents.formatter import FormatterAgent
 
 _PNG = base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode("ascii")
 

@@ -209,7 +209,7 @@ class TestFanOutPropagation:
 
         from app.agents.analysis.module_summarizer import ModuleSummarizerAgent
         from app.agents.analysis.narrative_writer import NarrativeWriterAgent
-        from app.agents.composition.writer import CompositionWriterAgent
+        from app.features.documentation.agents.writer import CompositionWriterAgent
 
         for agent in (CompositionWriterAgent, ModuleSummarizerAgent, NarrativeWriterAgent):
             src = inspect.getsource(agent)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.composition.linker import LinkerAgent
+from app.features.documentation.agents.linker import LinkerAgent
 
 SITE_MAP = {
     "title": "widgets",

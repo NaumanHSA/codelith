@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.composition.planner import CompositionPlannerAgent
-from app.agents.composition.writer import CompositionWriterAgent
+from app.features.documentation.agents.planner import CompositionPlannerAgent
+from app.features.documentation.agents.writer import CompositionWriterAgent
 
 
 class TestPlannerPublishesTheOutline:

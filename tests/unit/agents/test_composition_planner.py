@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agents.composition.planner import CompositionPlannerAgent
+from app.features.documentation.agents.planner import CompositionPlannerAgent
 
 SETTINGS = SimpleNamespace(SITE_MAX_HEADINGS_PER_PAGE=6)
 

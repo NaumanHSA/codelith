@@ -98,7 +98,7 @@ class TestPinning:
         """
         import inspect
 
-        from app.services.site_service import SiteService
+        from app.features.documentation.services.site_service import SiteService
 
         source = inspect.getsource(SiteService.merge_proposal)
         assert "not p.pinned" in source, "the orphaning pass must exempt pinned pages"

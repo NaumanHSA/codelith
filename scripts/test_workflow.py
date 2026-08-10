@@ -227,7 +227,7 @@ async def main(
     print("  Running workflow (no Celery)...")
     print(f"{'='*62}\n")
 
-    from app.workers.tasks.generation_tasks import _run_workflow
+    from app.features.documentation.tasks.generation_tasks import _run_workflow
 
     try:
         result = await _run_workflow(job_id)

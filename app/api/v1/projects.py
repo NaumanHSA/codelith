@@ -35,11 +35,12 @@ from app.schemas.site import (
 )
 from app.services.audit_service import AuditService
 from app.services.job_service import JobService
+from app.features.documentation.services.documentation_service import DocumentationService
 from app.services.knowledge_service import KnowledgeService
-from app.services.page_builder_service import PageBuilderService
-from app.services.revision_service import RevisionService
+from app.features.documentation.services.page_builder_service import PageBuilderService
+from app.features.documentation.services.revision_service import RevisionService
 from app.services.project_service import ProjectService
-from app.services.site_service import SiteService
+from app.features.documentation.services.site_service import SiteService
 from app.services.source_service import SourceService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -428,7 +429,7 @@ async def compose_documents(
     is the original one-document-per-type path. An unknown page address or a scope
     over `SITE_MAX_PAGES_PER_JOB` comes back 422 before any job is created.
     """
-    job = await KnowledgeService(db).start_composition(project_id, req, user)
+    job = await DocumentationService(db).start(project_id, req, user)
     await AuditService(db).log(
         "project.compose", "job",
         user_id=user.id, resource_id=job.id,
@@ -456,7 +457,7 @@ async def create_job(
     Kept working for existing clients. New callers should use `/analyze` then
     `/compose`, which avoids re-analysing for every document type.
     """
-    from app.workers.tasks.generation_tasks import run_documentation_workflow
+    from app.features.documentation.tasks.generation_tasks import run_documentation_workflow
 
     svc = JobService(db)
     job = await svc.create(project_id, req, user)

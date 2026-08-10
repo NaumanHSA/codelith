@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agents.composition.reviser import ReviserAgent
+from app.features.documentation.agents.reviser import ReviserAgent
 
 PAGE_MD = """Opening line.
 

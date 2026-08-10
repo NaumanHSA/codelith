@@ -16,15 +16,15 @@ import zipfile
 import pytest
 import yaml
 
-from app.formatters.docusaurus import DocusaurusFormatter
-from app.formatters.mkdocs import MkDocsFormatter
-from app.formatters.site_tree import (
+from app.features.documentation.formatters.docusaurus import DocusaurusFormatter
+from app.features.documentation.formatters.mkdocs import MkDocsFormatter
+from app.features.documentation.formatters.site_tree import (
     ExportPage,
     ExportSection,
     SiteTree,
     rewrite_links,
 )
-from app.formatters.static_site import StaticSiteFormatter
+from app.features.documentation.formatters.static_site import StaticSiteFormatter
 
 
 def page(section: str, slug: str, title: str, body: str = "Prose.") -> ExportPage:

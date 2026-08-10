@@ -23,7 +23,7 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.db.repositories.knowledge import KnowledgeRepositories
 from app.knowledge.constants import KBStatus
-from app.services.site_service import SiteService
+from app.features.documentation.services.site_service import SiteService
 from app.tracing.artifacts import save_artifact
 
 

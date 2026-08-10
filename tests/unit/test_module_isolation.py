@@ -59,6 +59,25 @@ WIRING_POINTS = {
     "main.py",
 }
 
+#: Couplings that exist, are known, and are not yet fixed.
+#:
+#: An exception list is a liability unless it can only shrink, so
+#: `test_every_known_leak_is_still_real` fails when an entry stops being true —
+#: whoever fixes one is told to delete the line rather than leaving a comment that
+#: quietly stops meaning anything.
+#:
+#: Each entry needs a reason and a way out, not just a path.
+KNOWN_LEAKS = {
+    "agents/analysis/site_planner.py": (
+        "Analysis plans the documentation site while it has the codebase open, so an "
+        "analysis agent reaches into the documentation feature. It is the last place "
+        "the base knows a feature exists, and the real fix is a behaviour change: "
+        "analysis should emit neutral facts, and documentation should plan its own "
+        "site the first time somebody asks for one. Deferred rather than hidden — "
+        "moving when site planning happens is not a refactor."
+    ),
+}
+
 
 def _imports(path: Path) -> set[str]:
     """Every module named by an `import` in this file, including local ones.
@@ -127,7 +146,7 @@ class TestTheBaseDoesNotKnowAboutFeatures:
 
         for file in _python_files(APP):
             rel = _rel(file)
-            if rel.startswith("features/") or rel in WIRING_POINTS:
+            if rel.startswith("features/") or rel in WIRING_POINTS or rel in KNOWN_LEAKS:
                 continue
             bad = {m for m in _imports(file) if m.startswith("app.features")}
             if bad:
@@ -135,8 +154,30 @@ class TestTheBaseDoesNotKnowAboutFeatures:
 
         assert not offenders, (
             "A feature is named outside a composition root. Add the file to "
-            "WIRING_POINTS only if assembling the app is genuinely its job:\n  "
+            "WIRING_POINTS only if assembling the app is genuinely its job — and to "
+            "KNOWN_LEAKS only with a reason and a way out:\n  "
             + "\n  ".join(offenders)
+        )
+
+    def test_every_known_leak_is_still_real(self) -> None:
+        """
+        The exception list may only shrink.
+
+        A stale entry is worse than no list: it reads as a known problem long after
+        somebody quietly fixed it, and the next person trusts it.
+        """
+        fixed: list[str] = []
+        for rel in KNOWN_LEAKS:
+            file = APP / rel
+            if not file.exists():
+                fixed.append(f"{rel} no longer exists")
+                continue
+            if not any(m.startswith("app.features") for m in _imports(file)):
+                fixed.append(f"{rel} no longer imports a feature")
+
+        assert not fixed, (
+            "A known leak has been fixed. Delete its entry from KNOWN_LEAKS:\n  "
+            + "\n  ".join(fixed)
         )
 
 

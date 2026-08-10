@@ -13,10 +13,10 @@ celery_app = Celery(
     include=[
         "app.workers.tasks.ingestion_tasks",
         "app.workers.tasks.analysis_tasks",
-        "app.workers.tasks.composition_tasks",
-        "app.workers.tasks.revision_tasks",
-        "app.workers.tasks.generation_tasks",
-        "app.workers.tasks.export_tasks",
+        "app.features.documentation.tasks.composition_tasks",
+        "app.features.documentation.tasks.revision_tasks",
+        "app.features.documentation.tasks.generation_tasks",
+        "app.features.documentation.tasks.export_tasks",
     ],
 )
 

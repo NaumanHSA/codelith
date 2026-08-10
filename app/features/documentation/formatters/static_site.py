@@ -23,7 +23,7 @@ import zipfile
 
 from markdown_it import MarkdownIt
 
-from app.formatters.site_tree import ExportPage, SiteTree, rewrite_links, slugify_filename
+from app.features.documentation.formatters.site_tree import ExportPage, SiteTree, rewrite_links, slugify_filename
 
 #: The studio's tokens, inlined. Kept in one string so the two stay comparable —
 #: if `ui/src/styles/theme.css` moves, this is the one place to follow it.

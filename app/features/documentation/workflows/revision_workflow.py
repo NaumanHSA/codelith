@@ -27,10 +27,10 @@ import structlog
 from langgraph.graph import END, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.composition import LinkerAgent
-from app.agents.composition.reviser import ReviserAgent
-from app.agents.publisher import PublisherAgent
-from app.workflows.revision_states import RevisionState
+from app.features.documentation.agents import LinkerAgent
+from app.features.documentation.agents.reviser import ReviserAgent
+from app.features.documentation.agents.publisher import PublisherAgent
+from app.features.documentation.workflows.revision_states import RevisionState
 
 logger = structlog.get_logger(__name__)
 

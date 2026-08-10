@@ -20,7 +20,7 @@ from pathlib import Path
 
 import structlog
 
-from app.services.repo_publish import PublishPlan
+from app.features.documentation.services.repo_publish import PublishPlan
 
 logger = structlog.get_logger(__name__)
 

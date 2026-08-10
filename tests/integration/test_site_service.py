@@ -22,7 +22,7 @@ from app.knowledge.constants import PageStatus
 from app.models.organization import Organization
 from app.models.project import Project
 from app.models.user import User
-from app.services.site_service import SiteService
+from app.features.documentation.services.site_service import SiteService
 
 
 @pytest_asyncio.fixture

@@ -16,7 +16,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis import StructuredExtractorAgent
-from app.agents.composition import (
+from app.features.documentation.agents import (
     CompositionPlannerAgent,
     CompositionWriterAgent,
     KBLoaderAgent,
@@ -317,7 +317,7 @@ class TestWriter:
 
 class TestGraphShape:
     def test_composition_state_reduces_only_generated_docs(self) -> None:
-        from app.workflows.composition_states import CompositionState
+        from app.features.documentation.workflows.composition_states import CompositionState
 
         annotations = CompositionState.__annotations__
         assert "kb_id" in annotations
@@ -327,7 +327,7 @@ class TestGraphShape:
         assert "repo_path" not in annotations
 
     def test_workflow_compiles_with_the_reused_back_half(self, kb) -> None:
-        from app.workflows.composition_workflow import CompositionWorkflow
+        from app.features.documentation.workflows.composition_workflow import CompositionWorkflow
 
         graph = CompositionWorkflow(
             project=kb["project"], job=kb["job"], db=None
