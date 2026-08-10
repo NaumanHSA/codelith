@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.apps.qa.checkout import checkout
+from codelith.apps.qa.deep import build_index
 from codelith.apps.qa.findings import Finding, Severity, ToolReport
 from codelith.apps.qa.impact import ImpactResolver
 from codelith.apps.qa.runner import run_tool
@@ -87,6 +88,7 @@ class QAService:
             report.missing_tools = []
             return report
 
+        deep = None
         async with checkout(project, analysed_sha=kb.commit_sha) as tree:
             report.drift_note = tree.drift_note
             # Sequential, not gathered. Two whole-repository passes over the same
@@ -95,6 +97,10 @@ class QAService:
             for spec in specs:
                 report.tools.append(await self._run_one(spec, tree.path))
 
+            # Q7: derived while the checkout exists, because it is a parse of files
+            # already on disk. Doing it later would mean cloning twice.
+            deep = build_index(tree.path, commit_sha=tree.commit_sha)
+
         for tool_report in report.tools:
             report.findings.extend(tool_report.findings)
             if not tool_report.ran:
@@ -102,7 +108,7 @@ class QAService:
 
         # Q2: reach, then rank by it. Severity alone puts a missing annotation in a
         # throwaway script above an undefined name in the composition workflow.
-        resolver = ImpactResolver(self.db, project.id, kb.id)
+        resolver = ImpactResolver(self.db, project.id, kb.id, deep=deep)
         await resolver.prepare({f.path for f in report.findings})
         report.findings = [resolver.resolve(f) for f in report.findings]
         report.findings.sort(key=resolver.rank)

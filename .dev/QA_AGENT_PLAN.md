@@ -132,7 +132,7 @@ to everybody, not to QA.
 | Q4 | Dependency audit, offline only | ✅ |
 | Q5 | Architecture drift | ✅ |
 | Q6 | Test generation, write-only | ✅ |
-| Q7 | The deep analysis pass | ⬜ |
+| Q7 | The deep analysis pass | ✅ |
 | Q8 | The UI | ⬜ |
 
 **Q0 is done and nothing else is started.** Quality appears in the studio as a planned
@@ -316,12 +316,28 @@ like a passing test is a lie about the state of the codebase.
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q7.1 | What QA needs the base does not hold | ⬜ | Decide from Q1–Q6, not before. Likely: deeper call edges, symbol↔test association |
-| Q7.2 | Job or lazy step | ⬜ | A job type is more honest about costing minutes, which it will |
-| Q7.3 | Keyed to the commit | ⬜ | Same SHA as the base KB, invalidated together |
-| Q7.4 | Stays out of the base | ⬜ | The isolation test is what proves it |
+| Q7.1 | What QA needs the base does not hold | ✅ | **Decided by Q2, not guessed.** Per-file symbol spans with real end lines |
+| Q7.2 | Job or lazy step | ✅ | **Lazy step.** The open question is closed — see below |
+| Q7.3 | Keyed to the commit | ✅ | `DeepIndex.commit_sha`; the index is only valid for the tree it was parsed from |
+| Q7.4 | Stays out of the base | ✅ | Lives in `codelith/apps/qa/deep.py`; nothing in `codelith/knowledge/` knows it exists |
 
-**Exit:** QA deepens the KB for itself, and no other app pays for it.
+**Exit — met.** The sentence completes: *in `McpStore.enabled` · 24 files reach it*.
+
+**The need was discovered, not assumed.** Q2 found that the knowledge base stores
+symbols per *module*, and a module is usually several files — so a finding at
+`config/mcp.py:127` could not be attributed at all. Worse, the KB records where a
+symbol *starts* and not where it ends, so it cannot tell a line inside a function from
+one in the gap after it. QA parses the checkout it already has and gets both.
+
+**Lazy step, not a job type.** The plan left this open and argued a job is more honest
+about costing minutes. It would be — but this is a parse of files already on disk
+during a QA run, and it costs seconds. A second job type for something that finishes
+before the first has flushed its logs is ceremony.
+
+**The shape generalises.** An app is defined by what it reads from the knowledge base
+*and*, optionally, what it derives for itself. The derived data stays in the app,
+nothing in the base learns it exists, and a project that never opens Quality never pays
+for it.
 
 ### Q8 — The UI
 

@@ -48,10 +48,16 @@ class ImpactResolver:
     for tens of distinct answers.
     """
 
-    def __init__(self, db: AsyncSession, project_id: int, kb_id: int) -> None:
+    def __init__(
+        self, db: AsyncSession, project_id: int, kb_id: int, deep=None
+    ) -> None:
         self.db = db
         self.project_id = project_id
         self.kb_id = kb_id
+        #: QA's own index of the checkout, when one was built. It knows which file a
+        #: symbol is in and where it ends, neither of which the knowledge base
+        #: records — see `deep.py`.
+        self.deep = deep
         self._reach: dict[str, tuple[int, tuple[str, ...]]] = {}
         self._docs: dict[str, tuple[str, ...]] = {}
         self._symbols: dict[str, list[tuple[int, str]]] = {}
@@ -201,6 +207,14 @@ class ImpactResolver:
             entries.sort()
 
     def _symbol_at(self, path: str, line: int) -> str | None:
+        # QA's own index first: it knows the file *and* the end line, so it can say
+        # whether a line is inside a symbol or in the gap after it. The knowledge
+        # base can only manage the second-best answer below.
+        if self.deep is not None:
+            found = self.deep.symbol_at(path, line)
+            if found:
+                return found
+
         entries = self._symbols.get(path)
         if not entries:
             return None
