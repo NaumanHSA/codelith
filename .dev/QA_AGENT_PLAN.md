@@ -129,7 +129,7 @@ to everybody, not to QA.
 | Q1 | Run the tools that already exist | ✅ |
 | Q2 | Give every finding an impact | ✅ |
 | Q3 | Surface coverage | ✅ |
-| Q4 | Dependency audit, offline only | ⬜ |
+| Q4 | Dependency audit, offline only | ✅ |
 | Q5 | Architecture drift | ⬜ |
 | Q6 | Test generation, write-only | ⬜ |
 | Q7 | The deep analysis pass | ⬜ |
@@ -245,12 +245,27 @@ what they think is worse than no number — which is why nothing here says "cove
 
 | # | Task | Status | What it contains |
 |---|---|---|---|
-| Q4.1 | Declared vs imported | ⬜ | `dependency` entities against the import graph, both directions |
-| Q4.2 | Unpinned | ⬜ | No version constraint at all |
-| Q4.3 | Conflicting constraints | ⬜ | The same package pinned differently in two manifests |
-| Q4.4 | No network | ⬜ | Deliberate: "nothing leaves your box" is the headline claim. Latest-version checks are a later, opt-in addition |
+| Q4.1 | Declared vs imported | ✅ | Both directions, from the graph's `Package` nodes — the language providers already separated third-party from local and stdlib |
+| Q4.2 | Unpinned | ✅ | |
+| Q4.3 | Conflicting constraints | ✅ | Name-normalised, so `Python-Slugify` and `python_slugify` are not a conflict |
+| Q4.4 | No network | ✅ | No socket. Latest-version checking stays a later, opt-in addition |
 
-**Exit:** four checks, no socket opened.
+**Exit — met.** On neurosurfer: 17 of 43 dependencies need a look — 9 imported but
+undeclared (`starlette`, `torch`, `numpy`), 3 unpinned, 5 with no import found.
+
+**The first run reported 22, and five of them were wrong.** Two families of false
+positive, both fixed:
+
+* **Plugins are configured, not imported.** A mkdocs plugin is named in `mkdocs.yml`
+  and never appears in a `.py` file — eight of the nine "unused" findings were exactly
+  this. Whole prefixes are excluded now (`mkdocs-`, `pytest-`, `sphinx-`, `types-`).
+* **Namespace packages.** `import opentelemetry`, install `opentelemetry-sdk`.
+  Declaring the distribution is correct, and both directions now resolve it.
+
+**"Unused" is the weakest of the four and the wording says so.** It can only see
+imports the analysis recorded — a package loaded by string name looks unused — so the
+detail reads "no import of it was found in the analysed code" rather than "it is
+unused". The first is what was measured.
 
 ### Q5 — Architecture drift
 
