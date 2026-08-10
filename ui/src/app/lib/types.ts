@@ -401,3 +401,16 @@ export type ChatEvent =
   | { type: 'done'; text: string; citations: string[]; stripped: string[] }
   | { type: 'stopped' }
   | { type: 'error'; message: string }
+
+/** One thing an analysed codebase unlocks. Mirrors `app/features/registry.py`. */
+export interface ProjectFeature {
+  id: string
+  label: string
+  blurb: string
+  needs: string[]
+  route: string
+  /** `available` · `locked` · `planned` */
+  state: 'available' | 'locked' | 'planned'
+  /** Why it is not available. Says what to do, not what went wrong. */
+  reason: string
+}

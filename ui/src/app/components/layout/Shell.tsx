@@ -9,9 +9,17 @@ import { GitHubMark, Logo } from '../ui'
 import { ChatThreadsProvider } from '../../chat-threads'
 import ThreadRail from './ThreadRail'
 
+/**
+ * The rail is the product's shape, so it says what the product is.
+ *
+ * It used to lead with Documents — one feature's output promoted to a top-level
+ * destination, from when documentation was the whole point. Documents are reached
+ * from the project that produced them now; what belongs at this level is the work
+ * itself: the codebases, and the analysis that makes anything possible.
+ */
 const NAV = [
   { to: '/app', index: '01', label: 'Dashboard', end: true },
-  { to: '/app/projects', index: '02', label: 'Projects' },
+  { to: '/app/projects', index: '02', label: 'Codebases' },
   { to: '/app/documents', index: '03', label: 'Documents' },
   { to: '/app/jobs', index: '04', label: 'Jobs' },
 ]
@@ -118,7 +126,7 @@ function ShellBody() {
         </button>
 
         <nav className="border-b border-rule pb-1.5">
-          <SectionLabel>Documentation</SectionLabel>
+          <SectionLabel>Workspace</SectionLabel>
           {NAV.map(n => (
             <NavLink key={n.to} to={n.to} end={n.end} className={linkClass}>
               {({ isActive }) => (
@@ -137,7 +145,7 @@ function ShellBody() {
 
         <div className="min-h-0 flex-1 overflow-y-auto py-2">
           <div className="flex items-center gap-2 px-3 pb-1.5">
-            <span className="tag text-ink-dim">Projects</span>
+            <span className="tag text-ink-dim">Codebases</span>
             <span className="h-px flex-1 bg-rule" />
             <span className="tag text-ink-dim">{projects?.length ?? '—'}</span>
           </div>

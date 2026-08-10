@@ -10,7 +10,7 @@ import type {
   Doc, Features, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
-  ChatEvent, ChatThread, ChatThreadSummary,
+  ChatEvent, ChatThread, ChatThreadSummary, ProjectFeature,
 } from './types'
 
 export const API_BASE =
@@ -408,6 +408,10 @@ export const api = {
     request<void>(`/projects/${projectId}/chat/thread/${threadId}`, { method: 'DELETE' }),
 
   /** Recent conversations across every project, for the rail. */
+  /** What this codebase unlocks, and what it does not yet. */
+  projectFeatures: (projectId: number, signal?: AbortSignal) =>
+    request<ProjectFeature[]>(`/projects/${projectId}/features`, { signal }),
+
   chatThreads: (limit = 40) =>
     request<ChatThreadSummary[]>(`/chat/threads?limit=${limit}`),
 

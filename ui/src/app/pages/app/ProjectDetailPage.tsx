@@ -10,6 +10,7 @@ import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../compone
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
 import ConfirmDelete from '../../components/ConfirmDelete'
+import FeatureGrid from '../../components/projects/FeatureGrid'
 import { coverage, describeJobScope } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
@@ -76,48 +77,44 @@ function SourcePanel({ project }: { project: Project }) {
  * the documentation — which pages are missing, which have gone out of date — and
  * that needs a screen of its own, not a form stapled to the bottom of a status page.
  */
-function ComposeCallout({ project }: { project: Project }) {
-  const { data: site } = useAsync(s => api.site(project.id, null, s), [project.id])
+/**
+ * How much of the documentation exists, shown inside its feature card.
+ *
+ * This used to be a panel of its own titled "Documentation", sitting where the
+ * project's one outcome went. It is a detail of one feature among several now, so it
+ * lives in that feature's card — and the "Read" link only appears once there is
+ * something written to read.
+ */
+function DocumentationProgress({ projectId }: { projectId: number }) {
+  const { data: site } = useAsync(s => api.site(projectId, null, s), [projectId])
   const c = coverage(site ?? null)
   const outstanding = c.planned + c.stale + c.failed
   const planned = c.total - c.orphaned
+  const written = !!site && site.sections.length > 0
 
   return (
-    <Panel title="Documentation">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-3">
-        <span className="min-w-0 flex-1">
-          <span className="block font-sans text-[12.5px] leading-relaxed text-ink-mid">
-            {!site || !site.sections.length
-              ? 'No pages planned yet. Analysis proposes the sections and pages this codebase warrants.'
-              : outstanding
-                ? `${countLabel(outstanding, 'page')} still to write out of ${planned} planned.`
-                : 'Every planned page is written and current.'}
-          </span>
-          {site && site.sections.length > 0 && (
-            <span className="mt-2 flex items-center gap-2">
-              <Meter pct={c.pct} segments={22} />
-              <span className="tag text-ink-dim">{c.pct}% written</span>
-            </span>
-          )}
-        </span>
-        <span className="flex gap-2">
-          {site && site.sections.length > 0 && (
-            <Link
-              to={`/app/projects/${project.id}/docs`}
-              className="tag inline-flex items-center border border-rule bg-panel px-3 py-[7px] text-ink-mid transition-colors hover:border-ink hover:text-ink"
-            >
-              Read →
-            </Link>
-          )}
+    <span className="block">
+      <span className="block font-sans text-[11.5px] text-ink-mid">
+        {!written
+          ? 'No pages planned yet.'
+          : outstanding
+            ? `${countLabel(outstanding, 'page')} still to write of ${planned} planned.`
+            : 'Every planned page is written and current.'}
+      </span>
+      {written && (
+        <span className="mt-1.5 flex items-center gap-2">
+          <Meter pct={c.pct} segments={18} />
+          <span className="tag text-ink-dim">{c.pct}% written</span>
           <Link
-            to={`/app/projects/${project.id}/compose`}
-            className="tag inline-flex items-center border border-hot bg-hot px-3 py-[7px] text-on-hot transition-colors hover:border-hot-press hover:bg-hot-press"
+            to={`/app/projects/${projectId}/docs`}
+            onClick={e => e.stopPropagation()}
+            className="tag ml-auto text-ink-dim underline-offset-2 hover:text-hot-ink hover:underline"
           >
-            Compose →
+            read
           </Link>
         </span>
-      </div>
-    </Panel>
+      )}
+    </span>
   )
 }
 
@@ -131,6 +128,7 @@ export default function ProjectDetailPage() {
   const project = useAsync(() => api.project(id), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
+  const features = useAsync(sig => api.projectFeatures(id, sig), [id])
 
   const [analysing, setAnalysing] = useState(false)
   const [analyseError, setAnalyseError] = useState<string | null>(null)
@@ -222,6 +220,15 @@ export default function ProjectDetailPage() {
       />
 
       {analyseError && <ErrorState message={analyseError} compact />}
+
+      {!!features.data?.length && (
+        <div className="mb-3">
+          <FeatureGrid
+            features={features.data}
+            extras={{ documentation: <DocumentationProgress projectId={id} /> }}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_320px]">
         <div className="flex min-w-0 flex-col gap-3">
@@ -350,7 +357,6 @@ export default function ProjectDetailPage() {
                 </div>
               )}
 
-              {base.status !== 'failed' && <ComposeCallout project={p} />}
             </>
           )}
         </div>
