@@ -30,9 +30,9 @@ const STAGES = [
   },
   {
     num: '03',
-    name: 'Choose',
-    tagline: 'See what is worth writing',
-    desc: 'Because analysis already ran, the tool knows what exists. It offers an API Reference only when it found routes — and tells you how many. Evidence before effort.',
+    name: 'Unlock',
+    tagline: 'See what the codebase offers',
+    desc: 'Analysis has already run, so the studio knows what exists. Documentation and Ask the code become available together, and the document types offered are the ones the evidence supports — an API Reference only when routes were found, and it says how many.',
     facts: [
       ['Architecture', '90% →'],
       ['Getting Started', '70% →'],
@@ -42,14 +42,53 @@ const STAGES = [
   },
   {
     num: '04',
-    name: 'Compose',
-    tagline: 'Write the document',
-    desc: 'Pulls the right slice of the knowledge base for each section, writes prose, generates diagrams, runs a QA pass against source, then emits Markdown, MkDocs or Docusaurus.',
+    name: 'Use',
+    tagline: 'Retrieve, then work',
+    desc: 'Every feature pulls the slice of the knowledge base it needs and nothing more. Documentation retrieves per section, writes prose and runs QA against source. Ask retrieves per question and checks every citation it produces. Neither opens the repository again.',
     facts: [
-      ['sections written', '8'],
-      ['Mermaid diagrams', '2'],
-      ['QA verified', '100%'],
-      ['formats', 'MD · MkDocs'],
+      ['repo reads', '0'],
+      ['retrieval', 'per section'],
+      ['QA', 'against source'],
+      ['citations', 'checked'],
+    ],
+  },
+]
+
+/**
+ * What the knowledge base unlocks.
+ *
+ * Mirrors `app/features/registry.py` — deliberately, and only in copy: a marketing
+ * page that lists a feature the studio does not offer is the worst kind of lie,
+ * because the reader finds out after signing up. Anything added here must exist in
+ * the registry first.
+ */
+const SERVICES = [
+  {
+    id: '01',
+    name: 'Codelith Docs',
+    label: 'Documentation',
+    line: 'Documents written from the analysis, not from a chat session.',
+    desc:
+      'Architecture guides, API references, getting-started guides, module docs. Document types are offered from what the code actually contains — an API reference appears when routes were found, and it says how many. Each section retrieves its own slice of the knowledge base, gets a QA pass against source, and comes out as Markdown, DOCX, MkDocs or Docusaurus.',
+    facts: [
+      ['offered from', 'evidence'],
+      ['QA', 'against source'],
+      ['formats', '4'],
+      ['re-reads repo', 'never'],
+    ],
+  },
+  {
+    id: '02',
+    name: 'Codelith Ask',
+    label: 'Ask the code',
+    line: 'Questions answered from the source, with citations that are checked.',
+    desc:
+      'Ask in English and get an answer grounded in the repository. Every citation is verified against the evidence actually retrieved, and one that does not resolve is stripped rather than shown — a chat that merely sounds grounded is worse than one that obviously guesses. When one retrieval pass is not enough it looks further, using tools over the knowledge base and the code graph.',
+    facts: [
+      ['citations', 'checked'],
+      ['unresolved', 'stripped'],
+      ['escalates', 'with tools'],
+      ['conversations', 'kept'],
     ],
   },
 ]
@@ -216,6 +255,9 @@ export default function LandingPage() {
         </span>
         <Chip>v0.4.1</Chip>
         <div className="ml-auto flex items-center gap-3">
+          <a href="#features" className="tag hidden text-ink-dim transition-colors hover:text-ink sm:block">
+            Features
+          </a>
           <a href="#pipeline" className="tag hidden text-ink-dim transition-colors hover:text-ink sm:block">
             Pipeline
           </a>
@@ -248,20 +290,26 @@ export default function LandingPage() {
             </div>
 
             <h1 className="mb-5 text-[clamp(30px,5.4vw,58px)] leading-[0.95] font-bold tracking-[-0.045em] text-ink">
-              Documentation
+              Read the codebase
               <br />
-              that reads your
+              once. Use it
               <br />
               <span className="relative inline-block">
-                <span className="relative z-10 text-hot">code first.</span>
+                <span className="relative z-10 text-hot">many times.</span>
                 <span className="absolute inset-x-0 bottom-[0.1em] z-0 h-[0.16em] bg-hot/20" />
               </span>
             </h1>
 
             <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
-              Point it at a repository. It analyses the codebase, builds a structured knowledge
-              base, then writes real prose — architecture guides, API references, getting-started
-              guides — from that knowledge base rather than from a chat session.
+              Point Codelith at a repository. It walks every file and builds a structured
+              knowledge base — routes, entry points, module boundaries, dependencies, data
+              stores — pinned to the commit it read.
+            </p>
+            <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
+              That knowledge base is the product. Everything else is something you do with
+              it: <strong className="font-semibold text-ink">write documentation</strong>,{' '}
+              <strong className="font-semibold text-ink">ask the code questions</strong>, and
+              more as they land. None of them read the repository again.
             </p>
             <p className="mb-6 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
               Everything runs on your machine against a local LLM.{' '}
@@ -349,7 +397,7 @@ export default function LandingPage() {
             <h2 className="text-[clamp(20px,3vw,34px)] leading-[1.05] font-bold tracking-[-0.035em] text-ink">
               Analyse once.
               <br />
-              Write as many times as you need.
+              Use it as many times as you need.
             </h2>
           </div>
           <button
@@ -418,13 +466,61 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* services — what the knowledge base unlocks */}
+      <section id="features" className="border-t border-rule bg-panel">
+        <div className="mx-auto max-w-[1180px] px-5 py-12">
+          <div className="mb-6 border-b border-rule pb-4">
+            <p className="tag mb-2 text-hot-ink">What it unlocks</p>
+            <h2 className="max-w-[24ch] text-[clamp(20px,3vw,34px)] leading-[1.05] font-bold tracking-[-0.035em] text-ink">
+              One analysis. Everything else grows on it.
+            </h2>
+            <p className="mt-3 max-w-[62ch] font-sans text-[13.5px] leading-[1.7] text-ink-mid">
+              Each of these reads the same knowledge base and none of them reads the
+              repository again. That is the whole architecture, and it is why the second
+              thing you ask for is cheap.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-px border border-rule bg-rule lg:grid-cols-2">
+            {SERVICES.map(s => (
+              <div key={s.id} className="group flex flex-col bg-panel p-5 transition-colors hover:bg-hot-wash/40">
+                <div className="mb-3 flex items-baseline gap-2">
+                  <span className="tag text-rule transition-colors group-hover:text-hot">{s.id}</span>
+                  <h3 className="text-[15px] font-bold tracking-tight text-ink">{s.name}</h3>
+                  <span className="tag ml-auto text-ink-dim">{s.label}</span>
+                </div>
+
+                <p className="mb-3 font-sans text-[13px] leading-relaxed font-semibold text-ink">
+                  {s.line}
+                </p>
+                <p className="mb-4 font-sans text-[12.5px] leading-[1.7] text-ink-mid">{s.desc}</p>
+
+                <div className="mt-auto grid grid-cols-2 gap-px border border-rule bg-rule sm:grid-cols-4">
+                  {s.facts.map(([k, v]) => (
+                    <div key={k} className="bg-paper px-2.5 py-2">
+                      <div className="tag mb-1 text-ink-dim">{k}</div>
+                      <div className="text-[12px] leading-none font-bold text-ink">{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-4 font-sans text-[12px] leading-relaxed text-ink-dim">
+            A feature is defined by what it needs from the knowledge base — which is why
+            adding one never means analysing your code differently.
+          </p>
+        </div>
+      </section>
+
       {/* claims */}
       <section className="border-y border-rule bg-panel">
         <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-px bg-rule md:grid-cols-3">
           {[
-            ['Evidence, not vibes', 'A section on authentication only appears if the analyser actually found auth. Every claim is traceable back to a file and line.'],
+            ['Evidence, not vibes', 'A section on authentication only appears if the analyser actually found auth, and an answer that cites a file it never retrieved has the citation stripped. Everything traces back to a file and a line.'],
             ['Local by construction', 'Point the endpoint at LM Studio or Ollama and the process never opens a socket to the internet. Your source stays yours.'],
-            ['Cheap to re-run', 'The expensive read happens once per commit. Asking for a fifth document costs a composition pass, not another full analysis.'],
+            ['Cheap to re-run', 'The expensive read happens once per commit. A fifth document, or a hundred questions, cost a retrieval pass — not another full analysis.'],
           ].map(([t, d], i) => (
             <div key={t} className="group bg-panel px-5 py-8 transition-colors hover:bg-hot-wash/50">
               <div className="tag mb-3 text-rule transition-colors group-hover:text-hot">
