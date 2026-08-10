@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
@@ -104,7 +104,18 @@ export default function ProjectsPage() {
   const { data, error, loading, reload, setData } = useAsync(() => api.projects(50, 0), [])
   const [q, setQ] = useState('')
   const [view, setView] = useState<'grid' | 'table'>('grid')
-  const [creating, setCreating] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // `?new=1` opens the form directly, so "Add a codebase" on the dashboard lands on
+  // the action rather than on a list the reader then has to find the button in.
+  const [creating, setCreating] = useState(searchParams.get('new') === '1')
+
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    setCreating(true)
+    // Consumed, so a reload or a back-navigation does not reopen it.
+    searchParams.delete('new')
+    setSearchParams(searchParams, { replace: true })
+  }, [searchParams, setSearchParams])
   const [doomed, setDoomed] = useState<Project | null>(null)
 
   const filtered = useMemo(() => {

@@ -5,6 +5,8 @@ import { api } from '../../lib/api'
 import { countLabel, formatDateTime, relativeTime } from '../../lib/format'
 import { StatusBadge, Eyebrow, Panel } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
+import StartHere from '../../components/dashboard/StartHere'
+import FeatureCards from '../../components/dashboard/FeatureCards'
 import type { Doc, Job, Project } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
@@ -140,6 +142,7 @@ function ActivitySpark({ jobs }: { jobs: Job[] }) {
 export default function DashboardPage() {
   const projects = useAsync(sig => api.projects(50, 0), [])
   const docs = useAsync(sig => api.documents(undefined, 10, 0), [])
+  const features = useAsync(sig => api.featureCatalog(sig), [])
 
   /* Collect all recent jobs from the first few projects in parallel.
      We load up to 5 projects' jobs so the dashboard has real data. */
@@ -160,7 +163,7 @@ export default function DashboardPage() {
     [projects.data],
   )
 
-  const totalDocs = docs.data?.length ?? 0
+  const totalPages = (projects.data ?? []).reduce((n, p) => n + (p.stats?.page_count ?? 0), 0)
   const totalProjects = projects.data?.length ?? 0
   const activeJobs = (projects.data ?? []).filter(
     p => p.latest_job && !['completed', 'failed', 'cancelled'].includes(p.latest_job.status),
@@ -184,10 +187,14 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      <StartHere projects={projects.data ?? null} />
+
+      <FeatureCards features={features.data ?? null} projects={projects.data ?? null} />
+
       {/* Stats row */}
       <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 border border-rule">
         <StatBar label="Projects" value={projects.loading ? '…' : totalProjects} />
-        <StatBar label="Documents" value={docs.loading ? '…' : totalDocs} />
+        <StatBar label="Pages written" value={projects.loading ? '…' : totalPages} />
         <StatBar
           label="Jobs run"
           value={projects.loading ? '…' : totalJobs.toLocaleString()}
@@ -354,8 +361,8 @@ export default function DashboardPage() {
               {[
                 { n: '01', label: 'Analyse', desc: 'Probe + clone source, build knowledge base' },
                 { n: '02', label: 'Knowledge Base', desc: 'Modules, entities, and narrative topics' },
-                { n: '03', label: 'Choose', desc: 'Select doc types by confidence score' },
-                { n: '04', label: 'Compose', desc: 'LLM writes Markdown, DOCX, or site output' },
+                { n: '03', label: 'Unlock', desc: 'Features become available together' },
+                { n: '04', label: 'Use', desc: 'Each feature retrieves what it needs — never the repo again' },
               ].map(step => (
                 <div key={step.n} className="flex gap-3">
                   <span className="text-[18px] font-bold tracking-tighter text-rule leading-none select-none shrink-0 mt-0.5">

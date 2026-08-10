@@ -70,8 +70,18 @@ export interface Project {
   created_at: string
   updated_at: string
   sources: ProjectSource[] | null
-  stats: { source_count: number; job_count: number; doc_count: number } | null
+  /** `doc_count` is the legacy single-shot pipeline; `page_count` is written site pages. */
+  stats: {
+    source_count: number
+    job_count: number
+    doc_count: number
+    page_count: number
+  } | null
   latest_job: { id: number; status: JobStatus } | null
+  /** Status of the most recent knowledge base, null if never analysed. */
+  kb_status: KBStatus | null
+  /** Whether features can run. Computed by the server — never re-derive it here. */
+  features_ready: boolean
 }
 
 export type JobStatus = Open<
@@ -413,4 +423,15 @@ export interface ProjectFeature {
   state: 'available' | 'locked' | 'planned'
   /** Why it is not available. Says what to do, not what went wrong. */
   reason: string
+}
+
+/** The feature catalogue, independent of any codebase. `GET /features`. */
+export interface FeatureCatalogItem {
+  id: string
+  label: string
+  blurb: string
+  needs: string[]
+  /** Contains `{id}` — substitute a project id. */
+  route_template: string
+  built: boolean
 }

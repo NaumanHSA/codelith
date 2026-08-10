@@ -133,8 +133,11 @@ class ProjectService:
             source_count=len(project.sources),
             job_count=int(job_count or 0),
             doc_count=int(doc_count or 0),
+            page_count=(await self._page_counts([project.id])).get(project.id, 0),
         )
         out.latest_job = LatestJobOut.model_validate(latest_job_row) if latest_job_row else None
+        out.kb_status = (await self._kb_statuses([project.id])).get(project.id)
+        out.features_ready = _features_ready(out.kb_status)
         return out
 
     async def _to_out_many(self, projects: list[Project]) -> list[ProjectOut]:
@@ -185,6 +188,9 @@ class ProjectService:
             ).scalars()
         }
 
+        page_counts = await self._page_counts(ids)
+        kb_statuses = await self._kb_statuses(ids)
+
         outs: list[ProjectOut] = []
         for project in projects:
             out = ProjectOut.model_validate(project)
@@ -192,12 +198,73 @@ class ProjectService:
                 source_count=len(project.sources),
                 job_count=int(job_counts.get(project.id, 0)),
                 doc_count=int(doc_counts.get(project.id, 0)),
+                page_count=int(page_counts.get(project.id, 0)),
             )
             latest = latest_jobs.get(project.id)
             out.latest_job = LatestJobOut.model_validate(latest) if latest else None
+            out.kb_status = kb_statuses.get(project.id)
+            out.features_ready = _features_ready(out.kb_status)
             outs.append(out)
         return outs
+
+    async def _page_counts(self, ids: list[int]) -> dict[int, int]:
+        """
+        Written pages per project, live site only.
+
+        `doc_count` counts rows from the legacy single-shot pipeline, so a project
+        whose documentation site was full of pages still reported "0 documents" on
+        the dashboard. Versioned rows are excluded: a snapshot is a copy of pages
+        already counted, and including them would inflate the number every time
+        somebody cut a release.
+        """
+        from app.models.site import DocPage, DocSite
+
+        if not ids:
+            return {}
+        rows = await self.db.execute(
+            select(DocSite.project_id, func.count(DocPage.id))
+            .join(DocPage, DocPage.site_id == DocSite.id)
+            .where(
+                DocSite.project_id.in_(ids),
+                DocPage.version_id.is_(None),
+                DocPage.status.in_(("ready", "stale")),
+            )
+            .group_by(DocSite.project_id)
+        )
+        return {pid: int(n) for pid, n in rows.all()}
+
+    async def _kb_statuses(self, ids: list[int]) -> dict[int, str]:
+        """The most recent knowledge base status per project."""
+        from app.models.knowledge import KnowledgeBase
+
+        if not ids:
+            return {}
+        rows = await self.db.execute(
+            select(KnowledgeBase.project_id, KnowledgeBase.status)
+            .where(KnowledgeBase.project_id.in_(ids))
+            .distinct(KnowledgeBase.project_id)
+            .order_by(KnowledgeBase.project_id, KnowledgeBase.id.desc())
+        )
+        return {pid: status for pid, status in rows.all()}
 
     def _check_access(self, project: Project, user: User) -> None:
         if project.org_id != (user.org_id or 0) and user.role != "admin":
             raise AuthorizationError("Access denied to this project")
+
+
+def _features_ready(kb_status: str | None) -> bool:
+    """
+    Whether features can run against this project.
+
+    Wraps `KBStatus.can_serve_features` rather than restating it. Four call sites
+    once decided this independently and one had drifted, so the same project could
+    offer a feature on one screen and refuse it on another.
+    """
+    from app.knowledge.constants import KBStatus
+
+    if not kb_status:
+        return False
+    try:
+        return KBStatus(kb_status).can_serve_features
+    except ValueError:
+        return False

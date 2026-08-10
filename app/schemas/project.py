@@ -75,6 +75,10 @@ class ProjectStats(BaseModel):
     source_count: int = 0
     job_count: int = 0
     doc_count: int = 0
+    #: Site pages actually written. `doc_count` counts rows from the legacy
+    #: single-shot pipeline, which is why the studio could report "0 documents"
+    #: for a project whose documentation site had pages in it.
+    page_count: int = 0
 
 
 class LatestJobOut(BaseModel):
@@ -96,5 +100,11 @@ class ProjectOut(BaseModel):
     sources: list[ProjectSourceOut] = []
     stats: ProjectStats | None = None
     latest_job: LatestJobOut | None = None
+    #: Status of the most recent knowledge base, or None if never analysed.
+    kb_status: str | None = None
+    #: Whether features can run against it. Computed from `KBStatus`, never
+    #: re-derived in the studio — a client that reimplements this rule is a client
+    #: that will disagree with the server about what a project can do.
+    features_ready: bool = False
 
     model_config = {"from_attributes": True}

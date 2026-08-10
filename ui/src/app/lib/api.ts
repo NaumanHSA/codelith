@@ -10,7 +10,7 @@ import type {
   Doc, Features, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
-  ChatEvent, ChatThread, ChatThreadSummary, ProjectFeature,
+  ChatEvent, ChatThread, ChatThreadSummary, ProjectFeature, FeatureCatalogItem,
 } from './types'
 
 export const API_BASE =
@@ -408,6 +408,11 @@ export const api = {
     request<void>(`/projects/${projectId}/chat/thread/${threadId}`, { method: 'DELETE' }),
 
   /** Recent conversations across every project, for the rail. */
+  /** Every feature, with no codebase in the picture. For the dashboard.
+   *  Named `featureCatalog` because `features` is the settings feature-flag call. */
+  featureCatalog: (signal?: AbortSignal) =>
+    request<FeatureCatalogItem[]>('/features', { signal }),
+
   /** What this codebase unlocks, and what it does not yet. */
   projectFeatures: (projectId: number, signal?: AbortSignal) =>
     request<ProjectFeature[]>(`/projects/${projectId}/features`, { signal }),
