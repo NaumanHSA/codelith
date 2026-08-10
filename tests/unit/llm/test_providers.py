@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import Settings
-from app.llm import providers
-from app.llm.providers import FAST, LOCAL, OPENAI, QUALITY
+from codelith.config import Settings
+from codelith.llm import providers
+from codelith.llm.providers import FAST, LOCAL, OPENAI, QUALITY
 
 
 @pytest.fixture
@@ -174,7 +174,7 @@ class TestProviderValidation:
 
 class TestRouting:
     def test_task_types_map_to_the_documented_tiers(self, settings_factory) -> None:
-        from app.llm.router import select_tier
+        from codelith.llm.router import select_tier
 
         assert select_tier("write") == QUALITY
         assert select_tier("plan") == QUALITY

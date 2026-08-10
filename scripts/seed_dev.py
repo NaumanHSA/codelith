@@ -1,11 +1,11 @@
 """Seed script — creates a default org, admin user, and sample project for dev."""
 import asyncio
-import app.models  # noqa: F401 — registers all ORM models with SQLAlchemy before any query
-from app.db.session import AsyncSessionLocal
-from app.db.repositories.org_repo import OrgRepository
-from app.db.repositories.user_repo import UserRepository
-from app.db.repositories.project_repo import ProjectRepository
-from app.core.security import hash_password
+import codelith.models  # noqa: F401 — registers all ORM models with SQLAlchemy before any query
+from codelith.db.session import AsyncSessionLocal
+from codelith.db.repositories.org_repo import OrgRepository
+from codelith.db.repositories.user_repo import UserRepository
+from codelith.db.repositories.project_repo import ProjectRepository
+from codelith.core.security import hash_password
 
 
 async def main():

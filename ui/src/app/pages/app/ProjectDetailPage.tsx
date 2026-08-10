@@ -10,7 +10,7 @@ import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../compone
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
 import ConfirmDelete from '../../components/ConfirmDelete'
-import FeatureGrid from '../../components/projects/FeatureGrid'
+import AppGrid from '../../components/projects/AppGrid'
 import { coverage, describeJobScope } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
@@ -128,7 +128,7 @@ export default function ProjectDetailPage() {
   const project = useAsync(() => api.project(id), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
-  const features = useAsync(sig => api.projectFeatures(id, sig), [id])
+  const features = useAsync(sig => api.projectApps(id, sig), [id])
 
   const [analysing, setAnalysing] = useState(false)
   const [analyseError, setAnalyseError] = useState<string | null>(null)
@@ -223,7 +223,7 @@ export default function ProjectDetailPage() {
 
       {!!features.data?.length && (
         <div className="mb-3">
-          <FeatureGrid
+          <AppGrid
             features={features.data}
             extras={{ documentation: <DocumentationProgress projectId={id} /> }}
           />

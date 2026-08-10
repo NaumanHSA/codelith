@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import base64
 
-from app.features.documentation.agents.formatter import FormatterAgent
+from codelith.apps.documentation.agents.formatter import FormatterAgent
 
 _PNG = base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode("ascii")
 
@@ -65,8 +65,8 @@ class TestRoutingByDocument:
 
 class TestRendererIsOptional:
     def test_disabling_rendering_returns_none(self, monkeypatch) -> None:
-        from app.config import get_settings
-        from app.tools import mermaid_render
+        from codelith.config import get_settings
+        from codelith.tools import mermaid_render
 
         get_settings.cache_clear()
         monkeypatch.setenv("DIAGRAM_RENDER_PNG", "false")
@@ -76,8 +76,8 @@ class TestRendererIsOptional:
             get_settings.cache_clear()
 
     def test_a_missing_binary_is_not_fatal(self, monkeypatch) -> None:
-        from app.config import get_settings
-        from app.tools import mermaid_render
+        from codelith.config import get_settings
+        from codelith.tools import mermaid_render
 
         get_settings.cache_clear()
         monkeypatch.setenv("MERMAID_CLI_PATH", "/nonexistent/mmdc")
@@ -97,8 +97,8 @@ class TestRenderingAvailability:
     """
 
     def test_unavailable_when_rendering_is_disabled(self, monkeypatch) -> None:
-        from app.config import get_settings
-        from app.tools.mermaid_render import rendering_available
+        from codelith.config import get_settings
+        from codelith.tools.mermaid_render import rendering_available
 
         get_settings.cache_clear()
         monkeypatch.setenv("DIAGRAM_RENDER_PNG", "false")
@@ -108,8 +108,8 @@ class TestRenderingAvailability:
             get_settings.cache_clear()
 
     def test_unavailable_when_the_binary_is_missing(self, monkeypatch) -> None:
-        from app.config import get_settings
-        from app.tools.mermaid_render import rendering_available
+        from codelith.config import get_settings
+        from codelith.tools.mermaid_render import rendering_available
 
         get_settings.cache_clear()
         monkeypatch.setenv("MERMAID_CLI_PATH", "/nonexistent/mmdc")

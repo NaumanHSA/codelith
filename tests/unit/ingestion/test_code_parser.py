@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 import pytest
-from app.ingestion.parsers.code_parser import CodeParser
+from codelith.ingestion.parsers.code_parser import CodeParser
 
 
 def test_parse_python_file():

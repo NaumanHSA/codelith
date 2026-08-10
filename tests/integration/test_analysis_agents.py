@@ -15,13 +15,13 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.analysis import KBPersisterAgent, SemanticIndexerAgent, StructuredExtractorAgent
-from app.db.repositories.knowledge import KnowledgeRepositories
-from app.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
-from app.knowledge.constants import EntityKind, KBStatus, ModuleRole, PageStatus
-from app.models.job import Job
-from app.models.organization import Organization
-from app.models.project import Project
+from codelith.agents.analysis import KBPersisterAgent, SemanticIndexerAgent, StructuredExtractorAgent
+from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
+from codelith.knowledge.constants import EntityKind, KBStatus, ModuleRole, PageStatus
+from codelith.models.job import Job
+from codelith.models.organization import Organization
+from codelith.models.project import Project
 
 ROUTES = textwrap.dedent(
     '''
@@ -144,7 +144,7 @@ class TestSemanticIndexer:
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
         calls: list[int] = []
 
-        from app.config import get_settings
+        from codelith.config import get_settings
 
         dimensions = get_settings().VECTOR_DIMENSIONS
 
@@ -156,7 +156,7 @@ class TestSemanticIndexer:
             return [[0.1] * dimensions for _ in texts]
 
         monkeypatch.setattr(
-            "app.agents.analysis.semantic_indexer.create_embeddings", fake_embeddings
+            "codelith.agents.analysis.semantic_indexer.create_embeddings", fake_embeddings
         )
 
         result = await SemanticIndexerAgent(db=db_session, job_id=job.id).run(
@@ -169,7 +169,7 @@ class TestSemanticIndexer:
 
         from sqlalchemy import func, select
 
-        from app.models.chunk import CodeChunk
+        from codelith.models.chunk import CodeChunk
 
         count = await db_session.execute(
             select(func.count()).select_from(CodeChunk).where(CodeChunk.kb_id == extracted["kb_id"])
@@ -184,7 +184,7 @@ class TestSemanticIndexer:
         async def all_fail(texts, model=None, batch_size=None):
             return [None for _ in texts]
 
-        monkeypatch.setattr("app.agents.analysis.semantic_indexer.create_embeddings", all_fail)
+        monkeypatch.setattr("codelith.agents.analysis.semantic_indexer.create_embeddings", all_fail)
 
         result = await SemanticIndexerAgent(db=db_session, job_id=job.id).run(
             {**state, "kb_id": extracted["kb_id"]}
@@ -203,14 +203,14 @@ class TestNarrativeWriter:
         which raises "another operation is in progress" and silently drops
         narratives — observed as 4 of 5 topics failing on a real run.
         """
-        from app.agents.analysis import NarrativeWriterAgent
+        from codelith.agents.analysis import NarrativeWriterAgent
 
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
 
         async def fake_llm(self, messages, task_type="write", **kwargs):
             return "## Section\n\nGrounded prose."
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", fake_llm)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", fake_llm)
 
         agent = NarrativeWriterAgent(db=db_session, job_id=job.id)
         result = await agent.run(
@@ -234,7 +234,7 @@ class TestNarrativeWriter:
         the extracted facts demand — so this stubs it out entirely and checks what
         survives.
         """
-        from app.agents.analysis import NarrativeWriterAgent
+        from codelith.agents.analysis import NarrativeWriterAgent
 
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
         repos = KnowledgeRepositories.for_session(db_session)
@@ -245,7 +245,7 @@ class TestNarrativeWriter:
             return []
 
         monkeypatch.setattr(
-            "app.agents.analysis.narrative_writer.NarrativeWriterAgent._propose_topics",
+            "codelith.agents.analysis.narrative_writer.NarrativeWriterAgent._propose_topics",
             no_proposals,
         )
 
@@ -344,14 +344,14 @@ class TestSitePlanner:
         }
 
     async def _plan(self, db_session, job, state, monkeypatch, response) -> dict:
-        from app.agents.analysis import SitePlannerAgent
+        from codelith.agents.analysis import SitePlannerAgent
 
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
 
         async def fake_llm_json(self, messages, task_type="plan", **kwargs):
             return response
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_llm_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_llm_json)
         return await SitePlannerAgent(db=db_session, job_id=job.id).run(
             {**state, "kb_id": extracted["kb_id"], "architecture_map": {"services": []}}
         )
@@ -359,7 +359,7 @@ class TestSitePlanner:
     async def test_it_plans_a_site_and_merges_it(
         self, db_session, job, state, monkeypatch
     ) -> None:
-        from app.features.documentation.services.site_service import SiteService
+        from codelith.apps.documentation.services.site_service import SiteService
 
         result = await self._plan(db_session, job, state, monkeypatch, self._proposal())
 
@@ -375,7 +375,7 @@ class TestSitePlanner:
         self, db_session, job, state, monkeypatch
     ) -> None:
         """A path the KB has never seen retrieves nothing and must not be stored."""
-        from app.features.documentation.services.site_service import SiteService
+        from codelith.apps.documentation.services.site_service import SiteService
 
         await self._plan(db_session, job, state, monkeypatch, self._proposal())
 
@@ -395,7 +395,7 @@ class TestSitePlanner:
         self, db_session, job, state, monkeypatch
     ) -> None:
         """The done-when for this phase, end to end."""
-        from app.features.documentation.services.site_service import SiteService
+        from codelith.apps.documentation.services.site_service import SiteService
 
         await self._plan(db_session, job, state, monkeypatch, self._proposal())
         site = await SiteService(db_session).sites.get_with_pages(job.project_id)
@@ -411,7 +411,7 @@ class TestSitePlanner:
         self, db_session, job, state, monkeypatch
     ) -> None:
         """A failed plan must cost site quality, not the site."""
-        from app.features.documentation.services.site_service import SiteService
+        from codelith.apps.documentation.services.site_service import SiteService
 
         result = await self._plan(db_session, job, state, monkeypatch, None)
 
@@ -437,14 +437,14 @@ class TestSitePlanner:
 class TestGraphShape:
     def test_analysis_graph_has_no_doc_type_dependency(self) -> None:
         """Phase 1 must be composable-agnostic: the state has no doc_types key."""
-        from app.workflows.analysis_states import AnalysisState
+        from codelith.workflows.analysis_states import AnalysisState
 
         assert "doc_types" not in AnalysisState.__annotations__
         assert "output_formats" not in AnalysisState.__annotations__
         assert "kb_id" in AnalysisState.__annotations__
 
     def test_workflow_compiles(self, job) -> None:
-        from app.workflows.analysis_workflow import AnalysisWorkflow
+        from codelith.workflows.analysis_workflow import AnalysisWorkflow
 
         workflow = AnalysisWorkflow(project=job.project, job=job, db=None)
         graph = workflow._build_graph()

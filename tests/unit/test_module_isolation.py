@@ -8,7 +8,7 @@ is a test rather than a convention.
 
 **Two directions, both enforced here:**
 
-1. The base may not import a feature. The moment `app/knowledge/` knows what
+1. The base may not import a feature. The moment `codelith/knowledge/` knows what
    documentation is, the knowledge base is documentation-shaped again.
 2. A feature may not import another feature. If two need the same thing, it belongs in
    the base — otherwise the isolation is a diamond wearing a folder structure.
@@ -25,11 +25,11 @@ from pathlib import Path
 
 import pytest
 
-APP = Path(__file__).resolve().parents[2] / "app"
+APP = Path(__file__).resolve().parents[2] / "codelith"
 
 #: Packages that are the base. A feature reads these; they must never read back.
 #:
-#: Not simply "everything outside app/features": the composition root has to wire the
+#: Not simply "everything outside codelith/apps": the composition root has to wire the
 #: features in somewhere, and pretending otherwise would mean either a fake exception
 #: or an app that cannot serve them.
 BASE_PACKAGES = (
@@ -53,8 +53,8 @@ BASE_PACKAGES = (
 WIRING_POINTS = {
     "api/v1/router.py",       # mounts each feature's routes
     "workers/celery_app.py",  # lists each feature's task modules
-    "features/registry.py",   # declares what exists
-    "api/v1/features.py",     # serves the registry
+    "apps/registry.py",   # declares what exists
+    "api/v1/apps.py",     # serves the registry
     "api/v1/projects.py",     # per-project feature availability
     "main.py",
 }
@@ -82,7 +82,7 @@ KNOWN_LEAKS = {
 def _imports(path: Path) -> set[str]:
     """Every module named by an `import` in this file, including local ones.
 
-    Parsed rather than grepped: a comment mentioning `app.features` is not an import,
+    Parsed rather than grepped: a comment mentioning `codelith.apps` is not an import,
     and this test is about what the code actually does.
     """
     try:
@@ -110,12 +110,12 @@ def _rel(path: Path) -> str:
 def _feature_of(path: Path) -> str | None:
     """Which feature a file belongs to, or None if it is not in one."""
     parts = path.relative_to(APP).parts
-    return parts[1] if len(parts) > 2 and parts[0] == "features" else None
+    return parts[1] if len(parts) > 2 and parts[0] == "apps" else None
 
 
 class TestTheBaseDoesNotKnowAboutFeatures:
     """
-    Direction 1. `app/knowledge/` is the substrate every feature reads; if it imports
+    Direction 1. `codelith/knowledge/` is the substrate every feature reads; if it imports
     one, the substrate has a favourite and the next feature has to fit around it.
     """
 
@@ -127,7 +127,7 @@ class TestTheBaseDoesNotKnowAboutFeatures:
             if not root.exists():
                 continue
             for file in _python_files(root):
-                bad = {m for m in _imports(file) if m.startswith("app.features")}
+                bad = {m for m in _imports(file) if m.startswith("codelith.apps")}
                 if bad:
                     offenders.append(f"{_rel(file)} imports {', '.join(sorted(bad))}")
 
@@ -146,9 +146,9 @@ class TestTheBaseDoesNotKnowAboutFeatures:
 
         for file in _python_files(APP):
             rel = _rel(file)
-            if rel.startswith("features/") or rel in WIRING_POINTS or rel in KNOWN_LEAKS:
+            if rel.startswith("apps/") or rel in WIRING_POINTS or rel in KNOWN_LEAKS:
                 continue
-            bad = {m for m in _imports(file) if m.startswith("app.features")}
+            bad = {m for m in _imports(file) if m.startswith("codelith.apps")}
             if bad:
                 offenders.append(f"{rel} imports {', '.join(sorted(bad))}")
 
@@ -172,7 +172,7 @@ class TestTheBaseDoesNotKnowAboutFeatures:
             if not file.exists():
                 fixed.append(f"{rel} no longer exists")
                 continue
-            if not any(m.startswith("app.features") for m in _imports(file)):
+            if not any(m.startswith("codelith.apps") for m in _imports(file)):
                 fixed.append(f"{rel} no longer imports a feature")
 
         assert not fixed, (
@@ -189,17 +189,17 @@ class TestFeaturesDoNotKnowAboutEachOther:
     """
 
     def test_no_feature_imports_another(self) -> None:
-        features_root = APP / "features"
-        if not features_root.exists():
-            pytest.skip("no features package yet")
+        apps_root = APP / "apps"
+        if not apps_root.exists():
+            pytest.skip("no apps package yet")
 
         offenders: list[str] = []
-        for file in _python_files(features_root):
+        for file in _python_files(apps_root):
             mine = _feature_of(file)
             if mine is None:
                 continue
             for module in _imports(file):
-                if not module.startswith("app.features."):
+                if not module.startswith("codelith.apps."):
                     continue
                 theirs = module.split(".")[2] if len(module.split(".")) > 2 else None
                 if theirs and theirs != mine:
@@ -217,17 +217,17 @@ class TestTheRuleIsBeingApplied:
     def test_there_are_features_to_check(self) -> None:
         features = {
             p.name
-            for p in (APP / "features").iterdir()
+            for p in (APP / "apps").iterdir()
             if p.is_dir() and p.name != "__pycache__"
         }
 
-        assert features, "expected feature packages under app/features/"
+        assert features, "expected feature packages under codelith/apps/"
 
     def test_the_import_reader_actually_reads_imports(self) -> None:
         """The whole guard rests on this. If it silently returned nothing — a parse
         error swallowed, say — every assertion above would pass on any codebase."""
-        found = _imports(APP / "features" / "ask" / "service.py")
+        found = _imports(APP / "apps" / "ask" / "service.py")
 
-        assert "app.knowledge.questions" in found, (
+        assert "codelith.knowledge.questions" in found, (
             f"expected the ask service to import from the knowledge base; got {sorted(found)[:8]}"
         )

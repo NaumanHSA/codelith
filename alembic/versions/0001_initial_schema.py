@@ -9,7 +9,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
-from app.config import get_settings
+from codelith.config import get_settings
 
 revision: str = "0001"
 down_revision: Union[str, None] = None

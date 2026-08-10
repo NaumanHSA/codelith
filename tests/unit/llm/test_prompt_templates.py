@@ -18,8 +18,8 @@ import pkgutil
 
 import pytest
 
-import app.llm.prompts as prompts_pkg
-from app.llm.prompts.base import MissingPromptValue, PromptTemplate
+import codelith.llm.prompts as prompts_pkg
+from codelith.llm.prompts.base import MissingPromptValue, PromptTemplate
 
 
 class TestGuard:
@@ -59,7 +59,7 @@ class TestEveryTemplate:
     def _templates() -> list[tuple[str, PromptTemplate]]:
         found = []
         for module in pkgutil.iter_modules(prompts_pkg.__path__):
-            mod = importlib.import_module(f"app.llm.prompts.{module.name}")
+            mod = importlib.import_module(f"codelith.llm.prompts.{module.name}")
             for name, obj in vars(mod).items():
                 if isinstance(obj, PromptTemplate):
                     found.append((f"{module.name}.{name}", obj))

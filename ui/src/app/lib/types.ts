@@ -81,7 +81,7 @@ export interface Project {
   /** Status of the most recent knowledge base, null if never analysed. */
   kb_status: KBStatus | null
   /** Whether features can run. Computed by the server — never re-derive it here. */
-  features_ready: boolean
+  apps_ready: boolean
 }
 
 export type JobStatus = Open<
@@ -413,7 +413,7 @@ export type ChatEvent =
   | { type: 'error'; message: string }
 
 /** One thing an analysed codebase unlocks. Mirrors `app/features/registry.py`. */
-export interface ProjectFeature {
+export interface ProjectApp {
   id: string
   label: string
   blurb: string
@@ -426,7 +426,7 @@ export interface ProjectFeature {
 }
 
 /** The feature catalogue, independent of any codebase. `GET /features`. */
-export interface FeatureCatalogItem {
+export interface AppCatalogItem {
   id: string
   label: string
   blurb: string

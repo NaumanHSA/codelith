@@ -40,7 +40,7 @@ infra:
 	@echo "Infrastructure is up. Now run:"
 	@echo "  make migrate   (first time only)"
 	@echo "  make seed      (first time only)"
-	@echo "  uvicorn app.main:app --reload"
+	@echo "  uvicorn codelith.main:app --reload"
 
 infra-stop:
 	$(INFRA) down
@@ -55,7 +55,7 @@ seed:
 	$(PYTHON) scripts/seed_dev.py
 
 worker:
-	celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
+	celery -A codelith.workers.celery_app worker --loglevel=info --concurrency=4
 
 # ── Production ────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ build:
 # ── Testing ───────────────────────────────────────────────────────────────────
 
 test:
-	pytest tests/ -v --cov=app --cov-report=term-missing
+	pytest tests/ -v --cov=codelith --cov-report=term-missing
 
 test-unit:
 	pytest tests/unit/ -v
@@ -82,11 +82,11 @@ test-int:
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 lint:
-	ruff check app/ tests/
+	ruff check codelith/ tests/
 
 format:
-	ruff format app/ tests/
-	ruff check --fix app/ tests/
+	ruff format codelith/ tests/
+	ruff check --fix codelith/ tests/
 
 typecheck:
-	mypy app/
+	mypy codelith/

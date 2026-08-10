@@ -6,8 +6,8 @@ import textwrap
 
 import pytest
 
-from app.languages.providers.python import PythonProvider
-from app.languages.taxonomy import ModuleKind, SymbolKind, Visibility
+from codelith.languages.providers.python import PythonProvider
+from codelith.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 
 @pytest.fixture

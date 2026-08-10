@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.features.documentation.agents.linker import LinkerAgent
+from codelith.apps.documentation.agents.linker import LinkerAgent
 
 SITE_MAP = {
     "title": "widgets",

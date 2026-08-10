@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.knowledge.constants import EntityKind, ModuleRole
-from app.knowledge.roles import infer_role
+from codelith.knowledge.constants import EntityKind, ModuleRole
+from codelith.knowledge.roles import infer_role
 
 
 def role(path: str, files: list[str] | None = None, **kw) -> str:

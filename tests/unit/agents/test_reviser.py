@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.features.documentation.agents.reviser import ReviserAgent
+from codelith.apps.documentation.agents.reviser import ReviserAgent
 
 PAGE_MD = """Opening line.
 
@@ -144,7 +144,7 @@ class TestSplicing:
     """End-to-end through the block layer, which is what actually protects the page."""
 
     def test_only_the_addressed_section_changes(self) -> None:
-        from app.knowledge.blocks import find_blocks, replace_block
+        from codelith.knowledge.blocks import find_blocks, replace_block
 
         block = find_blocks(PAGE_MD, "request-and-data-flow")[0]
         out = replace_block(PAGE_MD, block, "## Request and data flow\n\nNew flow text.")
@@ -159,7 +159,7 @@ class TestSplicing:
     def test_the_pages_structure_survives_for_the_next_turn(self) -> None:
         """A conversation means revising the same page repeatedly; the splice must
         leave it addressable."""
-        from app.knowledge.blocks import find_blocks, replace_block, split_blocks
+        from codelith.knowledge.blocks import find_blocks, replace_block, split_blocks
 
         block = find_blocks(PAGE_MD, "request-and-data-flow")[0]
         once = replace_block(PAGE_MD, block, "## Request and data flow\n\nFirst pass.")
@@ -202,7 +202,7 @@ class TestSettingsUsed:
         assert ReviserAgent.name == "reviser_agent"
 
     def test_a_page_without_an_anchor_revises_the_whole_thing(self) -> None:
-        from app.knowledge.blocks import find_blocks
+        from codelith.knowledge.blocks import find_blocks
 
         # No anchor means no block lookup at all — the target is the page.
         assert find_blocks(PAGE_MD, "") == []

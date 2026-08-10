@@ -24,14 +24,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.knowledge import policy
-from app.knowledge.builder import SourceFile, chunk_files, chunk_prose
-from app.knowledge.policy import (
+from codelith.knowledge import policy
+from codelith.knowledge.builder import SourceFile, chunk_files, chunk_prose
+from codelith.knowledge.policy import (
     DOCS_GENERATION,
     QUESTION_ANSWERING,
     RetrievalPolicy,
 )
-from app.knowledge.retrieval import SectionContextBuilder
+from codelith.knowledge.retrieval import SectionContextBuilder
 
 CODE_FILE = '''
 """Session handling for the database.
@@ -102,7 +102,7 @@ def builder(monkeypatch):
         async def _embedding(_text):
             return [0.0] * 8
 
-        monkeypatch.setattr("app.knowledge.retrieval.create_embedding", _embedding)
+        monkeypatch.setattr("codelith.knowledge.retrieval.create_embedding", _embedding)
 
         b = SectionContextBuilder(
             db=None,  # type: ignore[arg-type]
@@ -200,7 +200,7 @@ class TestCodeCannotBeCrowdedOut:
         context = await b.build(SECTION, "architecture")
 
         assert context.retrieved_blocks, "code was entirely displaced by prose"
-        from app.llm.context_manager import count_text_tokens
+        from codelith.llm.context_manager import count_text_tokens
 
         prose_tokens = sum(count_text_tokens(b_) for b_ in context.prose_blocks)
         assert prose_tokens <= b.token_budget - b.code_budget + 1

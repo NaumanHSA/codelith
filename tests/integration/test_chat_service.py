@@ -19,10 +19,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
-from app.models.organization import Organization
-from app.models.project import Project
-from app.features.ask.threads import ChatService
+from codelith.core.exceptions import NotFoundError
+from codelith.models.organization import Organization
+from codelith.models.project import Project
+from codelith.apps.ask.threads import ChatService
 
 
 @pytest_asyncio.fixture

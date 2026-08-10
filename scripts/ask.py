@@ -27,9 +27,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select  # noqa: E402
 
-from app.db.session import AsyncSessionLocal  # noqa: E402
-from app.knowledge.questions import QuestionRouter  # noqa: E402
-from app.models.knowledge import KnowledgeBase  # noqa: E402
+from codelith.db.session import AsyncSessionLocal  # noqa: E402
+from codelith.knowledge.questions import QuestionRouter  # noqa: E402
+from codelith.models.knowledge import KnowledgeBase  # noqa: E402
 
 _BODY_PREVIEW = 400
 

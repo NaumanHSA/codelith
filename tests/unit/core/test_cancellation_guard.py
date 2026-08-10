@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core import cancellation
+from codelith.core import cancellation
 
 
 @pytest.fixture
@@ -51,8 +51,8 @@ def job(monkeypatch):
         state["cleared"] = True
 
     monkeypatch.setattr(cancellation, "clear_cancel", _clear)
-    monkeypatch.setattr("app.db.session.AsyncSessionLocal", lambda: _Session())
-    monkeypatch.setattr("app.db.repositories.job_repo.JobRepository", _Repo)
+    monkeypatch.setattr("codelith.db.session.AsyncSessionLocal", lambda: _Session())
+    monkeypatch.setattr("codelith.db.repositories.job_repo.JobRepository", _Repo)
     return state
 
 

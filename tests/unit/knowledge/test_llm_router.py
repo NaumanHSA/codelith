@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.knowledge.questions import KBVocabulary, LLMQuestionPlanner
+from codelith.knowledge.questions import KBVocabulary, LLMQuestionPlanner
 
 VOCAB = KBVocabulary(
     entity_kinds=frozenset({"datastore", "route", "env_var"}),

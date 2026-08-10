@@ -15,14 +15,14 @@ strings and JSX being excluded.
 
 from __future__ import annotations
 
-from app.knowledge.constants import EntityKind
-from app.languages.providers.typescript import (
+from codelith.knowledge.constants import EntityKind
+from codelith.languages.providers.typescript import (
     JavaScriptProvider,
     TypeScriptProvider,
     _strip_noise,
 )
-from app.languages.registry import registry
-from app.languages.taxonomy import SymbolKind, Visibility
+from codelith.languages.registry import registry
+from codelith.languages.taxonomy import SymbolKind, Visibility
 
 ts = TypeScriptProvider()
 
@@ -211,7 +211,7 @@ class TestImportResolution:
     })
 
     def _resolve(self, target: str, from_path: str) -> str | None:
-        from app.languages.base import ImportRef
+        from codelith.languages.base import ImportRef
 
         return ts.resolve_import(ImportRef(target=target, line=1), from_path, self.KNOWN)
 
@@ -235,7 +235,7 @@ class TestImportResolution:
 
 class TestExternalPackages:
     def _pkg(self, target: str) -> str | None:
-        from app.languages.base import ImportRef
+        from codelith.languages.base import ImportRef
 
         return ts.external_package(ImportRef(target=target, line=1))
 

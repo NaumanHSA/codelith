@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from app.services.auth_service import AuthService
-from app.core.exceptions import AuthenticationError, ConflictError
-from app.schemas.auth import RegisterRequest, LoginRequest
+from codelith.services.auth_service import AuthService
+from codelith.core.exceptions import AuthenticationError, ConflictError
+from codelith.schemas.auth import RegisterRequest, LoginRequest
 
 
 @pytest.mark.asyncio
@@ -18,7 +18,7 @@ async def test_register_duplicate_email():
 
 @pytest.mark.asyncio
 async def test_login_wrong_password():
-    from app.core.security import hash_password
+    from codelith.core.security import hash_password
     db = AsyncMock()
     svc = AuthService(db)
     svc.repo = AsyncMock()

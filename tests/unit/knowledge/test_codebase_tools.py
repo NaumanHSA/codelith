@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.knowledge.tools import TOOL_NAMES, TOOL_SCHEMAS, CodebaseTools
+from codelith.knowledge.tools import TOOL_NAMES, TOOL_SCHEMAS, CodebaseTools
 
 
 class _Chunk(SimpleNamespace):
@@ -70,7 +70,7 @@ class TestSchemas:
     def test_list_facts_only_offers_kinds_the_schema_knows(self) -> None:
         """The enum is what stops the model inventing an entity kind and getting an
         empty result that reads as "this repository has none"."""
-        from app.knowledge.constants import EntityKind
+        from codelith.knowledge.constants import EntityKind
 
         schema = next(s for s in TOOL_SCHEMAS if s["function"]["name"] == "list_facts")
         offered = set(schema["function"]["parameters"]["properties"]["kind"]["enum"])
@@ -136,7 +136,7 @@ class TestEmptyResultsAreAnswers:
             async def get_callers(self, project_id, symbol):
                 return []
 
-        monkeypatch.setattr("app.knowledge.tools.GraphStore", _Graph)
+        monkeypatch.setattr("codelith.knowledge.tools.GraphStore", _Graph)
 
         text, _ = await tools.run("find_callers", {"symbol": "ghost"})
 
@@ -152,7 +152,7 @@ class TestResultsBecomeEvidence:
             return [_chunk("app/db/session.py", 12, 40, "def make_engine(): ...")]
 
         monkeypatch.setattr(
-            "app.knowledge.tools.SectionContextBuilder",
+            "codelith.knowledge.tools.SectionContextBuilder",
             lambda **kwargs: SimpleNamespace(_search_chunks=_search),
         )
 
@@ -183,7 +183,7 @@ class TestResultsBecomeEvidence:
             async def get_dependents(self, project_id, path):
                 return ["app/a.py", "app/b.py"]
 
-        monkeypatch.setattr("app.knowledge.tools.GraphStore", _Graph)
+        monkeypatch.setattr("codelith.knowledge.tools.GraphStore", _Graph)
 
         text, evidence = await tools.run("find_dependents", {"path": "app/x.py"})
 

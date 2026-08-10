@@ -5,9 +5,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
-from app.config import get_settings
-from app.db.base import Base
-import app.models  # noqa: F401 — ensures all models are registered
+from codelith.config import get_settings
+from codelith.db.base import Base
+import codelith.models  # noqa: F401 — ensures all models are registered
 
 config = context.config
 settings = get_settings()

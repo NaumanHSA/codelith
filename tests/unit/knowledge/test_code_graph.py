@@ -17,8 +17,8 @@ So the assertions are mostly *absences*: what must not appear.
 
 from __future__ import annotations
 
-from app.knowledge.builder import SourceFile
-from app.knowledge.graph import build_code_graph
+from codelith.knowledge.builder import SourceFile
+from codelith.knowledge.graph import build_code_graph
 
 SESSION = '''
 """Database session."""

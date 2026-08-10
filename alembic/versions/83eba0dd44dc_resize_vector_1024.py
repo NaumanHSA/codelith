@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    from app.config import get_settings
+    from codelith.config import get_settings
     dims = get_settings().VECTOR_DIMENSIONS  # reads VECTOR_DIMENSIONS from .env
 
     op.execute("DROP INDEX IF EXISTS ix_code_chunks_embedding")

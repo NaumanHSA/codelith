@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.features.documentation.agents.strategy import CompositionStrategyAgent
+from codelith.apps.documentation.agents.strategy import CompositionStrategyAgent
 
 
 class FakeBases:

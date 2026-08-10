@@ -27,10 +27,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.features.documentation.agents.linker import LinkerAgent
-from app.features.documentation.agents.reviser import ReviserAgent
-from app.knowledge.blocks import find_blocks, split_blocks
-from app.features.documentation.services.revision_service import RevisionService
+from codelith.apps.documentation.agents.linker import LinkerAgent
+from codelith.apps.documentation.agents.reviser import ReviserAgent
+from codelith.knowledge.blocks import find_blocks, split_blocks
+from codelith.apps.documentation.services.revision_service import RevisionService
 
 PAGE_MD = """Opening line.
 
@@ -99,10 +99,10 @@ def agent(monkeypatch) -> ReviserAgent:
     a._emit_log = _noop  # type: ignore[method-assign]
     a._update_step = _noop  # type: ignore[method-assign]
     a._tracer = lambda: _Tracer()  # type: ignore[method-assign]
-    monkeypatch.setattr("app.features.documentation.agents.reviser.SectionContextBuilder", _Builder)
-    monkeypatch.setattr("app.features.documentation.agents.reviser.save_artifact", lambda *a, **k: None)
-    monkeypatch.setattr("app.features.documentation.agents.reviser.save_input_artifact", lambda *a, **k: None)
-    monkeypatch.setattr("app.features.documentation.agents.reviser.save_text_artifact", lambda *a, **k: None)
+    monkeypatch.setattr("codelith.apps.documentation.agents.reviser.SectionContextBuilder", _Builder)
+    monkeypatch.setattr("codelith.apps.documentation.agents.reviser.save_artifact", lambda *a, **k: None)
+    monkeypatch.setattr("codelith.apps.documentation.agents.reviser.save_input_artifact", lambda *a, **k: None)
+    monkeypatch.setattr("codelith.apps.documentation.agents.reviser.save_text_artifact", lambda *a, **k: None)
     return a
 
 
@@ -409,13 +409,13 @@ class TestLinksFromElsewhereInTheSite:
         def _run(pages):
             db = _SweepDB([])
             monkeypatch.setattr(
-                "app.features.documentation.services.revision_service.DocSiteRepository",
+                "codelith.apps.documentation.services.revision_service.DocSiteRepository",
                 lambda _db: SimpleNamespace(
                     get_for_project=lambda pid: _async(SimpleNamespace(id=1))
                 ),
             )
             monkeypatch.setattr(
-                "app.features.documentation.services.revision_service.DocPageRepository",
+                "codelith.apps.documentation.services.revision_service.DocPageRepository",
                 lambda _db: SimpleNamespace(list_for_site=lambda sid: _async(pages)),
             )
             return db

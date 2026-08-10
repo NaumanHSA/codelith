@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.ingestion.parsers.code_parser import SUPPORTED_EXTENSIONS
-from app.languages.registry import registry
+from codelith.ingestion.parsers.code_parser import SUPPORTED_EXTENSIONS
+from codelith.languages.registry import registry
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -180,7 +180,7 @@ class TestProvidersAgreeOnTheContract:
     def test_resolve_import_never_invents_a_file(self) -> None:
         """Returning a path outside `known_files` mints a graph node for something
         that is not in the repository — the bug the old graph store shipped."""
-        from app.languages.base import ImportRef
+        from codelith.languages.base import ImportRef
 
         known = frozenset({"a/b.py", "a/b.ts"})
         for provider in registry.providers():

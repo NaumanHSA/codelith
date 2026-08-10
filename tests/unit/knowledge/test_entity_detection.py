@@ -18,9 +18,9 @@ patterns matched the comments that document them:
 
 from __future__ import annotations
 
-from app.knowledge.constants import EntityKind
-from app.knowledge.detectors import detect_file_entities
-from app.languages.providers.python import PythonProvider
+from codelith.knowledge.constants import EntityKind
+from codelith.knowledge.detectors import detect_file_entities
+from codelith.languages.providers.python import PythonProvider
 
 provider = PythonProvider()
 

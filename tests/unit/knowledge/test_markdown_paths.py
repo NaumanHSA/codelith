@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.ingestion.parsers.markdown_parser import MarkdownParser
+from codelith.ingestion.parsers.markdown_parser import MarkdownParser
 
 
 def _repo(tmp_path: Path) -> Path:

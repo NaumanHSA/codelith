@@ -9,8 +9,8 @@ name that no consumer looks up.
 
 from __future__ import annotations
 
-from app.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
-from app.knowledge.narratives import (
+from codelith.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
+from codelith.knowledge.narratives import (
     coerce_topics,
     required_topics,
     topics_for_doc_type,

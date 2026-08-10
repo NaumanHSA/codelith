@@ -6,12 +6,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.repositories.knowledge import KnowledgeRepositories
-from app.knowledge.constants import EntityKind, KBStatus, ModuleRole, NarrativeTopic
-from app.languages.taxonomy import ModuleKind
-from app.models.chunk import CodeChunk
-from app.models.organization import Organization
-from app.models.project import Project
+from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge.constants import EntityKind, KBStatus, ModuleRole, NarrativeTopic
+from codelith.languages.taxonomy import ModuleKind
+from codelith.models.chunk import CodeChunk
+from codelith.models.organization import Organization
+from codelith.models.project import Project
 
 pytestmark = pytest.mark.asyncio
 

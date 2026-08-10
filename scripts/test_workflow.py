@@ -72,14 +72,14 @@ def _project_name_from_path(path: str) -> str:
 async def ensure_org_and_user(db):
     """Return (org, user). Creates a dev org/user if the DB is empty."""
     from sqlalchemy import select
-    from app.models.organization import Organization
-    from app.models.user import User
+    from codelith.models.organization import Organization
+    from codelith.models.user import User
 
     org = (await db.execute(select(Organization).order_by(Organization.id).limit(1))).scalar_one_or_none()
     user = (await db.execute(select(User).order_by(User.id).limit(1))).scalar_one_or_none()
 
     if not org:
-        from app.core.security import get_password_hash
+        from codelith.core.security import get_password_hash
         org = Organization(name="Dev Org", slug="dev-org", plan_tier="free")
         db.add(org)
         await db.flush()
@@ -87,7 +87,7 @@ async def ensure_org_and_user(db):
         print(f"  [bootstrap] Created org '{org.name}' (id={org.id})")
 
     if not user:
-        from app.core.security import get_password_hash
+        from codelith.core.security import get_password_hash
         user = User(
             org_id=org.id,
             email="dev@localhost",
@@ -114,7 +114,7 @@ async def create_project_with_source(
     branch: str | None,
 ) -> tuple:
     """Create project + source, return (project, source)."""
-    from app.models.project import Project, ProjectSource
+    from codelith.models.project import Project, ProjectSource
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
 
@@ -160,7 +160,7 @@ async def create_project_with_source(
 
 
 async def create_job(db, project_id: int, user_id: int, doc_types: list[str], output_formats: list[str]):
-    from app.models.job import Job
+    from codelith.models.job import Job
     job = Job(
         project_id=project_id,
         created_by=user_id,
@@ -187,10 +187,10 @@ async def main(
     branch: str | None,
     job_id: int | None,
 ):
-    from app.core.logging import setup_logging
+    from codelith.core.logging import setup_logging
     setup_logging()
 
-    from app.db.session import AsyncSessionLocal
+    from codelith.db.session import AsyncSessionLocal
 
     source_type, resolved_path = _detect_source_type(path)
     name = project_name or _project_name_from_path(path)
@@ -227,7 +227,7 @@ async def main(
     print("  Running workflow (no Celery)...")
     print(f"{'='*62}\n")
 
-    from app.features.documentation.tasks.generation_tasks import _run_workflow
+    from codelith.features.documentation.tasks.generation_tasks import _run_workflow
 
     try:
         result = await _run_workflow(job_id)
@@ -237,7 +237,7 @@ async def main(
         sys.exit(1)
 
     # ── Final summary ─────────────────────────────────────────────────────────
-    from app.core.sandbox import JobSandbox
+    from codelith.core.sandbox import JobSandbox
     sandbox = JobSandbox(job_id)
 
     print(f"\n{'='*62}")

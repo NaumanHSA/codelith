@@ -23,10 +23,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.cancellation import JobCancelled
-from app.llm import client as client_mod
-from app.llm.client import _completion_params, stream_completion
-from app.llm.providers import ModelSpec
+from codelith.core.cancellation import JobCancelled
+from codelith.llm import client as client_mod
+from codelith.llm.client import _completion_params, stream_completion
+from codelith.llm.providers import ModelSpec
 
 
 def _delta(content: str | None = None, reasoning: str | None = None):
@@ -79,7 +79,7 @@ def fake_llm(monkeypatch):
         async def _no_cancel():
             return None
 
-        monkeypatch.setattr("app.core.cancellation.check_cancelled", _no_cancel)
+        monkeypatch.setattr("codelith.core.cancellation.check_cancelled", _no_cancel)
         return state
 
     return _make
@@ -155,7 +155,7 @@ class TestCancellationStopsTheModel:
             if seen["n"] > 2:
                 raise JobCancelled("stop")
 
-        monkeypatch.setattr("app.core.cancellation.check_cancelled", cancel_after_two)
+        monkeypatch.setattr("codelith.core.cancellation.check_cancelled", cancel_after_two)
 
         out: list[str] = []
         with pytest.raises(JobCancelled):

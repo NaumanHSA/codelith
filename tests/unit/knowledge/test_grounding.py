@@ -19,7 +19,7 @@ as ungrounded.
 
 from __future__ import annotations
 
-from app.knowledge.grounding import check_page
+from codelith.knowledge.grounding import check_page
 
 KNOWN = frozenset({
     "SessionFactory", "make_engine", "app/db/session.py", "session.py",

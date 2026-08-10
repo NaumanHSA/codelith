@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.knowledge.sites import coerce_doc_type, slugify, unique_slug
+from codelith.knowledge.sites import coerce_doc_type, slugify, unique_slug
 
 
 class TestSlugAssignment:
@@ -81,7 +81,7 @@ class TestAnchorRanking:
         assert order[1] == "b.py"
 
     def test_the_anchor_list_is_capped(self) -> None:
-        from app.knowledge.sites import MAX_KEY_FILES
+        from codelith.knowledge.sites import MAX_KEY_FILES
 
         ranked = {f"f{i}.py": 10 - i for i in range(20)}
         picked = [p for p, _ in sorted(ranked.items(), key=lambda kv: -kv[1])][:MAX_KEY_FILES]
@@ -98,7 +98,7 @@ class TestPinning:
         """
         import inspect
 
-        from app.features.documentation.services.site_service import SiteService
+        from codelith.apps.documentation.services.site_service import SiteService
 
         source = inspect.getsource(SiteService.merge_proposal)
         assert "not p.pinned" in source, "the orphaning pass must exempt pinned pages"

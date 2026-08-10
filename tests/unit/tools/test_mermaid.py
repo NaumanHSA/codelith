@@ -7,7 +7,7 @@ them, and they were discarded for an unrelated reason. These are the exact failu
 
 from __future__ import annotations
 
-from app.tools.mermaid import clean_mermaid, ungrounded_labels, validate_mermaid
+from codelith.tools.mermaid import clean_mermaid, ungrounded_labels, validate_mermaid
 
 
 class TestRealFailuresFromRun2:

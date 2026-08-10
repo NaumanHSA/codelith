@@ -20,9 +20,9 @@ valid D2, so three properties hold by construction and are asserted here:
 
 from __future__ import annotations
 
-from app.knowledge.constants import EntityKind
-from app.knowledge.diagrams import blast_radius, entity_map, module_map, system_context
-from app.tools.d2 import D2Diagram, ident
+from codelith.knowledge.constants import EntityKind
+from codelith.knowledge.diagrams import blast_radius, entity_map, module_map, system_context
+from codelith.tools.d2 import D2Diagram, ident
 
 FILES = [
     {"path": "app/api/v1/jobs.py", "module_key": "app/api/v1"},
@@ -246,7 +246,7 @@ class TestRenderedOutputIsWellFormed:
                     assert line.split("label:", 1)[1].strip().startswith('"')
 
     def test_it_is_accepted_by_d2_when_d2_is_available(self) -> None:
-        from app.tools.d2_render import d2_cli, validate
+        from codelith.tools.d2_render import d2_cli, validate
 
         if not d2_cli():
             import pytest

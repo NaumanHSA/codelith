@@ -6,14 +6,14 @@ import textwrap
 
 import pytest
 
-from app.knowledge.builder import (
+from codelith.knowledge.builder import (
     SourceFile,
     build_modules,
     chunk_files,
     entities_from_api_specs,
     merge_entities,
 )
-from app.knowledge.constants import EntityKind, ModuleRole
+from codelith.knowledge.constants import EntityKind, ModuleRole
 
 ROUTES_PY = textwrap.dedent(
     '''
@@ -153,8 +153,8 @@ class TestEntities:
 
     def test_invalid_entity_kinds_are_dropped(self) -> None:
         """A provider emitting an unknown kind must not poison the KB."""
-        from app.languages import registry
-        from app.languages.base import DetectedEntity
+        from codelith.languages import registry
+        from codelith.languages.base import DetectedEntity
 
         provider = registry.get("python")
         original = provider.detect_entities
@@ -190,7 +190,7 @@ class TestManifestDiscovery:
     """
 
     def test_finds_manifests_the_code_parser_would_miss(self, tmp_path) -> None:
-        from app.knowledge.builder import read_manifest_files
+        from codelith.knowledge.builder import read_manifest_files
 
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname="x"\ndependencies=["fastapi","httpx"]\n'
@@ -205,7 +205,7 @@ class TestManifestDiscovery:
         assert {d["name"] for d in deps} == {"fastapi", "httpx"}
 
     def test_finds_nested_manifests(self, tmp_path) -> None:
-        from app.knowledge.builder import read_manifest_files
+        from codelith.knowledge.builder import read_manifest_files
 
         (tmp_path / "svc").mkdir()
         (tmp_path / "svc" / "requirements.txt").write_text("httpx\n")
@@ -213,7 +213,7 @@ class TestManifestDiscovery:
         assert [f.path for f in read_manifest_files(tmp_path)] == ["svc/requirements.txt"]
 
     def test_skips_vendored_manifests(self, tmp_path) -> None:
-        from app.knowledge.builder import read_manifest_files
+        from codelith.knowledge.builder import read_manifest_files
 
         (tmp_path / "node_modules").mkdir()
         (tmp_path / "node_modules" / "requirements.txt").write_text("evil\n")
@@ -221,7 +221,7 @@ class TestManifestDiscovery:
         assert read_manifest_files(tmp_path) == []
 
     def test_missing_directory_is_not_an_error(self) -> None:
-        from app.knowledge.builder import read_manifest_files
+        from codelith.knowledge.builder import read_manifest_files
 
         assert read_manifest_files("/nope/does/not/exist") == []
 
@@ -256,20 +256,20 @@ class TestDocTypeSuggestions:
         ],
     )
     def test_evidence_drives_suggestions(self, kinds, expected) -> None:
-        from app.knowledge.roles import suggest_doc_types
+        from codelith.knowledge.roles import suggest_doc_types
 
         types = {s["doc_type"] for s in suggest_doc_types(kinds, {"service": 2})}
         assert expected in types
         assert "architecture" in types  # always offered
 
     def test_no_routes_means_no_api_doc_offered(self) -> None:
-        from app.knowledge.roles import suggest_doc_types
+        from codelith.knowledge.roles import suggest_doc_types
 
         types = {s["doc_type"] for s in suggest_doc_types({}, {"service": 1})}
         assert "api" not in types
 
     def test_suggestions_are_ordered_by_confidence(self) -> None:
-        from app.knowledge.roles import suggest_doc_types
+        from codelith.knowledge.roles import suggest_doc_types
 
         out = suggest_doc_types({"route": 40, "infra_resource": 2}, {"service": 5})
         assert out == sorted(out, key=lambda s: s["confidence"], reverse=True)
@@ -286,7 +286,7 @@ class TestChunkingMetadata:
 
     @staticmethod
     def _chunk(source: str):
-        from app.knowledge.builder import SourceFile, chunk_files
+        from codelith.knowledge.builder import SourceFile, chunk_files
 
         return chunk_files([SourceFile(path="pkg/mod.py", content=source, language="python")])
 

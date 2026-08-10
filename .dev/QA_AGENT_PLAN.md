@@ -86,9 +86,30 @@ starting point; 1 and 2 are additions.
 
 ---
 
+## The base analysis stays minimal — QA brings its own
+
+QA wants things the other apps do not: call graphs deep enough to trace a finding,
+per-symbol test association, dependency constraint parsing. Adding all of that to the
+shared analysis would make **every** project pay, in time and storage, for something
+most of them never ask for — and it would put QA's vocabulary in the base, which is
+the coupling the app split exists to remove.
+
+So an app may run **its own analysis pass on top of the base knowledge base**. The
+shared analysis stays the common substrate; QA deepens it when somebody actually opens
+QA, keyed to the same commit SHA.
+
+That makes it the first app with two stages rather than one, and it generalises: an
+app is defined by what it reads from the KB *and*, optionally, what it derives for
+itself. Worth getting the seam right here, because whatever QA does the next one will
+copy.
+
+Open question for the build: whether the deep pass is a separate job type with its own
+progress, or a lazy step inside the first QA request. A job is more honest about
+costing minutes, which it will.
+
 ## What it needs from the knowledge base
 
-The registry rule: a feature is defined by what it reads. This one reads
+The registry rule: an app is defined by what it reads. This one reads
 
 * **the graph** — `get_dependents`, `get_blast_radius`, to turn a finding into an impact
 * **entities** — `dependency`, `test_suite`, `route`, `cli_command`, `entrypoint`

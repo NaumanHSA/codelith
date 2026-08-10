@@ -9,8 +9,8 @@ change to a file changes it.
 
 from __future__ import annotations
 
-from app.agents.analysis.structured_extractor import StructuredExtractorAgent
-from app.knowledge.builder import SourceFile
+from codelith.agents.analysis.structured_extractor import StructuredExtractorAgent
+from codelith.knowledge.builder import SourceFile
 
 
 def hashes(**files: str) -> dict[str, str]:

@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.features.documentation.agents.planner import CompositionPlannerAgent
-from app.features.documentation.agents.writer import CompositionWriterAgent
+from codelith.apps.documentation.agents.planner import CompositionPlannerAgent
+from codelith.apps.documentation.agents.writer import CompositionWriterAgent
 
 
 class TestPlannerPublishesTheOutline:

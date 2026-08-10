@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.languages import registry
-from app.languages.base import LanguageProvider, Symbol
-from app.languages.registry import LanguageRegistry
-from app.languages.taxonomy import SymbolKind
+from codelith.languages import registry
+from codelith.languages.base import LanguageProvider, Symbol
+from codelith.languages.registry import LanguageRegistry
+from codelith.languages.taxonomy import SymbolKind
 
 
 class _FakeGoProvider(LanguageProvider):

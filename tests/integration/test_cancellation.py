@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from app.core.cancellation import (
+from codelith.core.cancellation import (
     CancellationToken,
     JobCancelled,
     check_cancelled,
@@ -117,9 +117,9 @@ class TestStreamingIsInterruptible:
         class FakeClient:
             chat = type("Chat", (), {"completions": FakeCompletions()})()
 
-        monkeypatch.setattr("app.llm.client.get_llm_client", lambda *a, **k: FakeClient())
+        monkeypatch.setattr("codelith.llm.client.get_llm_client", lambda *a, **k: FakeClient())
 
-        from app.llm.client import chat_completion
+        from codelith.llm.client import chat_completion
 
         async with CancellationToken(job_id, poll_interval=0) as token:
             set_token(token)
@@ -159,9 +159,9 @@ class TestStreamingIsInterruptible:
         class FakeClient:
             chat = type("Chat", (), {"completions": FakeCompletions()})()
 
-        monkeypatch.setattr("app.llm.client.get_llm_client", lambda *a, **k: FakeClient())
+        monkeypatch.setattr("codelith.llm.client.get_llm_client", lambda *a, **k: FakeClient())
 
-        from app.llm.client import chat_completion
+        from codelith.llm.client import chat_completion
 
         set_token(None)
         out = await chat_completion([{"role": "user", "content": "x"}], stream=True)
@@ -175,7 +175,7 @@ class TestRetryDoesNotFightCancellation:
         blanket predicate would retry it three times with exponential backoff — issuing
         more LLM calls after the user asked us to stop.
         """
-        from app.agents.base import BaseAgent
+        from codelith.agents.base import BaseAgent
 
         calls = {"n": 0}
 
@@ -183,7 +183,7 @@ class TestRetryDoesNotFightCancellation:
             calls["n"] += 1
             raise JobCancelled(1)
 
-        monkeypatch.setattr("app.agents.base.chat_completion", always_cancelled)
+        monkeypatch.setattr("codelith.agents.base.chat_completion", always_cancelled)
 
         class Probe(BaseAgent):
             name = "probe"
@@ -207,9 +207,9 @@ class TestFanOutPropagation:
         """
         import inspect
 
-        from app.agents.analysis.module_summarizer import ModuleSummarizerAgent
-        from app.agents.analysis.narrative_writer import NarrativeWriterAgent
-        from app.features.documentation.agents.writer import CompositionWriterAgent
+        from codelith.agents.analysis.module_summarizer import ModuleSummarizerAgent
+        from codelith.agents.analysis.narrative_writer import NarrativeWriterAgent
+        from codelith.apps.documentation.agents.writer import CompositionWriterAgent
 
         for agent in (CompositionWriterAgent, ModuleSummarizerAgent, NarrativeWriterAgent):
             src = inspect.getsource(agent)

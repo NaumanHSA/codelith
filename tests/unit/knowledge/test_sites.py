@@ -9,7 +9,7 @@ type or a `key_files` entry that the rest of the system cannot honour.
 
 from __future__ import annotations
 
-from app.knowledge.sites import (
+from codelith.knowledge.sites import (
     DEFAULT_DOC_TYPE,
     MAX_KEY_FILES,
     coerce_doc_type,

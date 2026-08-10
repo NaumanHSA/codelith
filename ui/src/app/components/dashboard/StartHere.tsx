@@ -13,7 +13,7 @@ import type { Project } from '../../lib/types'
 
 export default function StartHere({ projects }: { projects: Project[] | null }) {
   const none = projects !== null && projects.length === 0
-  const unanalysed = (projects ?? []).filter(p => !p.features_ready)
+  const unanalysed = (projects ?? []).filter(p => !p.apps_ready)
 
   // First visit: the whole band is the invitation, because there is nothing else
   // true to say yet.

@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.knowledge.constants import EntityKind
-from app.languages.base import ImportRef
-from app.languages.registry import registry
-from app.languages.taxonomy import Visibility
+from codelith.knowledge.constants import EntityKind
+from codelith.languages.base import ImportRef
+from codelith.languages.registry import registry
+from codelith.languages.taxonomy import Visibility
 from tests.unit.languages.conformance import ALL_CASES, ConformanceCase
 
 

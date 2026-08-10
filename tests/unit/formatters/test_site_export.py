@@ -16,15 +16,15 @@ import zipfile
 import pytest
 import yaml
 
-from app.features.documentation.formatters.docusaurus import DocusaurusFormatter
-from app.features.documentation.formatters.mkdocs import MkDocsFormatter
-from app.features.documentation.formatters.site_tree import (
+from codelith.apps.documentation.formatters.docusaurus import DocusaurusFormatter
+from codelith.apps.documentation.formatters.mkdocs import MkDocsFormatter
+from codelith.apps.documentation.formatters.site_tree import (
     ExportPage,
     ExportSection,
     SiteTree,
     rewrite_links,
 )
-from app.features.documentation.formatters.static_site import StaticSiteFormatter
+from codelith.apps.documentation.formatters.static_site import StaticSiteFormatter
 
 
 def page(section: str, slug: str, title: str, body: str = "Prose.") -> ExportPage:

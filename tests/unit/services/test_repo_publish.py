@@ -23,9 +23,9 @@ from pathlib import Path
 
 import pytest
 
-from app.features.documentation.formatters.site_tree import ExportPage, ExportSection, SiteTree
-from app.features.documentation.services.repo_publish import build_plan
-from app.features.documentation.services.repo_publish_git import GitError, apply_plan
+from codelith.apps.documentation.formatters.site_tree import ExportPage, ExportSection, SiteTree
+from codelith.apps.documentation.services.repo_publish import build_plan
+from codelith.apps.documentation.services.repo_publish_git import GitError, apply_plan
 
 
 def _tree(**overrides) -> SiteTree:
@@ -257,7 +257,7 @@ class TestApplying:
         all, which is asserted here so a later refactor cannot quietly add one."""
         import inspect
 
-        from app.features.documentation.services import repo_publish_git
+        from codelith.apps.documentation.services import repo_publish_git
 
         source = inspect.getsource(repo_publish_git)
         for forbidden in ('"push"', "'push'", "remote", "gh ", "api.github.com"):

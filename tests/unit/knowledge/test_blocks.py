@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.knowledge.blocks import (
+from codelith.knowledge.blocks import (
     find_blocks,
     outline,
     replace_block,

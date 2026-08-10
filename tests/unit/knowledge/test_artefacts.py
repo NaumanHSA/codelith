@@ -15,7 +15,7 @@ absence stayed silent.
 
 from __future__ import annotations
 
-from app.knowledge.artefacts import ARTEFACTS, profile, render
+from codelith.knowledge.artefacts import ARTEFACTS, profile, render
 
 
 class TestWhatIsThere:

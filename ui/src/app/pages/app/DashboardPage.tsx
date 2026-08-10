@@ -6,7 +6,7 @@ import { countLabel, formatDateTime, relativeTime } from '../../lib/format'
 import { StatusBadge, Eyebrow, Panel } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import StartHere from '../../components/dashboard/StartHere'
-import FeatureCards from '../../components/dashboard/FeatureCards'
+import AppCards from '../../components/dashboard/AppCards'
 import type { Doc, Job, Project } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
@@ -142,7 +142,7 @@ function ActivitySpark({ jobs }: { jobs: Job[] }) {
 export default function DashboardPage() {
   const projects = useAsync(sig => api.projects(50, 0), [])
   const docs = useAsync(sig => api.documents(undefined, 10, 0), [])
-  const features = useAsync(sig => api.featureCatalog(sig), [])
+  const features = useAsync(sig => api.appCatalog(sig), [])
 
   /* Collect all recent jobs from the first few projects in parallel.
      We load up to 5 projects' jobs so the dashboard has real data. */
@@ -189,7 +189,7 @@ export default function DashboardPage() {
 
       <StartHere projects={projects.data ?? null} />
 
-      <FeatureCards features={features.data ?? null} projects={projects.data ?? null} />
+      <AppCards features={features.data ?? null} projects={projects.data ?? null} />
 
       {/* Stats row */}
       <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 border border-rule">

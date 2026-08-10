@@ -7,7 +7,7 @@ API_HOST="${APP_HOST:-0.0.0.0}"
 API_PORT="${APP_PORT:-8000}"
 
 # Absolute, not ".". `conda run` executes from its own temporary directory, so a
-# relative PYTHONPATH resolves somewhere unrelated and `app` becomes whatever else
+# relative PYTHONPATH resolves somewhere unrelated and `codelith` becomes whatever else
 # happens to be importable.
 export PYTHONPATH="${PYTHONPATH:-$(pwd)}"
 
@@ -24,7 +24,7 @@ export PYTHONPATH="${PYTHONPATH:-$(pwd)}"
 # afternoon to diagnose. Set RELOAD=1 to opt back in.
 RELOAD_ARGS=()
 if [ "${RELOAD:-0}" = "1" ]; then
-    RELOAD_ARGS=(--reload --reload-dir app)
+    RELOAD_ARGS=(--reload --reload-dir codelith)
 fi
 
 # ── Pick an interpreter ───────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ fi
 
 # ── Start Celery worker in background ─────────────────────────────────────────
 echo "[dev] Starting Celery worker ($ENV_LABEL)..."
-run celery -A app.workers.celery_app worker \
+run celery -A codelith.workers.celery_app worker \
     --loglevel=info \
     --concurrency=4 \
     -Q ingestion,generation,export &
@@ -79,7 +79,7 @@ sleep 1
 
 # ── Start API (foreground) ────────────────────────────────────────────────────
 echo "[dev] Starting API on http://$API_HOST:$API_PORT ($ENV_LABEL)..."
-run uvicorn app.main:app \
+run uvicorn codelith.main:app \
     --host "$API_HOST" \
     --port "$API_PORT" \
     "${RELOAD_ARGS[@]}"

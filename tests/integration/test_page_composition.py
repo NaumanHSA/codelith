@@ -19,23 +19,23 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.analysis import StructuredExtractorAgent
-from app.features.documentation.agents import (
+from codelith.agents.analysis import StructuredExtractorAgent
+from codelith.apps.documentation.agents import (
     CompositionPlannerAgent,
     CompositionWriterAgent,
     KBLoaderAgent,
 )
-from app.features.documentation.agents.publisher import PublisherAgent
-from app.core.exceptions import ValidationError
-from app.db.repositories.knowledge import KnowledgeRepositories
-from app.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
-from app.knowledge.constants import KBStatus, NarrativeTopic, PageStatus
-from app.models.chunk import CodeChunk
-from app.models.job import Job
-from app.models.organization import Organization
-from app.models.project import Project
-from app.models.user import User
-from app.features.documentation.services.site_service import SiteService
+from codelith.apps.documentation.agents.publisher import PublisherAgent
+from codelith.core.exceptions import ValidationError
+from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
+from codelith.knowledge.constants import KBStatus, NarrativeTopic, PageStatus
+from codelith.models.chunk import CodeChunk
+from codelith.models.job import Job
+from codelith.models.organization import Organization
+from codelith.models.project import Project
+from codelith.models.user import User
+from codelith.apps.documentation.services.site_service import SiteService
 
 ROUTES = textwrap.dedent(
     '''
@@ -285,7 +285,7 @@ class TestPagePlanning:
                 ]
             }
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_json)
         state = await self._loaded(db_session, kb, ["api/endpoints"])
 
         result = await CompositionPlannerAgent(db=db_session, job_id=kb["job"].id).run(state)
@@ -303,7 +303,7 @@ class TestPagePlanning:
         async def fake_json(self, messages, task_type="plan", **kwargs):
             return None
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_json)
         state = await self._loaded(db_session, kb, ["api/endpoints"])
 
         result = await CompositionPlannerAgent(db=db_session, job_id=kb["job"].id).run(state)
@@ -351,7 +351,7 @@ class TestPageWriting:
             return "Prose."
 
         state = await self._planned(db_session, kb, monkeypatch)
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", capture)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", capture)
         await CompositionWriterAgent(db=db_session, job_id=kb["job"].id).run(state)
 
         assert any("Schemas" in prompt and "Errors" in prompt for prompt in seen)
@@ -365,7 +365,7 @@ class TestPageWriting:
         async def empty(self, messages, task_type="write", **kwargs):
             return ""
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", empty)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", empty)
         written = await CompositionWriterAgent(db=db_session, job_id=kb["job"].id).run(state)
         await PublisherAgent(db=db_session, job_id=kb["job"].id).run(state | written)
 
@@ -403,8 +403,8 @@ class TestPageWriting:
         async def fake_write(self, messages, task_type="write", **kwargs):
             return "Prose about the architecture."
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_json)
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", fake_write)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", fake_write)
 
         state = {
             "project": kb["project"],
@@ -429,7 +429,7 @@ class TestPageWriting:
                  "key_files": ["app/api/routes.py"]}
             ]}
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_json)
         state = {
             "project": kb["project"],
             "job": kb["job"],
@@ -445,7 +445,7 @@ class TestPageWriting:
         async def fake_write(self, messages, task_type="write", **kwargs):
             return "The `get_widget` handler returns one widget."
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", fake_write)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", fake_write)
         return state | await CompositionWriterAgent(db=db_session, job_id=kb["job"].id).run(state)
 
 
@@ -545,7 +545,7 @@ class TestStaleness:
     @staticmethod
     async def _rebuild(db_session, kb, *, changed: dict[str, str]) -> object:
         """A second knowledge base for the same project at a new commit."""
-        from app.models.knowledge import KnowledgeBase
+        from codelith.models.knowledge import KnowledgeBase
 
         repos = KnowledgeRepositories.for_session(db_session)
         old = await repos.bases.get_by_id(kb["kb_id"])
@@ -597,7 +597,7 @@ class TestStaleness:
     async def test_a_deleted_source_file_makes_the_page_stale(
         self, db_session, kb, sites, monkeypatch
     ) -> None:
-        from app.models.knowledge import KnowledgeBase
+        from codelith.models.knowledge import KnowledgeBase
 
         written = await self._write(db_session, kb, sites, monkeypatch)
         new_kb = KnowledgeBase(
@@ -770,7 +770,7 @@ class TestVersions:
     async def test_a_snapshot_never_goes_stale(
         self, db_session, kb, sites, user, monkeypatch
     ) -> None:
-        from app.models.knowledge import KnowledgeBase
+        from codelith.models.knowledge import KnowledgeBase
 
         site = await self._written_site(db_session, kb, sites, monkeypatch)
         await sites.create_version(kb["project"].id, "v1.0", user)
@@ -806,7 +806,7 @@ class TestVersions:
             await sites.create_version(kb["project"].id, "v0", user)
 
     async def test_an_unknown_version_label_404s(self, kb, sites, user) -> None:
-        from app.core.exceptions import NotFoundError
+        from codelith.core.exceptions import NotFoundError
 
         with pytest.raises(NotFoundError):
             await sites.get_site(kb["project"].id, user, "nope")
@@ -891,7 +891,7 @@ class TestExport:
 
 class TestFanOut:
     def test_the_graph_sends_one_writer_per_page(self, kb) -> None:
-        from app.features.documentation.workflows.composition_workflow import CompositionWorkflow
+        from codelith.apps.documentation.workflows.composition_workflow import CompositionWorkflow
 
         workflow = CompositionWorkflow(project=kb["project"], job=kb["job"], db=None)
         sends = workflow._fan_out_writers(
@@ -903,7 +903,7 @@ class TestFanOut:
         ]
 
     def test_without_pages_it_still_sends_one_writer_per_doc_type(self, kb) -> None:
-        from app.features.documentation.workflows.composition_workflow import CompositionWorkflow
+        from codelith.apps.documentation.workflows.composition_workflow import CompositionWorkflow
 
         workflow = CompositionWorkflow(project=kb["project"], job=kb["job"], db=None)
         sends = workflow._fan_out_writers({"doc_types": ["architecture", "api"]})

@@ -15,20 +15,20 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.analysis import StructuredExtractorAgent
-from app.features.documentation.agents import (
+from codelith.agents.analysis import StructuredExtractorAgent
+from codelith.apps.documentation.agents import (
     CompositionPlannerAgent,
     CompositionWriterAgent,
     KBLoaderAgent,
 )
-from app.db.repositories.knowledge import KnowledgeRepositories
-from app.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
-from app.knowledge.constants import KBStatus, NarrativeTopic
-from app.knowledge.retrieval import SectionContextBuilder
-from app.models.chunk import CodeChunk
-from app.models.job import Job
-from app.models.organization import Organization
-from app.models.project import Project
+from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
+from codelith.knowledge.constants import KBStatus, NarrativeTopic
+from codelith.knowledge.retrieval import SectionContextBuilder
+from codelith.models.chunk import CodeChunk
+from codelith.models.job import Job
+from codelith.models.organization import Organization
+from codelith.models.project import Project
 
 ROUTES = textwrap.dedent(
     '''
@@ -188,7 +188,7 @@ class TestPlanner:
                 ],
             }
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_json)
 
         result = await CompositionPlannerAgent(db=db_session, job_id=kb["job"].id).run(
             {"project": kb["project"], "kb_id": kb["kb_id"], "doc_types": ["api"]}
@@ -206,7 +206,7 @@ class TestPlanner:
             return {"title": bad_title, "sections": [
                 {"name": "Endpoints", "focus": "routes", "key_files": ["app/api/routes.py"]}]}
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", fake_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", fake_json)
 
         result = await CompositionPlannerAgent(db=db_session, job_id=kb["job"].id).run(
             {"project": kb["project"], "kb_id": kb["kb_id"], "doc_types": ["api"]}
@@ -219,7 +219,7 @@ class TestPlanner:
         async def no_json(self, messages, task_type="plan", **kwargs):
             return None
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm_json", no_json)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm_json", no_json)
 
         result = await CompositionPlannerAgent(db=db_session, job_id=kb["job"].id).run(
             {"project": kb["project"], "kb_id": kb["kb_id"], "doc_types": ["api"]}
@@ -254,7 +254,7 @@ class TestWriter:
             calls.append(messages[1]["content"])
             return "Prose grounded in the context."
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", fake_llm)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", fake_llm)
 
         result = await CompositionWriterAgent(db=db_session, job_id=kb["job"].id).run(
             {"project": kb["project"], "kb_id": kb["kb_id"], "doc_types": ["api"],
@@ -280,7 +280,7 @@ class TestWriter:
             attempts.append(1)
             return "NEED_CONTEXT: how does auth work"
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", always_asks)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", always_asks)
 
         result = await CompositionWriterAgent(db=db_session, job_id=kb["job"].id).run(
             {"project": kb["project"], "kb_id": kb["kb_id"], "doc_types": ["api"],
@@ -304,7 +304,7 @@ class TestWriter:
                 raise RuntimeError("model exploded")
             return "Second section survived."
 
-        monkeypatch.setattr("app.agents.base.BaseAgent._call_llm", flaky)
+        monkeypatch.setattr("codelith.agents.base.BaseAgent._call_llm", flaky)
 
         result = await CompositionWriterAgent(db=db_session, job_id=kb["job"].id).run(
             {"project": kb["project"], "kb_id": kb["kb_id"], "doc_types": ["api"],
@@ -317,7 +317,7 @@ class TestWriter:
 
 class TestGraphShape:
     def test_composition_state_reduces_only_generated_docs(self) -> None:
-        from app.features.documentation.workflows.composition_states import CompositionState
+        from codelith.apps.documentation.workflows.composition_states import CompositionState
 
         annotations = CompositionState.__annotations__
         assert "kb_id" in annotations
@@ -327,7 +327,7 @@ class TestGraphShape:
         assert "repo_path" not in annotations
 
     def test_workflow_compiles_with_the_reused_back_half(self, kb) -> None:
-        from app.features.documentation.workflows.composition_workflow import CompositionWorkflow
+        from codelith.apps.documentation.workflows.composition_workflow import CompositionWorkflow
 
         graph = CompositionWorkflow(
             project=kb["project"], job=kb["job"], db=None
