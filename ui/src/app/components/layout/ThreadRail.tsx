@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useChatThreads } from '../../chat-threads'
@@ -19,6 +20,9 @@ import ConfirmDelete from '../ConfirmDelete'
 export const NEW_CHAT = (projectId?: number) =>
   `/app/chat?thread=new${projectId ? `&project=${projectId}` : ''}`
 
+/** Menu width, needed before the menu exists to keep it on screen. */
+const MENU_W = 150
+
 function RowMenu({
   thread,
   onDeleted,
@@ -26,24 +30,56 @@ function RowMenu({
   thread: ChatThreadSummary
   onDeleted: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const open = at !== null
 
-  // Any click elsewhere closes it. Without this the menu survives navigation and
-  // hangs over whatever the reader opened next.
+  /**
+   * Opening measures the trigger and pins the menu to the viewport.
+   *
+   * The rail is a scroll container with a bounded height, so a menu rendered
+   * inside it was clipped at the edge and pushed the list into scrolling. This
+   * one lives in a portal on `document.body` and is positioned from the
+   * trigger's rect — which is also why it has to close on scroll rather than
+   * follow it.
+   */
+  const openMenu = () => {
+    const r = trigger.current?.getBoundingClientRect()
+    if (!r) return
+    const left = Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
+    const below = window.innerHeight - r.bottom
+    // Flip above the trigger when there is not room beneath it — threads near the
+    // bottom of a long list otherwise open a menu half off the screen.
+    const top = below < 90 ? r.top - 78 : r.bottom + 4
+    setAt({ top, left: Math.max(8, left) })
+  }
+
+  // Anything that moves or dismisses closes it: a click elsewhere, Escape, a
+  // scroll, a resize. A fixed menu that survives a scroll detaches from the row
+  // it belongs to and points at the wrong thread.
   useEffect(() => {
     if (!open) return
-    const close = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false)
+    const close = () => setAt(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
     }
     document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    document.addEventListener('keydown', onKey)
+    // Capture: the rail's own scroll does not bubble to window.
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
   }, [open])
 
   const exportMd = async () => {
-    setOpen(false)
+    setAt(null)
     setBusy(true)
     try {
       await api.exportChatThread(thread.project_id, thread.id, thread.title)
@@ -55,13 +91,17 @@ function RowMenu({
   }
 
   return (
-    <div ref={box} className="relative shrink-0">
+    <div className="shrink-0">
       <button
+        ref={trigger}
         type="button"
         aria-label={`Options for ${thread.title}`}
+        aria-expanded={open}
+        onMouseDown={e => e.stopPropagation()}
         onClick={e => {
           e.stopPropagation()
-          setOpen(o => !o)
+          if (open) setAt(null)
+          else openMenu()
         }}
         className={`flex size-5 items-center justify-center text-[13px] leading-none transition-colors ${
           open ? 'text-hot-ink' : 'text-ink-dim hover:text-ink'
@@ -70,31 +110,36 @@ function RowMenu({
         ⋯
       </button>
 
-      {open && (
-        <div className="absolute top-full right-0 z-30 mt-1 w-[136px] border border-rule bg-panel shadow-sm">
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation()
-              void exportMd()
-            }}
-            className="block w-full px-2.5 py-1.5 text-left text-[11px] text-ink-mid transition-colors hover:bg-sunk hover:text-ink"
+      {at &&
+        createPortal(
+          <div
+            role="menu"
+            style={{ position: 'fixed', top: at.top, left: at.left, width: MENU_W }}
+            // The dismiss listener is on mousedown, so the menu must stop its own
+            // or every click closes it before the button below can fire.
+            onMouseDown={e => e.stopPropagation()}
+            className="z-50 border border-rule bg-panel shadow-md"
           >
-            Export as Markdown
-          </button>
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation()
-              setOpen(false)
-              setConfirming(true)
-            }}
-            className="block w-full border-t border-rule px-2.5 py-1.5 text-left text-[11px] text-ink-mid transition-colors hover:bg-bad-wash hover:text-bad"
-          >
-            Delete
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => void exportMd()}
+              className="block w-full px-2.5 py-1.5 text-left text-[11px] text-ink-mid transition-colors hover:bg-sunk hover:text-ink"
+            >
+              Export as Markdown
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAt(null)
+                setConfirming(true)
+              }}
+              className="block w-full border-t border-rule px-2.5 py-1.5 text-left text-[11px] text-ink-mid transition-colors hover:bg-bad-wash hover:text-bad"
+            >
+              Delete
+            </button>
+          </div>,
+          document.body,
+        )}
 
       <ConfirmDelete
         open={confirming}
