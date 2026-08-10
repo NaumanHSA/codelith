@@ -408,7 +408,7 @@ export const api = {
     request<void>(`/projects/${projectId}/chat/thread/${threadId}`, { method: 'DELETE' }),
 
   /** Recent conversations across every project, for the rail. */
-  /** Every feature, with no codebase in the picture. For the dashboard.
+  /** Every feature, with no codebase in the picture. For Home.
    *  Named `appCatalog` because `features` is the settings feature-flag call. */
   appCatalog: (signal?: AbortSignal) =>
     request<AppCatalogItem[]>('/apps', { signal }),

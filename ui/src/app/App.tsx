@@ -11,7 +11,7 @@ import Shell from './components/layout/Shell'
 import LandingPage from './pages/LandingPage'
 import SignInPage from './pages/auth/SignInPage'
 import RegisterPage from './pages/auth/RegisterPage'
-import DashboardPage from './pages/app/DashboardPage'
+import HomePage from './pages/app/HomePage'
 import ProjectsPage from './pages/app/ProjectsPage'
 import ProjectDetailPage from './pages/app/ProjectDetailPage'
 import JobProgressPage from './pages/app/JobProgressPage'
@@ -87,7 +87,7 @@ export default function App() {
                   </RequireAuth>
                 }
               >
-                <Route index element={<DashboardPage />} />
+                <Route index element={<HomePage />} />
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="projects/:projectId" element={<ProjectDetailPage />} />
                 <Route path="projects/:projectId/compose" element={<ComposePage />} />

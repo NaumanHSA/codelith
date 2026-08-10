@@ -105,7 +105,7 @@ export default function ProjectsPage() {
   const [q, setQ] = useState('')
   const [view, setView] = useState<'grid' | 'table'>('grid')
   const [searchParams, setSearchParams] = useSearchParams()
-  // `?new=1` opens the form directly, so "Add a codebase" on the dashboard lands on
+  // `?new=1` opens the form directly, so "Add a codebase" on Home lands on
   // the action rather than on a list the reader then has to find the button in.
   const [creating, setCreating] = useState(searchParams.get('new') === '1')
 
