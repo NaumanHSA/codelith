@@ -1,6 +1,6 @@
 # Codelith — where the work stands
 
-*Snapshot: 10 August 2026, `da35a8a`. Update the numbers when they stop being true.*
+*Snapshot: 16 August 2026, `6b23486`. Update the numbers when they stop being true.*
 
 ---
 
@@ -25,15 +25,15 @@ features (see *Deliberately not built*).
 | | |
 |---|---|
 | First commit | 8 June 2026 |
-| Commits | 103 |
-| Python | 241 files, ~32,300 lines |
-| Studio (TS/TSX) | 62 files, ~12,300 lines |
-| Tests | 59 files — **930 unit passing, 1 skipped**; 166 integration collected (needs Docker) |
+| Commits | 107 |
+| Python | 245 files, ~31,900 lines |
+| Studio (TS/TSX) | 66 files, ~12,400 lines |
+| Tests | 51 files — **799 unit passing, 2 skipped, 4 failing**; 166 integration collected (needs Docker) |
 | Migrations | 12 |
-| HTTP routes | 62 |
-| Apps built | 3 |
+| HTTP routes | 48 |
+| Apps on `main` | 2 — Quality is built but parked on `feat/qa` |
 | Languages analysed | Python, TypeScript, Go, Java |
-| Languages checked by Quality | Python only |
+| Languages checked by Quality | Python only (on `feat/qa`) |
 
 ## The shape
 
@@ -71,18 +71,24 @@ app, stop: the app is asking for something the KB should hold for everyone.
 - **Six KB tools** — `search_code`, `read_file`, `find_callers`, `find_dependents`,
   `blast_radius`, `list_facts`. Used by Ask, and exposed over MCP.
 
-### The three apps
+### The apps
 
 | App | Reads | State |
 |---|---|---|
-| **Documentation** | retrieval · narratives · entities | Built. Markdown / DOCX / MkDocs / Docusaurus. Document types are offered from what the code contains, so a repo with no HTTP routes is never offered an API reference. |
-| **Ask the code** | retrieval · code graph · entities | Built. Threaded conversations, persisted, exportable. Citations checked. |
-| **Quality** | code graph · entities · modules | Built (Q0–Q8, Aug 2026). Findings from ruff and mypy **ranked by what each one touches**; surface with no test; offline dependency audit; layering rules derived from the codebase itself. |
+| **Documentation** | retrieval · narratives · entities | Built, on `main`. Markdown / DOCX / MkDocs / Docusaurus. Document types are offered from what the code contains, so a repo with no HTTP routes is never offered an API reference. |
+| **Ask the code** | retrieval · code graph · entities | Built, on `main`. Threaded conversations, persisted, exportable. Citations checked. |
+| **Quality** | code graph · entities · modules | Built (Q0–Q8, Aug 2026), then **parked on `feat/qa`**. Findings from ruff and mypy **ranked by what each one touches**; surface with no test; offline dependency audit; layering rules derived from the codebase itself. |
 
-Quality is the first app with **two stages**: `codelith/apps/qa/deep.py` parses the checkout
-for per-file symbol spans, because the KB stores symbols per module and records only where
-they start. Derived data stays inside the app — a project that never opens Quality never
-pays for it. That is the pattern for any future app that needs more than the KB holds.
+**Why Quality is parked.** It is the youngest of the three and it matured against two
+neighbours still changing shape. An app held to a moving contract is an app rebuilt
+twice, so it waits until Documentation and Ask settle. It comes back from that branch
+whole, not re-added piecemeal. Nothing migrated on the way out — it owned no tables.
+
+Quality was the first app with **two stages**: `codelith/apps/qa/deep.py` parses the
+checkout for per-file symbol spans, because the KB stores symbols per module and records
+only where they start. Derived data stays inside the app — a project that never opens an
+app never pays for it. That is still the pattern for any future app that needs more than
+the KB holds.
 
 ### Not an app
 
@@ -116,7 +122,9 @@ These are enforced by tests, not by convention or review.
 ## Deliberately not built
 
 Recorded so that nine green ticks in a plan don't read as "everything got built". Each has
-a section in `.dev/QA_AGENT_PLAN.md` saying what it would take.
+a section in `.dev/QA_AGENT_PLAN.md` saying what it would take. The Quality rows describe
+gaps in the app as it stands on `feat/qa`; they are what it comes back to, not work
+outstanding on `main`.
 
 | | Why |
 |---|---|
@@ -131,6 +139,10 @@ a section in `.dev/QA_AGENT_PLAN.md` saying what it would take.
 
 Honest list. Nothing here is a crisis; all of it is worth knowing before trusting a number.
 
+- **Four unit tests fail against the installed MCP SDK.** `tests/unit/test_mcp_server.py`
+  reads `Tool.inputSchema`; the SDK renamed it to `input_schema`. The server itself is
+  unaffected — the tests assert on the SDK's own model, not on our behaviour — but a red
+  suite trains people to ignore a red suite, so this should be fixed rather than tolerated.
 - **Almost every measurement came from one repository.** `neurosurfer`, 257 Python files.
   Every false positive fixed so far was found by running against real code, which is
   reason to believe a second codebase will find more.
