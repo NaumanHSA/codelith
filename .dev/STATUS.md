@@ -28,7 +28,7 @@ features (see *Deliberately not built*).
 | Commits | 107 |
 | Python | 245 files, ~31,900 lines |
 | Studio (TS/TSX) | 66 files, ~12,400 lines |
-| Tests | 51 files — **799 unit passing, 2 skipped, 4 failing**; 166 integration collected (needs Docker) |
+| Tests | 51 files — **803 unit passing, 2 skipped**; 166 integration collected (needs Docker) |
 | Migrations | 12 |
 | HTTP routes | 48 |
 | Apps on `main` | 2 — Quality is built but parked on `feat/qa` |
@@ -139,10 +139,11 @@ outstanding on `main`.
 
 Honest list. Nothing here is a crisis; all of it is worth knowing before trusting a number.
 
-- **Four unit tests fail against the installed MCP SDK.** `tests/unit/test_mcp_server.py`
-  reads `Tool.inputSchema`; the SDK renamed it to `input_schema`. The server itself is
-  unaffected — the tests assert on the SDK's own model, not on our behaviour — but a red
-  suite trains people to ignore a red suite, so this should be fixed rather than tolerated.
+- **The MCP server is held at `mcp<2` by a pin, not by a port.** 2.0 dropped the
+  `@server.list_tools()` / `@server.call_tool()` decorators `codelith/mcp/server.py` is
+  written against; its `Server` is handler-registration only. `>=1.0.0` let a resolver
+  take that upgrade on our behalf and broke four tests. Pinned for now — the port is real
+  work and should be chosen, not stumbled into.
 - **Almost every measurement came from one repository.** `neurosurfer`, 257 Python files.
   Every false positive fixed so far was found by running against real code, which is
   reason to believe a second codebase will find more.

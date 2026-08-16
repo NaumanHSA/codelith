@@ -41,7 +41,11 @@ dependencies = [
     "langgraph>=0.2.60",
     "langchain-core>=0.3.25",
     "langchain-mcp-adapters>=0.1.0",
-    "mcp>=1.0.0",
+    # <2: mcp 2.0 removed the `@server.list_tools()` / `@server.call_tool()` decorators
+    # that `codelith/mcp/server.py` is built on — `Server` there is handler-registration
+    # only. Porting is a deliberate piece of work, not something a resolver should do on
+    # our behalf, which is what `>=1.0.0` allowed.
+    "mcp>=1.24.0,<2.0",
 
     # UI / tracing output
     "rich>=13.0.0",
