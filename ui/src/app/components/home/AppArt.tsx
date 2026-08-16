@@ -92,45 +92,8 @@ export function AskArt() {
   )
 }
 
-/** Quality — a finding, and how far it reaches. */
-export function QualityArt() {
-  return (
-    <svg viewBox={BOX} className={SVG} fill="none" aria-hidden>
-      <g className="text-rule" stroke="currentColor" strokeWidth="1">
-        <circle cx="60" cy="32" r="12" />
-        <circle cx="60" cy="32" r="21" strokeDasharray="3 3" />
-        <circle cx="60" cy="32" r="29" strokeDasharray="2 4" />
-      </g>
-
-      {/* Reached from the fault outward, not scattered around it. */}
-      <g className="text-rule" stroke="currentColor" strokeWidth="1">
-        <path d="M60 32l-18-11M60 32l20-9M60 32l16 15M60 32l-15 14M60 32l27 3" />
-      </g>
-      <g className="text-ink" fill="var(--panel)" stroke="currentColor" strokeWidth="1.1">
-        <rect x="38.5" y="17.5" width="7" height="7" />
-        <rect x="76.5" y="19.5" width="7" height="7" />
-        <rect x="72.5" y="43.5" width="7" height="7" />
-        <rect x="41.5" y="42.5" width="7" height="7" />
-        <rect x="83.5" y="31.5" width="7" height="7" />
-      </g>
-
-      {/* The finding itself. */}
-      <rect
-        x="54"
-        y="26"
-        width="12"
-        height="12"
-        className="text-hot"
-        fill="currentColor"
-        transform="rotate(45 60 32)"
-      />
-    </svg>
-  )
-}
-
 /** Drawn by app id, so an app with no drawing simply has none. */
 export const APP_ART: Record<string, () => React.ReactElement> = {
   documentation: DocumentationArt,
   ask: AskArt,
-  qa: QualityArt,
 }

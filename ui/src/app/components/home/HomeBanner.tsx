@@ -29,7 +29,7 @@ const STEPS = [
   },
   {
     label: 'Unlock',
-    desc: 'Documentation, Ask the code and Quality become available together. They read one knowledge base.',
+    desc: 'Documentation and Ask the code become available together. They read one knowledge base.',
   },
   {
     label: 'Use',

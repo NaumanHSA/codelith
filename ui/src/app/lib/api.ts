@@ -10,7 +10,7 @@ import type {
   Doc, Features, Job, JobLog, KnowledgeBase, LLMSettings, ProbeResult,
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
-  ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem, QualityReport,
+  ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
 } from './types'
 
 export const API_BASE =
@@ -416,17 +416,6 @@ export const api = {
   /** What this codebase unlocks, and what it does not yet. */
   projectApps: (projectId: number, signal?: AbortSignal) =>
     request<ProjectApp[]>(`/projects/${projectId}/apps`, { signal }),
-
-  /**
-   * Check a codebase. Slow by nature — it clones the repository and runs two
-   * whole-repository passes over it — so the caller shows progress rather than a
-   * spinner, and the response says how long each tool took.
-   */
-  runQuality: (projectId: number, signal?: AbortSignal) =>
-    request<QualityReport>(`/projects/${projectId}/quality/run`, {
-      method: 'POST',
-      signal,
-    }),
 
   chatThreads: (limit = 40) =>
     request<ChatThreadSummary[]>(`/chat/threads?limit=${limit}`),

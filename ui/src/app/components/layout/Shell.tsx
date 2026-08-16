@@ -7,7 +7,6 @@ import { GitHubMark, Logo } from '../ui'
 import { ChatThreadsProvider } from '../../chat-threads'
 import { ProjectsListProvider, useProjectsList } from '../../projects-list'
 import ThreadRail from './ThreadRail'
-import QualityRail from './QualityRail'
 import DocsRail from './DocsRail'
 import { RailAction, RailNote, RailRow } from './RailRow'
 
@@ -196,9 +195,6 @@ function ShellBody() {
 
           <SectionLabel>Ask the code</SectionLabel>
           <ThreadRail />
-
-          <SectionLabel>Quality</SectionLabel>
-          <QualityRail />
 
           <SectionLabel count={projects.length || undefined}>Codebases</SectionLabel>
           <CodebaseRail />

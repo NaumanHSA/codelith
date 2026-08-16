@@ -11,14 +11,19 @@ changing anything structural — the repository was originally built documentati
 and named for it, and code written under the old premise couples the two. It should
 not.
 
-Three apps exist today:
+Two apps exist on `main` today:
 
 - **Documentation** — structured documents in Markdown/DOCX/MkDocs/Docusaurus
 - **Ask the code** — grounded question answering with checked citations
-- **Quality** — findings from ruff and mypy, ranked by what each one *touches*;
-  surface with no test; an offline dependency audit; derived layering rules.
-  It writes tests and runs none of them — see `.dev/QA_AGENT_PLAN.md` for what is
-  deliberately not built
+
+**Quality is parked on `feat/qa`, not on `main`.** It was built (Q1–Q8: ruff/mypy
+findings ranked by what each one touches, surface with no test, an offline dependency
+audit, derived layering rules) and then taken back out until Documentation and Ask
+settle — an app maturing against two neighbours still changing shape is an app
+rebuilt twice. Do not re-add it to `main` piecemeal; when it returns it returns from
+that branch. What went with it: `codelith/apps/qa/`, its registry entry, its router
+mount, `tests/unit/apps/test_qa_*.py`, and the studio's Quality page and rail section.
+`.dev/QA_AGENT_PLAN.md` stays as the record of what was deliberately not built.
 
 `codelith/mcp/` is **not** an app. It adds nothing of its own — it is a second
 transport over `codelith/knowledge/tools.py`, so other agents (Claude Code, Cursor)
@@ -35,10 +40,10 @@ can query the knowledge base directly.
    the pattern: it needed nothing from the doc pipeline.
 
 An app is defined by *what it reads from the knowledge base* and, optionally, *what it
-derives for itself*. Quality is the first with two stages: `codelith/apps/qa/deep.py`
-parses the checkout for per-file symbol spans, because the KB stores symbols per module
-and records only where they start. Derived data stays inside the app — a project that
-never opens Quality never pays for it.
+derives for itself*. Quality was the first with two stages — it parsed the checkout for
+per-file symbol spans, because the KB stores symbols per module and records only where
+they start — and the rule it established still holds: derived data stays inside the
+app, so a project that never opens an app never pays for it.
 
 An app is defined by *what it needs from the knowledge base*. Adding one should mean
 one entry in `codelith/apps/registry.py` and one page — never a change to analysis. If

@@ -19,7 +19,6 @@ import DocumentsPage from './pages/app/DocumentsPage'
 import JobsPage from './pages/app/JobsPage'
 import ComposePage from './pages/app/ComposePage'
 import SettingsPage from './pages/app/SettingsPage'
-import QualityPage from './pages/app/QualityPage'
 
 // The Markdown stack is ~350 kB. Load it only when something is read.
 const DocumentReaderPage = lazy(() => import('./pages/app/DocumentReaderPage'))
@@ -94,7 +93,6 @@ export default function App() {
                 <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
                 <Route path="jobs" element={<JobsPage />} />
                 <Route path="chat" element={<ChatPage />} />
-                <Route path="projects/:projectId/quality" element={<QualityPage />} />
                 {/*
                   The documentation site. Section and page are optional: no
                   section shows the coverage view, which is the whole map at a

@@ -127,10 +127,7 @@ class TestAPlannedApp:
         for app in APPS:
             assert app.needs, app.id
 
-    def test_quality_is_built_and_available(self) -> None:
-        """Q0 registered it as planned; Q1-Q8 built it. The registry has to say so, or
-        the studio still renders it dimmed."""
-        qa = APPS_BY_ID["qa"]
-
-        assert qa.built is True
-        assert state_for(qa, "ready")[0] is AppState.AVAILABLE
+    def test_quality_is_not_registered_while_it_is_parked(self) -> None:
+        """Quality lives on `feat/qa` until documentation and Ask settle. A registry
+        entry for something `main` cannot serve is a promise the studio breaks."""
+        assert "qa" not in APPS_BY_ID

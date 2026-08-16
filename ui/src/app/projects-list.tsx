@@ -7,10 +7,10 @@ import type { Project } from './lib/types'
 /* ------------------------------------------------------------------ *
  * The list of codebases, shared by everything in the rail.
  *
- * Four sections of the rail need it — Documentation, Quality, the
- * codebase list, and the shell itself — and each was fetching it. The
- * same request three times on every navigation, and three chances for
- * the sections to disagree about what exists.
+ * Three sections of the rail need it — Documentation, the codebase list,
+ * and the shell itself — and each was fetching it. The same request three
+ * times on every navigation, and three chances for the sections to
+ * disagree about what exists.
  *
  * Sorted newest-touched first here rather than at each call site, so
  * that "recent" means the same thing in every section.
