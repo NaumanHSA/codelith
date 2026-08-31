@@ -65,10 +65,15 @@ export function useAsync<T>(
 }
 
 const POLL_MS = 2500
+/** A job waiting on a person changes when they act, not on its own — poll gently. */
+const REVIEW_POLL_MS = 8000
 
 /**
- * Polls a job while it is live. Stops on completed / failed / cancelled /
- * awaiting_review, and does not poll a job that is already finished.
+ * Polls a job while it is live. Stops on completed / failed / cancelled, and does
+ * not poll a job that is already finished.
+ *
+ * A job `awaiting_review` keeps polling, slowly: approval resumes it from another
+ * request, and the page has to notice that happening.
  */
 export function useJob(jobId: number | null) {
   const [job, setJob] = useState<Job>()
@@ -97,7 +102,12 @@ export function useJob(jobId: number | null) {
         setError(null)
         setLoading(false)
         // Schedule the next poll only while the job can still change.
-        if (!isTerminal(next.status)) timer = setTimeout(tick, POLL_MS)
+        if (!isTerminal(next.status)) {
+          timer = setTimeout(
+            tick,
+            next.status === 'awaiting_review' ? REVIEW_POLL_MS : POLL_MS,
+          )
+        }
       } catch (e) {
         if (!live || (e as Error).name === 'AbortError') return
         setLoading(false)

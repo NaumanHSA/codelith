@@ -37,6 +37,9 @@ export default function ComposePage() {
 
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [formats, setFormats] = useState<OutputFormat[]>(['markdown'])
+  /** Hold pages QA doubts instead of publishing them. Off by default: most writing
+   *  is read internally, and a gate nobody wants is just a job that stops. */
+  const [review, setReview] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -71,7 +74,7 @@ export default function ComposePage() {
       const job = await api.compose(id, {
         page_slugs: slugs,
         output_formats: formats,
-        human_review: false,
+        human_review: review,
       })
       track(job, project.data?.name)
       navigate(`/app/projects/${id}/jobs/${job.id}`)
@@ -273,6 +276,18 @@ export default function ComposePage() {
                     </Chip>
                   ))}
                 </span>
+                <label
+                  className="flex cursor-pointer items-center gap-1.5 select-none"
+                  title="Pages that fail the fact check are held for you to read before anything is published."
+                >
+                  <input
+                    type="checkbox"
+                    checked={review}
+                    onChange={e => setReview(e.target.checked)}
+                    className="accent-[var(--hot)]"
+                  />
+                  <span className="tag text-ink-dim">hold flagged pages for review</span>
+                </label>
                 <span className="tag text-ink-dim">
                   {picked.size
                     ? `roughly ${Math.max(2, picked.size * 3)} min on a local model`

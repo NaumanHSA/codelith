@@ -90,8 +90,15 @@ export type JobStatus = Open<
 export type StepStatus = Open<'pending' | 'running' | 'completed' | 'failed'>
 export type JobType = Open<'analysis' | 'composition'>
 
-/** Statuses after which the job will never change again — stop polling. */
-export const TERMINAL_JOB_STATUSES = ['completed', 'failed', 'cancelled', 'awaiting_review']
+/**
+ * Statuses after which the job will never change again — stop polling.
+ *
+ * `awaiting_review` is deliberately *not* here. It used to be, correctly: the gate
+ * could only end a job, so nothing would ever follow it. Now approval resumes the
+ * run, so a page that stopped polling at the hold would sit on a stale status while
+ * the pipeline published behind it.
+ */
+export const TERMINAL_JOB_STATUSES = ['completed', 'failed', 'cancelled']
 export const isTerminal = (s: JobStatus) => TERMINAL_JOB_STATUSES.includes(s)
 
 export interface JobStep {
@@ -434,4 +441,26 @@ export interface AppCatalogItem {
   /** Contains `{id}` — substitute a project id. */
   route_template: string
   built: boolean
+}
+
+
+/** One page's QA verdict, as the review panel shows it. */
+export interface ReviewPage {
+  key: string
+  title: string
+  approved: boolean
+  score: number | null
+  claims_total: number
+  claims_passed: number | null
+  notes: string | null
+}
+
+/** What a composition held at the review gate is waiting on. */
+export interface JobReview {
+  job_id: number
+  status: JobStatus
+  awaiting_review: boolean
+  pages_written: number
+  flagged_count: number
+  pages: ReviewPage[]
 }

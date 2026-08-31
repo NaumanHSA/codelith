@@ -15,6 +15,7 @@ import { Button, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { ErrorState, SkeletonPanel } from '../../components/States'
 import PipelineTree from '../../components/jobs/PipelineTree'
 import JobTargets from '../../components/jobs/JobTargets'
+import ReviewGate from '../../components/jobs/ReviewGate'
 
 const LEVEL_COLOR: Record<string, string> = {
   error: 'text-[var(--bad)]',
@@ -268,7 +269,7 @@ export default function JobProgressPage() {
             ) : running ? (
               (stagePurpose(running.name) ?? `Running ${agentLabel(running.name)}…`)
             ) : job.status === 'awaiting_review' ? (
-              'Paused for human review. Resuming is not supported by the API yet.'
+              'Paused for review. Nothing is published until you approve it.'
             ) : job.status === 'completed' ? (
               'Finished.'
             ) : job.status === 'cancelled' ? (
@@ -282,6 +283,10 @@ export default function JobProgressPage() {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_360px]">
         <div className="flex min-w-0 flex-col gap-3">
+          {job.status === 'awaiting_review' && (
+            <ReviewGate projectId={job.project_id} jobId={job.id} onResolved={setJob} />
+          )}
+
           <PipelineTree job={job} diagramsEnabled={diagramsEnabled} logs={logs} />
 
           {job.status === 'completed' && job.job_type === 'analysis' && (

@@ -11,6 +11,7 @@ import type {
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
+  JobReview,
 } from './types'
 
 export const API_BASE =
@@ -378,8 +379,20 @@ export const api = {
 
   cancelJob: (id: number) => request<Job>(`/jobs/${id}/cancel`, { method: 'POST' }),
 
-  approveJob: (id: number, approved: boolean, comment?: string) =>
-    request<Job>(`/jobs/${id}/approve`, { method: 'POST', body: { approved, comment } }),
+  /**
+   * What a held composition is waiting on — the pages QA doubted, flagged first.
+   * Project-scoped because approving publishes, and publishing belongs to the
+   * documentation feature rather than to jobs in general.
+   */
+  jobReview: (projectId: number, jobId: number, signal?: AbortSignal) =>
+    request<JobReview>(`/projects/${projectId}/compose/${jobId}/review`, { signal }),
+
+  /** Approve publishes the pages already written; reject ends the job. */
+  approveJob: (projectId: number, jobId: number, approved: boolean, comment?: string) =>
+    request<Job>(`/projects/${projectId}/compose/${jobId}/approve`, {
+      method: 'POST',
+      body: { approved, comment },
+    }),
 
   /** EventSource cannot set headers, so the JWT rides as a query param. */
   streamUrl: (id: number) =>
