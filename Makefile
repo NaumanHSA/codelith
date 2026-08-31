@@ -55,7 +55,10 @@ seed:
 	$(PYTHON) scripts/seed_dev.py
 
 worker:
-	celery -A codelith.workers.celery_app worker --loglevel=info --concurrency=4
+# -Q is not optional: every task is routed to a named queue by `task_routes`, so a
+# worker started without it consumes only the default `celery` queue and sits there
+# looking healthy while jobs queue up behind it. `dev.sh` has always passed these.
+	celery -A codelith.workers.celery_app worker --loglevel=info --concurrency=4 -Q ingestion,generation,export
 
 # ── Production ────────────────────────────────────────────────────────────────
 
