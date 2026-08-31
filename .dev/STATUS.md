@@ -1,6 +1,11 @@
 # Codelith — where the work stands
 
-*Snapshot: 16 August 2026, `6b23486`. Update the numbers when they stop being true.*
+*Snapshot: 31 August 2026, `e8bd29f`. Update the numbers when they stop being true.*
+
+**This is the planning document.** The phase plans that built the product (analyse/compose,
+the site, the UX overhaul, the substrate, Ask, the Codelith rename) all completed and were
+deleted on 31 August 2026 — their record is the git history and the code itself. What
+survived them is here, in `QA_AGENT_PLAN.md`, and in `ASK_SCORECARD.md`.
 
 ---
 
@@ -28,7 +33,7 @@ features (see *Deliberately not built*).
 | Commits | 107 |
 | Python | 245 files, ~31,900 lines |
 | Studio (TS/TSX) | 66 files, ~12,400 lines |
-| Tests | 51 files — **803 unit passing, 2 skipped**; 166 integration collected (needs Docker) |
+| Tests | 51 files — **804 unit passing, 1 skipped**; 166 integration collected (needs Docker) |
 | Migrations | 12 |
 | HTTP routes | 48 |
 | Apps on `main` | 2 — Quality is built but parked on `feat/qa` |
@@ -181,21 +186,95 @@ pytest tests/integration/  # needs Docker
 
 ## Where the plans live
 
-`.dev/` holds plans and progress logs. The ones that still matter:
+`.dev/` holds three documents now. The phase plans that built the product were deleted
+once complete — keeping a finished plan next to a living one makes the reader guess which
+is which, and the git history is the better record of how something was built.
 
 | File | What it is |
 |---|---|
-| `CODELITH_PLAN.md` / `CODELITH_PROGRESS.md` | The restructure: rename, apps split, project-as-hub |
-| `QA_AGENT_PLAN.md` | Quality, Q0–Q8, plus what was deliberately left out |
-| `ASK_PLAN.md` / `ASK_PROGRESS.md` / `ASK_SCORECARD.md` | Ask the code, including hand-scored answers |
-| `COMPOSITION_PLAN.md` / `SITE_PLAN.md` | The documentation pipeline |
-| `SUBSTRATE_PLAN.md` | The two-phase split |
-| `UX_PLAN.md` / `UX_PROGRESS.md` | The studio rebuild |
-| `HOME_DESIGN_BRIEF.md` | Open — brief for redesigning Home |
+| `STATUS.md` | This file. What exists, what is weak, what is open |
+| `QA_AGENT_PLAN.md` | Quality, Q0–Q8, plus what was deliberately left out. Kept because the app returns from `feat/qa` and this is the contract it returns to |
+| `ASK_SCORECARD.md` | Twenty questions hand-scored against `neurosurfer`. Kept because it is measurement, not a plan — it cost a manual pass and cannot be cheaply regenerated |
+
+Deleted 31 August 2026, all complete: `PLAN.md` / `PROGRESS.md` (analyse/compose
+rearchitecture, A–D), `SITE_PLAN.md` (S1–S6), `UX_PLAN.md` / `UX_PROGRESS.md` (U1–U7),
+`COMPOSITION_PLAN.md` (C1–C5), `SUBSTRATE_PLAN.md` (K1–K4), `ASK_PLAN.md` /
+`ASK_PROGRESS.md` (Q1–Q8), `CODELITH_PLAN.md` / `CODELITH_PROGRESS.md` (C0–C4, including
+the GitHub rename), `HANDOFF.md`, `HOME_DESIGN_BRIEF.md`, and `handover/`.
 
 ## What is open right now
 
-1. **Home page redesign** — brief written, out with a design specialist. Rename
-   Dashboard → Home, richer analysis display, resolve the duplicated app cards.
-2. **Wire ruff into CI** — see *Where it is weak*.
-3. **Run Quality against a repository that is not neurosurfer.**
+Verified against the code on 31 August 2026, not carried over from a checkbox.
+
+1. **`diagram` runs on every composition.** `graph.add_edge("linker", "diagram")` is
+   unconditional in `composition_workflow.py`. Measured at 64s, ~15% of a run. Should be
+   opt-in per doc type. Was E2.
+2. **Ruff is not in CI, and CI would fail if enabled.** `.github/workflows/ci.yml` is
+   `workflow_dispatch`-only and still lints `app/`, a path that has not existed since the
+   rename to `codelith/`. The tree has 375 findings, 201 auto-fixable; only 10 are the
+   SQLAlchemy `Mapped["Project"]` F821 false positives, all under `codelith/models/`, so
+   one per-directory ignore clears the blocker that was thought to be the whole problem.
+3. **The MCP server is pinned below 2.0, not ported.** See *Where it is weak*.
+4. **Quality returns from `feat/qa`** once Documentation and Ask settle.
+5. **Run Quality against a repository that is not `neurosurfer`.** Blocked on 4.
+
+Settled since the last snapshot, recorded so it is not re-opened:
+
+- **Neo4j is queried now.** The old E3 asked whether to fold the graph into `kb_entities`
+  and drop the service, on the grounds that it was built every run and queried never. Ask
+  resolved it the other way: `knowledge/questions.py::_add_graph`, `knowledge/grounding.py`
+  and the documentation `diagram` agent all query it, and it backs `find_callers`,
+  `find_dependents` and `blast_radius`.
+- **`react_mixin` is out of the writer path.** Composition uses `CompositionWriterAgent`.
+  `ReActMixin` survives only in `agents/writer.py`, reachable solely from the legacy
+  single-shot pipeline, which is kept alive on purpose.
+- **The Home page redesign shipped** on 10 August in `0971302`.
+- **The review gate works** as of 31 August. See *The review gate* below.
+- **The GitHub repository was renamed** to `codelith`.
+
+## The review gate
+
+Built 31 August 2026. Recorded here because it spent months as a decision nothing acted
+on, and the shape of that failure is worth keeping.
+
+**What it is for.** Review is **opt-in per job**: `human_review: true` sets
+`requires_human_review`. Composition writes the documents, and the `qa` agent scores each
+against the source it was written from — `all_approved = all(r["review"]["approved"])`.
+The gate fires only when a reviewer asked for review *and* QA did not pass everything, so
+it holds the pages that are actually in question rather than every page.
+
+**How it works.** `_route_after_review` sends `await_review` to a `hold` node, which
+writes the tail of the graph's state — written pages, diagrams, QA verdicts, the plan —
+to `jobs.resume_state_json` and parks the job as `awaiting_review`. The studio shows the
+flagged pages with their scores and claim counts.
+`POST /projects/{project_id}/compose/{job_id}/approve` then replays **only the tail** —
+`formatter` then `publisher` — against the stored pages. Rejecting fails the job and
+drops the payload.
+
+**Two decisions worth keeping.**
+
+*No checkpointer.* LangGraph's `interrupt` is the textbook answer and was rejected: the
+state holds `project`, `job` and `sandbox` — live objects that do not serialise, and that
+should not be frozen anyway, because resuming ought to publish against the project as it
+is now rather than as it was. Storing only the serialisable tail and rebuilding the rest
+is smaller, survives a worker restart, and needs no new dependency or tables.
+
+*Replay the tail, never the writer.* Re-running composition from the top would publish
+text nobody reviewed — the exact outcome the gate exists to prevent, reached through the
+feature meant to prevent it. `tests/unit/apps/test_review_gate.py` fails if the tail
+graph grows a node beyond `formatter` and `publisher`.
+
+**Where approve lives, and why not in `jobs.py`.** Resuming means dispatching the
+documentation feature's Celery task, and `codelith/api/v1/jobs.py` is not a composition
+root — `test_module_isolation.py` forbids it naming a feature. The route sits in
+`api/v1/projects.py` beside `/compose`, which already owns that wiring. The old
+`POST /jobs/{id}/approve` was removed rather than left: it could only set the status to
+`running`, which left approved jobs running forever with no worker on them.
+
+**Verified end to end** on 31 August against `neurosurfer`: a held job stored a 171KB
+payload, the studio showed the flagged page with `4/4 claims verified · score 3`, and
+Approve published page 123 in 0.25s and cleared the payload.
+
+**Where it earns its place.** Documentation that faces outward — an API reference going
+to customers, onboarding docs, anything with an accuracy claim attached. For internal
+notes, leave it off; the `flagged` chip in the page's provenance is enough.

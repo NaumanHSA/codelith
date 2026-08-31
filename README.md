@@ -256,9 +256,12 @@ kb_loader → strategy → planner → writer (retrieve-then-write, per section)
 ```
 
 `gate` is the join point for the parallel diagram/QA branches, and where the
-human-review decision is made. **Known limitation:** when review is required the graph
-routes to `END` with no checkpointer, so `POST /jobs/{id}/approve` cannot resume it —
-tracked as E4 in [.dev/PLAN.md](.dev/PLAN.md).
+human-review decision is made. Review is opt-in per job (`human_review: true`): when QA
+does not pass every page the graph routes to `hold`, which stores the written pages on
+the job and parks it as `awaiting_review`. Approving via
+`POST /projects/{project_id}/compose/{job_id}/approve` replays only the tail —
+`formatter` then `publisher` — against those stored pages, so approval publishes the
+text that was reviewed rather than commissioning new text.
 
 ### Language support
 
@@ -308,7 +311,7 @@ codelith/                       the importable package
 
 ui/                             React studio (Vite)
 tests/                          unit/ + integration/
-.dev/                           Plans and progress logs
+.dev/                           STATUS.md + the two records worth keeping
 ```
 
 ### Agents
@@ -457,7 +460,10 @@ See `.env.example` for the full list. Key variables:
 ## Build Phases
 
 - [PROGRESS.md](PROGRESS.md) — build phase tracker
-- [.dev/PLAN.md](.dev/PLAN.md) / [.dev/PROGRESS.md](.dev/PROGRESS.md) — the analyse/compose
-  rearchitecture, including a decision log
-- [.dev/UX_PLAN.md](.dev/UX_PLAN.md) / [.dev/UX_PROGRESS.md](.dev/UX_PROGRESS.md) — the
-  studio UX overhaul
+- [.dev/STATUS.md](.dev/STATUS.md) — where the work stands: what exists, what is weak, and
+  what is open. The phase plans that built the product completed and were deleted; the git
+  history is their record
+- [.dev/QA_AGENT_PLAN.md](.dev/QA_AGENT_PLAN.md) — the Quality app, and what it
+  deliberately does not do
+- [.dev/ASK_SCORECARD.md](.dev/ASK_SCORECARD.md) — twenty questions hand-scored against a
+  real repository

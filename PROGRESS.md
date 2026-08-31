@@ -39,8 +39,8 @@
 ## Phase 3 — Analyse / Compose rearchitecture ✅
 
 Split the single-shot pipeline into two phases so the document type is chosen *after* the
-codebase is understood. Full tracker in [.dev/PLAN.md](.dev/PLAN.md) and
-[.dev/PROGRESS.md](.dev/PROGRESS.md).
+codebase is understood. The phase tracker for this work completed and was deleted; see
+[.dev/STATUS.md](.dev/STATUS.md) for where things stand.
 
 - **A** — Knowledge base data model (`kb`, `kb_modules`, `kb_entities`, `kb_narratives`),
   keyed by project + commit SHA; `app/db/repositories/knowledge/`
@@ -56,7 +56,7 @@ codebase is understood. Full tracker in [.dev/PLAN.md](.dev/PLAN.md) and
 
 ## Phase 4 — Studio UX overhaul ✅
 
-Tracker in [.dev/UX_PLAN.md](.dev/UX_PLAN.md) / [.dev/UX_PROGRESS.md](.dev/UX_PROGRESS.md).
+Tracker completed and was deleted; the studio conventions live in `CLAUDE.md`.
 
 - Design system: interaction tokens, `Row`/`ClickableCard`/`IconButton`/`Skeleton`
 - **Real cancellation** — `app/core/cancellation.py`, streaming LLM calls, Celery revoke.
@@ -225,7 +225,7 @@ per project**, grown a section at a time — top-level sections, real `.md` page
 them, headings inside each page. The site map is decided during analysis, so a section
 generated months later slots into a navigation that already expected it.
 
-Phases S1–S6 all landed; full record in [.dev/SITE_PLAN.md](.dev/SITE_PLAN.md).
+Phases S1–S6 all landed; the plan that tracked them completed and was deleted.
 Decisions taken: our own UI and theme (MkDocs and Docusaurus stay export targets), the
 map is analysis-driven, and it was built in stages with the single-document path working
 throughout.
@@ -237,7 +237,7 @@ throughout.
 - **S5** — staleness and provenance, per-page QA
 - **S6** — export tree, static HTML, and frozen versions (`version_id IS NULL` is live)
 
-Three things that bite, kept from [.dev/HANDOFF.md](.dev/HANDOFF.md): `version_id IS NULL`
+Three things that bite: `version_id IS NULL`
 is the live site and uniqueness is two *partial* indexes; slugs are permanent and a
 dropped page becomes `orphaned`, never deleted; `anchor_id` in `app/knowledge/sites.py`
 and `anchorId` in `ui/src/app/lib/site.ts` must produce identical strings.
@@ -284,7 +284,7 @@ so it reported a false `[FAIL]` against a perfectly good endpoint.
 
 Measured on **job #4**, `architecture` composed as one section job (4 pages, 570s).
 Full results and the re-scoping of C4/C5 in
-[.dev/COMPOSITION_PLAN.md](.dev/COMPOSITION_PLAN.md). The three findings that change what
+the composition plan, since completed and deleted. The three findings that change what
 gets built next:
 
 - **The `$already_written` fix works and did not solve the problem.** 64 `[[ ]]` refs
@@ -308,7 +308,7 @@ of the fix.*
 
 ## Phase 8 — C2–C5: composing into the site ✅
 
-Tracker and full measurements in [.dev/COMPOSITION_PLAN.md](.dev/COMPOSITION_PLAN.md).
+Tracker and full measurements were in the composition plan, since completed and deleted.
 Measured on job #5 against C1's job #4 — same section, same four pages, same models.
 
 - **C2 — progress where the work is happening.** The docs reader derives "being

@@ -9,7 +9,7 @@ It is built once by the analysis workflow and read repeatedly by composition, so
 choosing a second document type costs no re-analysis.
 
 Phase A ships the vocabulary and persistence; the analysis pipeline that fills a KB
-lands in Phase B (see `.dev/PLAN.md`).
+lands in Phase B of the analyse/compose rearchitecture.
 """
 
 from __future__ import annotations

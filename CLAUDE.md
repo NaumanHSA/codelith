@@ -144,7 +144,7 @@ codelith/                 the importable package (distribution name: codelith)
   observability/   OpenTelemetry + Prometheus
 
 ui/                React studio (Vite) — see ui/README.md
-.dev/              Plans + progress logs
+.dev/              STATUS.md + the two records worth keeping
 ```
 
 ## UI Conventions
