@@ -5,8 +5,14 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, Query, Request, Response, UploadFile
 
 from codelith.config import get_settings
-from codelith.dependencies import CurrentUser, DbSession, ManagerUser
-from codelith.schemas.job import JobCreate, JobOut
+from codelith.dependencies import CurrentUser, DbSession, ManagerUser, ReviewerUser
+from codelith.schemas.job import (
+    JobApproveRequest,
+    JobCreate,
+    JobOut,
+    ReviewOut,
+    ReviewPageOut,
+)
 from codelith.apps import APPS, state_for
 from codelith.schemas.knowledge import (
     AppOut,
@@ -557,3 +563,118 @@ async def upload_source(
         config_json={"original_filename": file.filename},
     )
     return source
+
+
+# ── The review gate ───────────────────────────────────────────────────────────
+#
+# Composition holds a job between writing and publishing when the reviewer asked for
+# it and QA did not pass every page. Both routes live here rather than beside the
+# other job routes because resuming means dispatching the documentation feature's
+# task, and only a composition root is allowed to name a feature.
+
+
+@router.get("/{project_id}/compose/{job_id}/review", response_model=ReviewOut)
+async def get_review(project_id: int, job_id: int, db: DbSession, user: CurrentUser):
+    """
+    What the reviewer needs to decide, and nothing else.
+
+    Returns the pages QA doubted first — a reviewer who reads only the top of this
+    list has still seen everything that is actually in question.
+    """
+    job = await JobService(db).get(job_id)
+    if job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Job not found on this project")
+
+    held = job.resume_state_json or {}
+    reviews = held.get("review_results") or []
+
+    # The claim counts live in `validation_results`, not in the review — the QA agent
+    # writes two lists and only joins them by address. Showing "0 claims verified"
+    # because we read the wrong one would make a checked page look unchecked.
+    claims_by_address = {
+        v.get("address"): v
+        for v in (held.get("validation_results") or [])
+        if v.get("address")
+    }
+
+    def _page(r: dict) -> ReviewPageOut:
+        review = r.get("review") or {}
+        address = r.get("address")
+        validation = claims_by_address.get(address, {})
+        # `address` is what the reader sees in the URL; `doc_type` is the fallback for
+        # the legacy one-document-per-type path, which has no address at all.
+        label = address or r.get("doc_type") or "untitled"
+        issues = review.get("issues") or []
+        return ReviewPageOut(
+            key=str(label),
+            title=str(review.get("title") or label),
+            approved=bool(review.get("approved", False)),
+            score=review.get("score"),
+            claims_total=int(validation.get("claims_checked") or 0),
+            claims_passed=validation.get("claims_passed"),
+            notes=review.get("notes")
+            or review.get("summary")
+            # Issues are the usual shape; join them so the panel says something
+            # specific rather than leaving the reviewer to guess.
+            or ("; ".join(str(i) for i in issues) if issues else None),
+        )
+
+    pages = [_page(r) for r in reviews]
+    # Flagged first: the decision is about them, and a long approved list should not
+    # push the reason for the pause below the fold.
+    pages.sort(key=lambda p: (p.approved, p.title))
+
+    return ReviewOut(
+        job_id=job.id,
+        status=job.status,
+        awaiting_review=job.status == "awaiting_review",
+        pages_written=len(held.get("linked_docs") or held.get("generated_docs") or []),
+        flagged_count=sum(1 for p in pages if not p.approved),
+        pages=pages,
+    )
+
+
+@router.post("/{project_id}/compose/{job_id}/approve", response_model=JobOut)
+async def approve_composition(
+    project_id: int,
+    job_id: int,
+    req: JobApproveRequest,
+    db: DbSession,
+    user: ReviewerUser,
+    request: Request,
+):
+    """
+    Approve a held composition and publish it, or reject it and stop.
+
+    Approval dispatches the tail of the pipeline — format and publish — against the
+    pages that were already written. It does not re-write them: republishing text a
+    reviewer never saw would defeat the gate.
+    """
+    from codelith.apps.documentation.tasks.composition_tasks import resume_composition
+
+    svc = JobService(db)
+    job = await svc.get(job_id)
+    if job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Job not found on this project")
+    if job.status != "awaiting_review":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job {job_id} is {job.status}, not awaiting review",
+        )
+
+    job = await svc.approve(job_id, req.approved, req.comment)
+
+    if req.approved:
+        # Dispatch after the status write, so a worker that picks it up instantly
+        # never sees the job still marked `awaiting_review`.
+        task = resume_composition.delay(job_id)
+        await svc.repo.update(job_id, celery_task_id=task.id)
+        await db.commit()
+
+    await AuditService(db).log(
+        "job.approve" if req.approved else "job.reject", "job",
+        user_id=user.id, resource_id=job_id,
+        details={"project_id": project_id, "approved": req.approved, "comment": req.comment},
+        ip_address=request.client.host if request.client else None,
+    )
+    return await svc.get(job_id)

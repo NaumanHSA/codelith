@@ -65,6 +65,9 @@ class JobService:
             job_id,
             status="completed",
             completed_at=datetime.now(UTC),
+            # A finished job owes nobody a decision; a leftover payload would show up
+            # as a pending review forever.
+            resume_state_json=None,
         )
         await self.db.commit()
         return job  # type: ignore[return-value]
@@ -75,6 +78,7 @@ class JobService:
             status="failed",
             error_message=error,
             completed_at=datetime.now(UTC),
+            resume_state_json=None,
         )
         await self.db.commit()
         return job  # type: ignore[return-value]
@@ -84,10 +88,34 @@ class JobService:
         await self.db.commit()
         return job  # type: ignore[return-value]
 
+    async def hold_for_review(self, job_id: int, resume_state: dict) -> Job:
+        """
+        Park the job and keep what it would need to carry on.
+
+        Status and payload move together on purpose: a job that reads
+        `awaiting_review` with nothing stored is one nobody can approve, and the two
+        writes are the same decision.
+        """
+        job = await self.repo.update(
+            job_id, status="awaiting_review", resume_state_json=resume_state
+        )
+        await self.db.commit()
+        return job  # type: ignore[return-value]
+
     async def approve(self, job_id: int, approved: bool, comment: str | None = None) -> Job:
+        """
+        Record the reviewer's decision. **Does not resume anything.**
+
+        Resuming means dispatching the feature's task, and this service is base code
+        that must not import a feature. The caller — a composition root that already
+        knows what kind of job this is — dispatches. Calling this alone leaves an
+        approved job marked `running` with no worker on it, which was the old bug.
+        """
         new_status = "running" if approved else "failed"
         error = None if approved else (comment or "Rejected by reviewer")
-        await self.repo.update(job_id, status=new_status, error_message=error)
+        # A rejected job is over: drop the payload so nothing can resume it later.
+        extra = {} if approved else {"resume_state_json": None}
+        await self.repo.update(job_id, status=new_status, error_message=error, **extra)
         await self.db.commit()
         # Re-fetch with steps eager-loaded: this is returned as JobOut, which declares
         # `steps`, and a lazy load during serialization raises MissingGreenlet.

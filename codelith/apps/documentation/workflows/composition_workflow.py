@@ -116,20 +116,134 @@ class CompositionWorkflow:
         graph.add_edge("diagram", "qa")
         graph.add_edge("qa", "gate")
 
+        graph.add_node("hold", self._hold_node)
+
         graph.add_conditional_edges(
             "gate",
             self._route_after_review,
-            {"format": "formatter", "await_review": END},
+            {"format": "formatter", "await_review": "hold"},
         )
         graph.add_edge("formatter", "publisher")
         graph.add_edge("publisher", END)
+        graph.add_edge("hold", END)
 
         return graph.compile()
+
+    def _build_tail_graph(self):
+        """
+        The half of the pipeline that runs *after* a person says yes.
+
+        Formatting and publishing are the only stages that had not run when the gate
+        held the job, so approval replays exactly those two rather than the whole
+        pipeline. Re-running from `kb_loader` would ask the model to write the pages a
+        second time, and the text a reviewer approved is not the text they would get.
+        """
+        job_id = self.job_id
+
+        def make_node(agent_cls):
+            async def node(state: CompositionState) -> dict:
+                from codelith.core.cancellation import check_cancelled
+
+                await check_cancelled()
+
+                from codelith.db.session import AsyncSessionLocal
+                from codelith.observability.metrics import time_agent
+                from codelith.observability.tracing import agent_span
+
+                async with AsyncSessionLocal() as node_db:
+                    agent = agent_cls(db=node_db, job_id=job_id)
+                    with time_agent(agent.name), agent_span(agent.name, job_id):
+                        return await agent.run(state)
+
+            return node
+
+        graph = StateGraph(CompositionState)
+        graph.add_node("formatter", make_node(FormatterAgent))
+        graph.add_node("publisher", make_node(PublisherAgent))
+        graph.set_entry_point("formatter")
+        graph.add_edge("formatter", "publisher")
+        graph.add_edge("publisher", END)
+        return graph.compile()
+
+    async def run_tail(self, resumed: dict[str, Any]) -> dict[str, Any]:
+        """
+        Publish a held job, from the payload stored when it was held.
+
+        `human_approved` is not consulted here — reaching this method *is* the
+        approval. The gate is upstream and has already been passed.
+        """
+        state: CompositionState = {
+            **resumed,  # type: ignore[typeddict-item]
+            "project": self.project,
+            "job": self.job,
+            "job_config": self.job.config_json,
+            "sandbox": self.sandbox,
+            "human_approved": True,
+        }
+        final = await self._build_tail_graph().ainvoke(state)
+        return {
+            "saved_doc_ids": final.get("saved_doc_ids", []),
+            "saved_page_ids": final.get("saved_page_ids", []),
+            "requires_review": False,
+            "kb_id": final.get("kb_id"),
+            "error": final.get("error"),
+        }
+
+    #: State the tail needs and cannot re-derive. Everything absent from this list is
+    #: either rebuilt on resume (`project`, `job`, `sandbox`) or was only ever input to
+    #: a stage that has already run.
+    RESUMABLE_KEYS = (
+        "kb_id",
+        "kb_status",
+        "commit_sha",
+        "architecture_map",
+        "doc_types",
+        "pages",
+        "site_map",
+        "output_formats",
+        "strategy",
+        "documentation_plan",
+        "generated_docs",
+        "linked_docs",
+        "link_report",
+        "diagrams",
+        "validation_results",
+        "review_results",
+        "all_approved",
+    )
 
     @staticmethod
     async def _gate_node(state: CompositionState) -> dict:
         """No-op join for the parallel diagram/qa branches."""
         return {}
+
+    async def _hold_node(self, state: CompositionState) -> dict:
+        """
+        Stop, and leave behind enough to start again.
+
+        Everything up to here has run and cost real model time; the pages exist. This
+        writes them to the job so that approving publishes *these* pages rather than
+        commissioning new ones.
+        """
+        from codelith.db.session import AsyncSessionLocal
+        from codelith.services.job_service import JobService
+
+        payload = {k: state.get(k) for k in self.RESUMABLE_KEYS if state.get(k) is not None}
+
+        async with AsyncSessionLocal() as db:
+            await JobService(db).hold_for_review(self.job_id, payload)
+
+        flagged = [
+            r for r in (state.get("review_results") or [])
+            if not (r.get("review") or {}).get("approved", False)
+        ]
+        logger.info(
+            "composition_held_for_review",
+            job_id=self.job_id,
+            written=len(state.get("linked_docs") or state.get("generated_docs") or []),
+            flagged=len(flagged),
+        )
+        return {"requires_review": True}
 
     def _fan_out_writers(self, state: CompositionState) -> list[Send]:
         """

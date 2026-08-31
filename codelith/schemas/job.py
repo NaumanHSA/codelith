@@ -85,3 +85,33 @@ class JobOut(BaseModel):
 class JobApproveRequest(BaseModel):
     approved: bool
     comment: str | None = None
+
+
+class ReviewPageOut(BaseModel):
+    """One page's QA verdict, as a reviewer needs to see it."""
+
+    key: str
+    title: str
+    approved: bool
+    score: float | None = None
+    claims_total: int = 0
+    claims_passed: int | None = None
+    #: Why QA doubted it, when it said. The reviewer's whole job is deciding whether
+    #: this is a real problem, so an unexplained rejection is not much use.
+    notes: str | None = None
+
+
+class ReviewOut(BaseModel):
+    """
+    The state of a held composition.
+
+    `awaiting_review` is the one field the studio branches on; the rest is what it
+    renders once it has.
+    """
+
+    job_id: int
+    status: str
+    awaiting_review: bool
+    pages_written: int
+    flagged_count: int
+    pages: list[ReviewPageOut] = []

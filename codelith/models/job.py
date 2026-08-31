@@ -28,6 +28,17 @@ class Job(Base, TimestampMixin):
     #: Recorded at creation, so it is available before a single page exists and
     #: survives a job that failed — which `doc_pages.job_id` alone would not give.
     scope_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    #: The tail of a composition that stopped at the review gate — written pages,
+    #: diagrams, QA verdicts, the plan. Set when the job goes `awaiting_review` and
+    #: cleared when it finishes, so a non-null payload means somebody still owes this
+    #: job a decision. Holds no live objects: `project` and `sandbox` are re-made on
+    #: resume, because resuming should publish against the project as it is now.
+    #: `none_as_null` so clearing writes SQL NULL rather than JSON `null` — without
+    #: it the column is never NULL again once written, and "find the jobs awaiting a
+    #: decision" silently matches every job that ever waited for one.
+    resume_state_json: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

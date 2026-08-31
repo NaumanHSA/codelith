@@ -2,8 +2,8 @@ import asyncio
 import json
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
-from codelith.dependencies import DbSession, CurrentUser, CurrentUserOrToken, ManagerUser, ReviewerUser
-from codelith.schemas.job import JobOut, AgentLogOut, JobApproveRequest
+from codelith.dependencies import DbSession, CurrentUser, CurrentUserOrToken, ManagerUser
+from codelith.schemas.job import JobOut, AgentLogOut
 from codelith.services.job_service import JobService
 from codelith.services.audit_service import AuditService
 
@@ -50,16 +50,12 @@ async def get_job_logs(job_id: int, db: DbSession, user: CurrentUser):
     return await JobService(db).get_logs(job_id)
 
 
-@router.post("/{job_id}/approve", response_model=JobOut)
-async def approve_job(job_id: int, req: JobApproveRequest, db: DbSession, user: ReviewerUser, request: Request):
-    result = await JobService(db).approve(job_id, req.approved, req.comment)
-    await AuditService(db).log(
-        "job.approve" if req.approved else "job.reject", "job",
-        user_id=user.id, resource_id=job_id,
-        details={"approved": req.approved, "comment": req.comment},
-        ip_address=request.client.host if request.client else None,
-    )
-    return result
+# Approving a held composition lives at
+# `POST /projects/{project_id}/compose/{job_id}/approve`, not here. It has to dispatch
+# the documentation feature's task to publish what was written, and this module is not
+# a composition root — it may not name a feature. The route that used to sit here only
+# set the status to `running`, which left approved jobs running forever with no worker
+# on them.
 
 
 @router.post("/{job_id}/cancel", response_model=JobOut)
