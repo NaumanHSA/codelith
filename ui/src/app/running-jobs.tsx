@@ -47,24 +47,80 @@ function readSeeds(): Seed[] {
   }
 }
 
+/**
+ * Update one job's status, returning the *same* array when nothing changed.
+ *
+ * `prev.map()` allocates unconditionally, so a poll that found no change still
+ * produced a new array, a new context value, and a re-render of every consumer —
+ * every three seconds, app-wide, for as long as any job was tracked.
+ */
+function withStatus(prev: TrackedJob[], id: number, status: JobStatus): TrackedJob[] {
+  const i = prev.findIndex(j => j.id === id)
+  if (i === -1 || prev[i].status === status) return prev
+  const copy = [...prev]
+  copy[i] = { ...copy[i], status }
+  return copy
+}
+
 export function RunningJobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<TrackedJob[]>([])
   const seeds = useRef<Map<number, Seed>>(new Map())
 
-  // Restore whatever was in flight before the reload.
+  // Restore whatever was in flight before the reload — but check before showing it.
+  //
+  // This used to seed every stored id with `status: 'running'` and render it
+  // immediately. A stored id is *not* evidence a job is live: you normally close the
+  // tab after the work finishes, so the common case was a banner announcing a
+  // composition that had completed a day earlier. It then turned green when the first
+  // poll landed and vanished eight seconds later, shifting every page under it — the
+  // flicker that showed up on whichever page you happened to open.
+  //
+  // So nothing is rendered until a fetch says the job is genuinely unfinished.
+  // Terminal ones are dropped silently: an outcome nobody was watching for is not
+  // news, and the grace period below exists for jobs that finish while you watch.
   useEffect(() => {
-    for (const s of readSeeds()) seeds.current.set(s.id, s)
-    if (seeds.current.size) {
-      setJobs(
-        [...seeds.current.values()].map(s => ({
-          id: s.id,
-          projectId: s.projectId,
-          projectName: s.projectName,
-          jobType: s.jobType,
-          status: 'running' as JobStatus,
-        })),
+    const stored = readSeeds()
+    if (!stored.length) return
+    for (const s of stored) seeds.current.set(s.id, s)
+
+    let live = true
+    const ctrl = new AbortController()
+
+    void (async () => {
+      const alive: TrackedJob[] = []
+      await Promise.all(
+        stored.map(async s => {
+          try {
+            const job = await api.job(s.id, ctrl.signal)
+            if (isTerminal(job.status)) {
+              seeds.current.delete(s.id)
+              return
+            }
+            alive.push({
+              id: s.id,
+              projectId: s.projectId,
+              projectName: s.projectName,
+              jobType: s.jobType,
+              status: job.status,
+            })
+          } catch {
+            // Deleted, or the server is unreachable. Either way it is not something
+            // to keep a banner for.
+            seeds.current.delete(s.id)
+          }
+        }),
       )
+      if (!live) return
+      persist()
+      if (alive.length) setJobs(alive)
+    })()
+
+    return () => {
+      live = false
+      ctrl.abort()
     }
+    // `persist` is stable (useCallback with no deps); this runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const persist = useCallback(() => {
@@ -126,10 +182,10 @@ export function RunningJobsProvider({ children }: { children: ReactNode }) {
               // the outcome, then stop polling this job.
               seeds.current.delete(id)
               persist()
-              setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: job.status } : j)))
+              setJobs(prev => withStatus(prev, id, job.status))
               setTimeout(() => live && untrack(id), 8000)
             } else {
-              setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: job.status } : j)))
+              setJobs(prev => withStatus(prev, id, job.status))
             }
           } catch {
             // A job that 404s or a dropped connection should not wedge
