@@ -20,7 +20,7 @@ celery_app = Celery(
     ],
 )
 
-from celery.signals import worker_init, worker_process_init
+from celery.signals import worker_init, worker_process_init, worker_ready
 
 
 # `worker_process_init` fires per forked child and never fires at all under the
@@ -33,6 +33,52 @@ from celery.signals import worker_init, worker_process_init
 def init_worker_logging(**kwargs):
     from codelith.core.logging import setup_logging
     setup_logging()
+
+
+# A run claims its pages before writing and resolves them afterwards. Every path that
+# ends a run now hands them back — but no handler runs at all if the worker is killed
+# outright, and the container stopping does exactly that. The claim then outlives the
+# job, and because the studio polls the site map for as long as any page is
+# `generating`, one such page makes the documentation page re-fetch every few seconds
+# for ever.
+#
+# This releases only pages whose job has already reached a terminal status. That is
+# unambiguous regardless of how many workers are running: if the job is over, nothing
+# is writing its pages. Jobs left stuck `running` by a kill are *not* touched — telling
+# "abandoned" from "running on another worker" needs a lease, and guessing wrong would
+# kill live work.
+@worker_ready.connect
+def release_pages_of_finished_jobs(**kwargs):
+    import structlog
+
+    from codelith.workers import runner
+
+    log = structlog.get_logger(__name__)
+
+    async def _reconcile() -> int:
+        from sqlalchemy import text
+
+        from codelith.db.session import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text(
+                    "UPDATE doc_pages p SET status = 'planned' "
+                    "FROM jobs j "
+                    "WHERE j.id = p.job_id "
+                    "  AND p.status = 'generating' "
+                    "  AND j.status IN ('completed', 'failed', 'cancelled')"
+                )
+            )
+            await db.commit()
+            return result.rowcount or 0
+
+    try:
+        freed = runner.run(_reconcile())
+        if freed:
+            log.info("released_pages_of_finished_jobs", pages=freed)
+    except Exception:  # pragma: no cover - never stop a worker booting over cleanup
+        log.warning("page_reconciliation_failed", exc_info=True)
 
 
 # The prefork pool needs fork(). Windows has none, so the pool spawns instead and the
