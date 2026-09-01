@@ -343,12 +343,42 @@ export const GitHubMark = ({ size = 14 }: { size?: number }) => (
   </svg>
 )
 
+/**
+ * The Codelith mark — a monolith with a `</>` cut into it.
+ *
+ * Inlined from `docs/assets/codelith-logo.svg` rather than loaded as a file:
+ * the product's claim is that nothing leaves the machine, and an inline mark
+ * cannot 404, cannot flash, and costs no request. The two fills are bound to
+ * theme tokens instead of the source file's hex, so the mark follows the theme
+ * when a dark variant lands.
+ */
 export const Logo = ({ size = 18 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden>
-    <rect x="0.5" y="0.5" width="19" height="19" stroke="currentColor" opacity="0.35" />
-    <rect x="3" y="4" width="8" height="2" fill="var(--hot)" />
-    <rect x="3" y="8" width="14" height="1.5" fill="currentColor" opacity="0.28" />
-    <rect x="3" y="11.5" width="11" height="1.5" fill="currentColor" opacity="0.28" />
-    <rect x="3" y="15" width="6" height="1.5" fill="currentColor" opacity="0.18" />
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 150 150"
+    fill="none"
+    aria-hidden
+    className="shrink-0"
+  >
+    {/* The slab, and the thinner leaf standing behind it. */}
+    <path
+      fill="var(--hot)"
+      d="m52.6 142.8c-1.4-0.6-12.6-4.8-20.2-7.4-2.8-1.1-5.2-4.3-5.2-8.4v-92.6c0-5.5 3.6-10.5 8.1-11.7l58.7-15.3c1.4-0.4 3.4-0.4 4.8-0.1l14.4 4.6 0.3 0.1-56.4 16.2c-5.3 1.4-10 6.7-10 13.5v93.1c0 4.5 2 7.2 5.5 8z"
+    />
+    <path
+      fill="var(--hot)"
+      d="m114.6 124.3-56.4 16.1c-4.2 1-8-1.5-8-6v-92.4c0-5 3.7-9.7 8-11.1l56.4-15.9c4.6-1.4 8 1.3 8 6.1v91.9c0.1 5.4-3.4 10.2-8 11.3z"
+    />
+    {/* `</>` knocked out of the slab, so it reads as cut rather than drawn. */}
+    <path
+      fill="var(--paper)"
+      d="m74.8 62.3-14.4 17.4c-0.7 0.9-1.1 1.8-1 2.8s0.3 1.8 1.1 2.3l14.5 10.4v-8.1l-8.7-6.3 8.6-10.3v-8.2h-0.1z"
+    />
+    <polygon fill="var(--paper)" points="77.9 97 83.6 95.4 93.1 54.2 87.1 55.9" />
+    <path
+      fill="var(--paper)"
+      d="m111 66.6-14.9-10.3v8.4l8.7 6.3-8.7 10.2v8.2l15-17.4c1.7-1.8 1.8-4.4-0.1-5.4z"
+    />
   </svg>
 )

@@ -43,7 +43,7 @@ function SectionLabel({
   count?: number | string
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 pt-6 pb-1.5">
+    <div className="flex items-center gap-2 px-3 pt-9 pb-2">
       <span className="tag text-ink-dim">{children}</span>
       <span className="h-px flex-1 bg-rule" />
       {count !== undefined && <span className="tag text-ink-dim">{count}</span>}
@@ -165,11 +165,17 @@ function ShellBody() {
         <button
           onClick={() => navigate('/')}
           title="Back to the landing page"
-          className="flex items-center gap-2 border-b border-rule px-3 py-3 text-left transition-colors hover:bg-sunk"
+          className="flex items-center gap-2.5 border-b border-rule px-3.5 py-4 text-left transition-colors hover:bg-sunk"
         >
-          <Logo size={18} />
-          <span className="text-[12px] font-bold tracking-tight text-ink">
-            code<span className="text-hot">·</span>lith
+          <Logo size={26} />
+          <span className="flex flex-col leading-none">
+            <span className="text-[15px] font-bold tracking-tight text-ink">
+              code<span className="text-hot">·</span>lith
+            </span>
+            {/* The rail never says what the product is anywhere else, and the
+                landing page that does is the one screen you stop seeing once
+                you have an account. */}
+            <span className="tag mt-1 text-ink-dim">code intelligence</span>
           </span>
         </button>
 
