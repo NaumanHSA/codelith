@@ -11,6 +11,23 @@ from codelith.workers.celery_app import celery_app
 logger = structlog.get_logger(__name__)
 
 
+async def _release_claimed_pages(db, job_id: int, *, failed: bool) -> int:
+    """
+    Hand back pages a run claimed and never resolved.
+
+    Its own session: the caller's may be mid-rollback after the exception that got
+    us here, and a cleanup that cannot run when things go wrong is not a cleanup.
+    """
+    from codelith.apps.documentation.services.site_service import SiteService
+
+    try:
+        async with AsyncSessionLocal() as fresh:
+            return await SiteService(fresh).release_pages(job_id, failed=failed)
+    except Exception:  # pragma: no cover - best effort, never masks the real error
+        logger.warning("page_release_failed", job_id=job_id, exc_info=True)
+        return 0
+
+
 @celery_app.task(name="composition.run_composition", bind=True, max_retries=1)
 def run_composition(self, job_id: int) -> dict:
     return runner.run(_run_composition(job_id))
@@ -100,15 +117,21 @@ async def _run_composition(job_id: int) -> dict:
 
             except JobCancelled:
                 # Nothing is published: a half-written document is worse than none.
+                # But the pages this job claimed have to be handed back, or they stay
+                # `generating` for ever and the studio polls the map every four
+                # seconds for the life of the project.
                 logger.info("composition_cancelled", job_id=job_id)
+                released = await _release_claimed_pages(db, job_id, failed=False)
                 await job_svc.write_log(
-                    job_id, "coordinator", "warning", "Composition cancelled by user"
+                    job_id, "coordinator", "warning",
+                    f"Composition cancelled by user; released {released} page(s)",
                 )
                 job_total.labels(status="cancelled").inc()
                 return {"saved_doc_ids": [], "requires_review": False, "cancelled": True}
 
             except Exception as exc:
                 logger.exception("composition_failed", job_id=job_id)
+                await _release_claimed_pages(db, job_id, failed=True)
                 await job_svc.fail(job_id, str(exc))
                 await job_svc.write_log(
                     job_id, "coordinator", "error", f"Composition failed: {exc}"
@@ -221,6 +244,9 @@ async def _resume_composition(job_id: int) -> dict:
 
             except JobCancelled:
                 logger.info("composition_resume_cancelled", job_id=job_id)
+                # Held pages have been `generating` since before the review; stopping
+                # here has to hand them back like any other abandoned run.
+                await _release_claimed_pages(db, job_id, failed=False)
                 await job_svc.write_log(
                     job_id, "coordinator", "warning", "Publishing cancelled by user"
                 )
@@ -229,6 +255,7 @@ async def _resume_composition(job_id: int) -> dict:
 
             except Exception as exc:
                 logger.exception("composition_resume_failed", job_id=job_id)
+                await _release_claimed_pages(db, job_id, failed=True)
                 await job_svc.fail(job_id, str(exc))
                 await job_svc.write_log(
                     job_id, "coordinator", "error", f"Publishing failed: {exc}"

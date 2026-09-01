@@ -460,6 +460,34 @@ class SiteService:
         )
         await self.db.flush()
 
+    async def release_pages(self, job_id: int, *, failed: bool = False) -> int:
+        """
+        Un-claim the pages a job took but never wrote. Returns how many.
+
+        `mark_generating` claims a page before the writing starts so the nav can show
+        it working, and `publish_page` resolves it afterwards. A job that ends in
+        between — cancelled by the user, or dead from an exception — resolves nothing,
+        and the claim was permanent: the page stayed `generating` for ever.
+
+        That is not merely untidy. The studio polls the site map for as long as any
+        page is generating, so one abandoned claim meant the documentation page
+        re-fetched every four seconds indefinitely, on every visit, for the life of
+        the project.
+
+        Cancelled work goes back to `planned` — the user stopped it, and the page is
+        simply unwritten again. A crash leaves `failed`, which says something was
+        attempted. Both are pending as far as the studio is concerned, so either way
+        "write the remaining pages" picks them up.
+        """
+        result = await self.db.execute(
+            update(DocPage)
+            .where(DocPage.job_id == job_id, DocPage.status == PageStatus.GENERATING)
+            .values(status=PageStatus.FAILED if failed else PageStatus.PLANNED),
+            execution_options={"synchronize_session": "fetch"},
+        )
+        await self.db.commit()
+        return result.rowcount or 0
+
     async def publish_page(
         self,
         page_id: int,

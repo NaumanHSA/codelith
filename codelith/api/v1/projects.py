@@ -670,6 +670,11 @@ async def approve_composition(
         task = resume_composition.delay(job_id)
         await svc.repo.update(job_id, celery_task_id=task.id)
         await db.commit()
+    else:
+        # The pages have been `generating` since before the hold. Rejecting ends the
+        # run, so they have to be handed back — left claimed, the studio would poll
+        # the site map every few seconds for ever.
+        await SiteService(db).release_pages(job_id, failed=True)
 
     await AuditService(db).log(
         "job.approve" if req.approved else "job.reject", "job",

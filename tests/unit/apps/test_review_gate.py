@@ -168,3 +168,59 @@ class TestResuming:
         assert seen["linked_docs"] == [{"key": "a"}]
         assert result["requires_review"] is False, "a published job is no longer waiting"
         assert result["saved_page_ids"] == [11]
+
+
+class TestClaimedPagesAreHandedBack:
+    """
+    A run claims its pages before writing and resolves them after. Ending in
+    between left the claim permanent, and the cost was not cosmetic: the studio
+    polls the site map for as long as any page is `generating`, so one cancelled
+    job made the documentation page re-fetch every four seconds, on every visit,
+    for the life of the project.
+
+    Every path that ends a run without publishing has to release: cancel, crash,
+    and — since the gate — a rejected review.
+    """
+
+    @pytest.mark.parametrize(
+        "failed,expected",
+        [
+            # Cancelled: the user stopped it, so the page is simply unwritten again.
+            (False, "planned"),
+            # Crashed: something was attempted, and saying so is more use than
+            # pretending the page was never touched.
+            (True, "failed"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_release_resets_only_this_job_s_generating_pages(
+        self, failed: bool, expected: str
+    ) -> None:
+        from codelith.apps.documentation.services.site_service import SiteService
+
+        captured: dict = {}
+
+        class FakeResult:
+            rowcount = 2
+
+        class FakeDb:
+            async def execute(self, stmt, **kw):
+                captured["sql"] = str(stmt)
+                captured["params"] = stmt.compile().params
+                return FakeResult()
+
+            async def commit(self):
+                captured["committed"] = True
+
+        svc = SiteService.__new__(SiteService)
+        svc.db = FakeDb()  # type: ignore[attr-defined]
+
+        assert await SiteService.release_pages(svc, 43, failed=failed) == 2
+        assert captured["committed"] is True
+
+        sql = captured["sql"]
+        assert "UPDATE doc_pages" in sql
+        # Scoped both ways: another job's pages, and this job's already-published
+        # ones, must not be touched.
+        assert "job_id" in sql and "status" in sql
+        assert captured["params"]["status"] == expected
