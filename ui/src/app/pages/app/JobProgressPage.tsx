@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
-import { useJob, useJobLogs } from '../../lib/hooks'
+import { useAsync, useJob, useJobLogs } from '../../lib/hooks'
 import { useAuth } from '../../auth'
 import { useRunningJobs } from '../../running-jobs'
 import {
@@ -109,6 +109,9 @@ export default function JobProgressPage() {
   // optional work as merely queued is the failure this is here to prevent.
   const [diagramsEnabled, setDiagramsEnabled] = useState<boolean | null>(null)
   const [kb, setKb] = useState<KnowledgeBase | null>(null)
+  // What the finished analysis unlocks. From the registry rather than a list
+  // written here, so a third app appears without this page being edited.
+  const apps = useAsync(sig => api.appCatalog(sig), []).data
 
   // Documents only exist once the job finished writing them.
   useEffect(() => {
@@ -302,12 +305,41 @@ export default function JobProgressPage() {
               </div>
               <div className="px-3 py-2.5">
                 <p className="font-sans text-[12.5px] leading-relaxed text-ink-mid">
-                  The repository has been read and stored. Nothing is written until you
-                  choose what to write — and the options come from what was actually
-                  found in the code.
+                  The repository has been read and stored. Nothing else has happened yet
+                  — the knowledge base is the product, and each app below reads it
+                  without the repository being opened again.
                 </p>
-                {kb?.suggested_doc_types?.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+              </div>
+
+              {/* Analysis unlocks every app, not just documentation. Listing them
+                  from the registry keeps this honest when a third one lands: a
+                  panel that named documentation was the last place the base still
+                  had a favourite. */}
+              <ul className="grid grid-cols-1 gap-px border-t border-rule bg-rule sm:grid-cols-2">
+                {(apps ?? []).filter(a => a.built).map(a => (
+                  <li key={a.id} className="bg-panel">
+                    <Link
+                      to={a.route_template.replace('{id}', String(pid))}
+                      className="group flex h-full flex-col gap-1 px-3 py-2.5 transition-colors hover:bg-hot-wash"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="text-[12.5px] font-semibold text-ink">{a.label}</span>
+                        <span className="tag plate-arrow ml-auto text-ink-dim transition-colors group-hover:text-hot-ink">
+                          open →
+                        </span>
+                      </span>
+                      <span className="tag text-ink-dim">reads {a.needs.join(' · ')}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              {kb?.suggested_doc_types?.length ? (
+                <div className="border-t border-rule px-3 py-2.5">
+                  {/* Doc types belong to Documentation, so they are labelled as its
+                      suggestions rather than presented as what the analysis was for. */}
+                  <span className="tag text-ink-dim">documentation suggests</span>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {kb.suggested_doc_types.slice(0, 5).map(s => (
                       <span
                         key={s.doc_type}
@@ -318,18 +350,19 @@ export default function JobProgressPage() {
                       </span>
                     ))}
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
+
               <footer className="flex flex-wrap items-center gap-2 border-t border-rule bg-sunk/60 px-3 py-2.5">
                 <span className="tag text-ink-dim">
-                  this does not need repeating for each document
+                  this does not need repeating for each app
                 </span>
                 <Button
                   variant="hot"
                   className="ml-auto"
                   onClick={() => navigate(`/app/projects/${pid}`)}
                 >
-                  Choose what to write →
+                  Open this codebase →
                 </Button>
               </footer>
             </Panel>
