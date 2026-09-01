@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 import {
-  BrowserRouter, Navigate, Route, Routes, useLocation,
+  BrowserRouter, Navigate, Route, Routes, useLocation, useParams,
 } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
 import { RunningJobsProvider } from './running-jobs'
@@ -17,8 +17,14 @@ import ProjectDetailPage from './pages/app/ProjectDetailPage'
 import JobProgressPage from './pages/app/JobProgressPage'
 import DocumentsPage from './pages/app/DocumentsPage'
 import JobsPage from './pages/app/JobsPage'
-import ComposePage from './pages/app/ComposePage'
 import SettingsPage from './pages/app/SettingsPage'
+
+/** `/compose` was retired into the documentation site. `replace` so Back does not
+ *  bounce the reader off the page they just landed on. */
+function ComposeRedirect() {
+  const { projectId } = useParams()
+  return <Navigate to={`/app/projects/${projectId}/docs`} replace />
+}
 
 // The Markdown stack is ~350 kB. Load it only when something is read.
 const DocumentReaderPage = lazy(() => import('./pages/app/DocumentReaderPage'))
@@ -89,7 +95,15 @@ export default function App() {
                 <Route index element={<HomePage />} />
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-                <Route path="projects/:projectId/compose" element={<ComposePage />} />
+                {/* Compose was a second inventory of the same pages, with the
+                    controls two screens below the fold. The site page is where
+                    the docs already are, so writing happens there now. Kept as a
+                    redirect: links, bookmarks and the app registry all pointed
+                    here. */}
+                <Route
+                  path="projects/:projectId/compose"
+                  element={<ComposeRedirect />}
+                />
                 <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
                 <Route path="jobs" element={<JobsPage />} />
                 <Route path="chat" element={<ChatPage />} />

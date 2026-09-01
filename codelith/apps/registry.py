@@ -70,7 +70,7 @@ APPS: tuple[App, ...] = (
             "reference."
         ),
         needs=("retrieval", "narratives", "entities"),
-        route="/app/projects/{id}/compose",
+        route="/app/projects/{id}/docs",
     ),
     App(
         id="ask",

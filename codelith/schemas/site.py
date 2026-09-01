@@ -130,7 +130,10 @@ class CreateVersionRequest(BaseModel):
 
 
 #: Export targets. `markdown` is the raw page tree; the rest are buildable sites.
-EXPORT_FORMATS = ("markdown", "mkdocs", "docusaurus", "html")
+#: What the site can be exported as. `docx` is one document rather than a project:
+#: it is asked for when somebody wants to send, review or print the docs, and a zip
+#: of thirty Word files serves none of those.
+EXPORT_FORMATS = ("markdown", "mkdocs", "docusaurus", "html", "docx")
 
 
 __all__ = [

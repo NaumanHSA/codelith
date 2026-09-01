@@ -42,8 +42,16 @@ class FormatterAgent(BaseAgent):
                 mine = [d for d in diagrams if d.get("doc_key") == doc_key(doc)]
                 if mine:
                     content = self._inject_diagrams(content, mine)
-                if "mkdocs" in output_formats or "docusaurus" in output_formats:
-                    content = self._add_frontmatter(doc, content)
+                # Frontmatter is deliberately not injected. What this list becomes is
+                # the page the publisher stores, so injecting it meant a packaging
+                # choice made before anything was written had rewritten the source of
+                # truth — pick MkDocs at compose time and every stored page grew a
+                # YAML preamble it should never have carried.
+                #
+                # It was redundant as well as harmful: `MkDocsFormatter` and
+                # `DocusaurusFormatter` both write their own frontmatter at export
+                # time, from the same clean markdown. That is what makes "one stored
+                # form, any format" true rather than nearly true.
                 formatted_docs.append({**doc, "content_markdown": content})
 
             # ── Generate non-markdown exports ──────────────────────────────────
@@ -165,12 +173,6 @@ class FormatterAgent(BaseAgent):
             key = d.get("doc_key") or d.get("doc_type") or "unknown"
             counts[key] = counts.get(key, 0) + 1
         return counts
-
-    def _add_frontmatter(self, doc: dict, content: str) -> str:
-        title = doc.get("title", "Documentation")
-        doc_type = doc.get("doc_type", "doc")
-        return f"---\ntitle: \"{title}\"\ncategory: {doc_type}\n---\n\n" + content
-
 
 def _slug(key: str) -> str:
     """

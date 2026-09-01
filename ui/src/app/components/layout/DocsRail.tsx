@@ -34,7 +34,7 @@ export default function DocsRail() {
         <RailNote>Analyse a codebase to write about it.</RailNote>
       ) : (
         shown.map(p => {
-          const to = `/app/projects/${p.id}/compose`
+          const to = `/app/projects/${p.id}/docs`
           const pages = p.stats?.page_count ?? 0
           const docs = p.stats?.doc_count ?? 0
           const written = pages + docs

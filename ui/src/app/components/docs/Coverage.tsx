@@ -32,6 +32,8 @@ export default function Coverage({
   generatingSection,
   canGenerate,
   home,
+  selected,
+  onToggleSelect,
 }: {
   site: Site
   onOpen: (sectionSlug: string, page: SitePage) => void
@@ -40,6 +42,10 @@ export default function Coverage({
   canGenerate: boolean
   /** The nav-aware landing prose, rendered by the caller so this file stays light. */
   home?: ReactNode
+  /** Page addresses picked for the next write. The bar that acts on them lives in
+   *  the caller, because it is the caller that owns the compose call. */
+  selected: Set<string>
+  onToggleSelect: (address: string) => void
 }) {
   const c = coverage(site)
 
@@ -88,7 +94,24 @@ export default function Coverage({
             </header>
             <ul>
               {section.pages.map(page => (
-                <li key={page.id} className="border-b border-rule last:border-b-0">
+                <li key={page.id} className="flex items-stretch border-b border-rule last:border-b-0">
+                  {canGenerate && (
+                    <label
+                      className="flex cursor-pointer items-start pt-[9px] pl-3 select-none"
+                      title={
+                        isPending(page.status)
+                          ? 'Write this page in the next run'
+                          : 'Rewrite this page in the next run'
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-[var(--hot)]"
+                        checked={selected.has(`${section.slug}/${page.slug}`)}
+                        onChange={() => onToggleSelect(`${section.slug}/${page.slug}`)}
+                      />
+                    </label>
+                  )}
                   <button
                     onClick={() => onOpen(section.slug, page)}
                     className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-sunk/60"

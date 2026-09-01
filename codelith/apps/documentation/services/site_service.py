@@ -807,6 +807,14 @@ class SiteService:
                 f"{stem}-html.zip",
                 "application/zip",
             )
+        if fmt == "docx":
+            from codelith.apps.documentation.formatters.docx import DocxFormatter
+
+            return (
+                DocxFormatter().format_site_tree(tree),
+                f"{stem}.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
         if fmt == "markdown":
             return self._markdown_zip(tree), f"{stem}-markdown.zip", "application/zip"
 

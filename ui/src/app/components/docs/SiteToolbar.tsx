@@ -17,6 +17,9 @@ const FORMATS: { value: string; label: string; note: string }[] = [
   { value: 'markdown', label: 'Markdown', note: 'The page tree as stored.' },
   { value: 'mkdocs', label: 'MkDocs', note: 'A buildable MkDocs project with a generated nav.' },
   { value: 'docusaurus', label: 'Docusaurus', note: 'A Docusaurus docs directory and sidebar.' },
+  // One file, not a zip: DOCX is what you ask for when the docs need sending,
+  // reviewing with tracked changes, or printing.
+  { value: 'docx', label: 'Word (.docx)', note: 'The whole site as one document, in reading order.' },
 ]
 
 export default function SiteToolbar({

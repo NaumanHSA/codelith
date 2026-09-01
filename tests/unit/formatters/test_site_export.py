@@ -228,3 +228,44 @@ class TestStaticHtml:
 
         assert 'href="schemas.html"' in body
         assert "/app/projects/" not in body
+
+
+class TestWordExport:
+    """
+    DOCX joined the site targets late, and it is the odd one out: every other
+    format is a zip of files for a generator to build, this is one document for a
+    person to read, send or print. A zip of thirty `.docx` files would satisfy the
+    format and none of the reasons anybody asks for it.
+    """
+
+    def test_the_whole_site_is_one_document(self, tree: SiteTree) -> None:
+        from codelith.apps.documentation.formatters.docx import DocxFormatter
+
+        data = DocxFormatter().format_site_tree(tree)
+
+        # A .docx is a zip with a fixed member; checking the magic alone would pass
+        # for any zip, including one of Word files.
+        assert data[:2] == b"PK"
+        assert "word/document.xml" in zipfile.ZipFile(io.BytesIO(data)).namelist()
+
+    def test_written_pages_appear_and_planned_ones_do_not(self, tree: SiteTree) -> None:
+        from codelith.apps.documentation.formatters.docx import DocxFormatter
+
+        xml = read(DocxFormatter().format_site_tree(tree), "word/document.xml")
+
+        assert "API Reference" in xml and "Endpoints" in xml and "Setup" in xml
+        # `empty/todo` has no content. An export is a publishable artefact, so a
+        # heading opening onto "not written yet" is worse than one page fewer.
+        assert "Todo" not in xml
+        assert "Empty" not in xml
+
+    def test_page_headings_nest_under_their_page(self) -> None:
+        """
+        A page's own `#` would otherwise sit level with the section that contains
+        it, so the document reads as a flat pile rather than a site.
+        """
+        from codelith.apps.documentation.formatters.docx import DocxFormatter
+
+        assert DocxFormatter._demote("# Top\n\ntext\n\n## Sub") == "### Top\n\ntext\n\n#### Sub"
+        # Word has no heading 7; deeper markdown must clamp rather than overflow.
+        assert DocxFormatter._demote("###### Deep") == "###### Deep"

@@ -37,6 +37,53 @@ class DocxFormatter:
         self._render_markdown(word, doc.content_markdown)
         return self._to_bytes(word)
 
+    def format_site_tree(self, tree) -> bytes:
+        """
+        The whole site as one Word document, in reading order.
+
+        One file rather than a zip of files, because that is what DOCX is asked
+        for: somebody wants a document to send, review with tracked changes, or
+        print. A zip of thirty `.docx` files serves none of those.
+
+        Planned pages are skipped rather than exported empty — an export is a
+        publishable artefact, and a heading opening onto "not written yet" is
+        worse for a reader than one page fewer.
+        """
+        word = WordDocument()
+        word.add_heading(tree.title, level=0)
+        subtitle = f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d')}"
+        if getattr(tree, "version_label", None):
+            subtitle = f"Version: {tree.version_label}  |  " + subtitle
+        word.add_paragraph(subtitle, style="Intense Quote")
+
+        wrote_any = False
+        for section in tree.sections:
+            written = [p for p in section.pages if (p.content_markdown or "").strip()]
+            if not written:
+                continue
+            word.add_page_break()
+            word.add_heading(section.title, level=1)
+            for page in written:
+                word.add_heading(page.title, level=2)
+                # The page's own `#` headings are demoted so the section/page
+                # hierarchy survives: a page's H1 sitting level with a section
+                # title reads as a sibling of it rather than a child.
+                self._render_markdown(word, self._demote(page.content_markdown))
+                wrote_any = True
+
+        if not wrote_any:
+            word.add_paragraph("No content generated.")
+        return self._to_bytes(word)
+
+    @staticmethod
+    def _demote(content: str) -> str:
+        """Push every heading down two levels, so page bodies nest under their page."""
+        out: list[str] = []
+        for line in content.splitlines():
+            m = _HEADING_RE.match(line)
+            out.append(f"{'#' * min(len(m.group(1)) + 2, 6)} {m.group(2)}" if m else line)
+        return "\n".join(out)
+
     def _render_markdown(self, word: WordDocument, content: str) -> None:
         # Split by code fences first to preserve them
         parts = _CODE_FENCE_RE.split(content)
