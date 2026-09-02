@@ -1,6 +1,8 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { useState } from 'react'
 
 /* ------------------------------------------------------------------ *
@@ -15,6 +17,49 @@ import { useState } from 'react'
  * use it, rather than the chat duplicating a config that would drift
  * the first time either changed.
  * ------------------------------------------------------------------ */
+
+/* Diagrams reach a page as two things the default renderer throws away.
+ *
+ * The picture is `![name](data:image/svg+xml;base64,…)`. react-markdown sanitises
+ * URLs to a protocol allowlist that does not include `data:`, so the src was blanked
+ * and every diagram rendered as a broken-image icon — with a valid 30KB SVG sitting
+ * in the markdown the whole time.
+ *
+ * The source underneath it is a `<details>` block, and react-markdown renders no raw
+ * HTML at all without `rehype-raw`, so the tags arrived as literal text: readers saw
+ * `</details>` printed on the page.
+ *
+ * Raw HTML in an LLM-written document is a script tag waiting to happen, so `rehypeRaw`
+ * is followed by `rehypeSanitize` on a schema extended by exactly what is needed:
+ * `details`/`summary`, `data:` image sources, and the class names `rehype-highlight`
+ * puts on its spans (the default schema drops them, which would leave every code block
+ * unstyled).
+ */
+const SCHEMA = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), 'details', 'summary'],
+  attributes: {
+    ...defaultSchema.attributes,
+    // `data:` for the embedded diagrams. They are generated locally by d2 from the
+    // import graph and embedded rather than served, so there is no asset URL to allow.
+    img: [...(defaultSchema.attributes?.img ?? []), ['src', /^data:image\/(svg\+xml|png|jpeg|gif|webp);base64,/]],
+    span: [...(defaultSchema.attributes?.span ?? []), ['className', /^hljs-/]],
+    code: [...(defaultSchema.attributes?.code ?? []), ['className', /^(language-|hljs)/]],
+    details: [['open']],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src ?? []), 'data'],
+  },
+}
+
+/** Exported, because the comment at the top of this file promised the config lived
+ *  in one place and it did not: `DocMarkdown` kept its own copy and drifted, which is
+ *  why documentation pages rendered `</details>` as text long after this was fixed
+ *  anywhere else. Order matters — raw HTML is parsed, then sanitised, then
+ *  highlighted. */
+export const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, SCHEMA], rehypeHighlight] as never
+export const REMARK_PLUGINS = [remarkGfm]
 
 function Copy({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -36,8 +81,8 @@ function Copy({ text }: { text: string }) {
 export function Markdown({ children }: { children: string }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={REHYPE_PLUGINS}
       components={{
         pre({ children, ...props }) {
           // The copy button needs a positioned ancestor, and a code block a

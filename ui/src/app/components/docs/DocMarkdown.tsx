@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
+import { REHYPE_PLUGINS, REMARK_PLUGINS } from '../Markdown'
 import { anchorId } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
@@ -149,8 +148,8 @@ export default function DocMarkdown({
 }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={REHYPE_PLUGINS}
       components={{
         h1: heading(1),
         h2: heading(2, onRevise, selectedAnchor, busyAnchor),
