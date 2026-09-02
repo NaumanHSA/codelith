@@ -502,16 +502,8 @@ class DiagramAgent(BaseAgent):
 
         try:
             async with GraphStore() as graph:
-                files = await graph.query(
-                    "MATCH (f:File {project_id: $project_id, kb_id: $kb_id}) "
-                    "RETURN f.path AS path, f.module_key AS module_key",
-                    project_id=project_id, kb_id=kb_id,
-                )
-                imports = await graph.query(
-                    "MATCH (a:File {project_id: $project_id, kb_id: $kb_id})-[:IMPORTS]->(b:File) "
-                    "RETURN a.path AS src, b.path AS dst",
-                    project_id=project_id, kb_id=kb_id,
-                )
+                files = await graph.get_files(project_id, kb_id)
+                imports = await graph.get_import_edges(project_id, kb_id)
             return files, imports
         except Exception as exc:  # pragma: no cover - Neo4j optional
             await self._emit_log("info", f"No code graph available for diagrams: {exc}")

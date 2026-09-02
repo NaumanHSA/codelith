@@ -242,6 +242,14 @@ class GraphStore:
     # ── Queries ───────────────────────────────────────────────────────────────
 
     async def query(self, cypher: str, project_id: int, **params: Any) -> list[dict]:
+        """
+        Run Cypher directly. **Intended for this module's own methods.**
+
+        Callers outside it used to reach for this, which put Cypher in a diagram agent
+        and in the grounding code — the one storage engine in the project whose query
+        language had leaked into agents. Every such call is now a named method above,
+        so the interface can be implemented by something that is not Neo4j.
+        """
         """Run Cypher scoped to a project. Returns [] rather than raising."""
         if not await self.verify_connectivity():
             return []
@@ -324,6 +332,32 @@ class GraphStore:
             "ORDER BY f.path, s.line LIMIT 100"
         )
         return await self.query(cypher, project_id=project_id, prefix=path_prefix)
+
+    async def get_files(self, project_id: int, kb_id: int) -> list[dict]:
+        """Every file in one knowledge base, with the module it belongs to."""
+        return await self.query(
+            "MATCH (f:File {project_id: $project_id, kb_id: $kb_id}) "
+            "RETURN f.path AS path, f.module_key AS module_key",
+            project_id=project_id,
+            kb_id=kb_id,
+        )
+
+    async def get_import_edges(self, project_id: int, kb_id: int) -> list[dict]:
+        """Every import edge in one knowledge base, as `{src, dst}` file paths."""
+        return await self.query(
+            "MATCH (a:File {project_id: $project_id, kb_id: $kb_id})-[:IMPORTS]->(b:File) "
+            "RETURN a.path AS src, b.path AS dst",
+            project_id=project_id,
+            kb_id=kb_id,
+        )
+
+    async def get_packages(self, project_id: int, kb_id: int) -> list[dict]:
+        """External packages this repository depends on."""
+        return await self.query(
+            "MATCH (p:Package {project_id: $project_id, kb_id: $kb_id}) RETURN p.name AS name",
+            project_id=project_id,
+            kb_id=kb_id,
+        )
 
     async def get_callers(self, project_id: int, qname: str) -> list[dict]:
         rows = await self.query(

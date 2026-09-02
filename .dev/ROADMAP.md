@@ -177,9 +177,14 @@ nowhere near it.
       claims, and a flag that disagreed with the connection would fail at query time
       with an error about a missing operator. 10 tests, including one that pins the
       numpy path against a plain-Python cosine over 200 random vectors.
-- [ ] **The code graph in SQL.** `memory/graph_store.py` is the only Neo4j importer, and
-      only three tools query it — `find_callers`, `find_dependents`, `blast_radius`. Two
-      tables and two recursive CTEs replace a service.
+- [ ] **The code graph in SQL.** Two tables and two recursive CTEs replace a service.
+      *Prepared:* the interface can now be implemented by something that is not Neo4j.
+      Three callers outside the store — the diagram agent twice and the grounding code
+      once — ran raw Cypher, which made the graph the one storage engine whose query
+      language had leaked into agents. They are `get_files`, `get_import_edges` and
+      `get_packages` now, and a test fails if Cypher appears outside the store again.
+      What remains is the SQL implementation itself and choosing between the two by
+      profile.
 - [ ] **In-process cancellation** behind `core/cancellation.py`, replacing the Redis
       flag. Same `CancellationToken` contract; the long-running work must not notice.
 - [ ] **Filesystem storage** behind `storage/s3.py`, under a per-project directory.
@@ -194,9 +199,14 @@ nowhere near it.
       `Vector(dims)` column, the HNSW index, and a `TRUNCATE` in the resize migration.
       **Open question 1 is answered: share the schema and branch at those four points**,
       rather than keeping two schemas in step forever.
-- [ ] **A test that keeps the seam honest.** `tests/unit/test_storage_profiles.py`:
-      nothing outside the seam modules may import `neo4j`, `boto3`, `redis` or
-      `celery`. Modelled on `test_module_isolation.py` — a rule enforced by a test.
+- [x] **A test that keeps the seam honest.** `tests/unit/test_storage_seams.py`.
+      Each external service has exactly one door — Neo4j, boto3, redis and Celery are
+      each imported by a single module — and Cypher may not appear outside the graph
+      store. Nothing enforced that before; it was a happy consequence of "all DB access
+      goes through repositories", and a happy consequence is not a guarantee. The
+      second file to `import boto3` is the one that turns filesystem storage from a
+      swap into a refactor, and it always looks reasonable in review. Verified to bite
+      by adding a violation and watching it fail.
 
 **The risk to watch.** A second-class path rots. Solo mode must be the profile the
 maintainer uses daily, or it will be broken and nobody will know.

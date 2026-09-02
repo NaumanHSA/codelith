@@ -226,11 +226,7 @@ async def _imported_names(project_id: int, kb_id: int) -> set[str]:
 
     try:
         async with GraphStore() as graph:
-            rows = await graph.query(
-                "MATCH (p:Package {project_id: $project_id, kb_id: $kb_id}) "
-                "RETURN p.name AS name",
-                project_id=project_id, kb_id=kb_id,
-            )
+            rows = await graph.get_packages(project_id, kb_id)
     except Exception:  # pragma: no cover - Neo4j optional
         return set()
 
