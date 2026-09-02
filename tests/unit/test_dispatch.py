@@ -66,6 +66,46 @@ class TestTheInlineWorker:
         w.wait_idle()
         assert [a[0][0] for a in ran] == [0, 1, 2, 3, 4]
 
+    def test_a_failing_logger_does_not_end_the_queue_either(self, monkeypatch) -> None:
+        """
+        The hole the first guard left. `except Exception` wrapped the task, but the
+        `logger.exception` reporting it sat *inside* that handler — so a logger that
+        threw took the thread with it, and every job after that one waited for ever.
+
+        Not hypothetical: structlog writes to whatever `sys.stdout` was at
+        configuration time, a Windows console at cp1252 cannot encode everything it is
+        handed, and a redirected stream can be closed underneath it. The suite found
+        this by hanging, which is exactly how it would present in production.
+        """
+
+        class _BrokenLogger:
+            def __getattr__(self, _name):
+                def _explode(*_args, **_kwargs):
+                    raise ValueError("I/O operation on closed file")
+
+                return _explode
+
+        monkeypatch.setattr("codelith.workers.inline.logger", _BrokenLogger())
+
+        ran: list = []
+        w = InlineWorker()
+        w.submit(_Recorder(ran, explode=True), (1,))
+        w.submit(_Recorder(ran), (2,))
+
+        assert w.wait_idle(timeout=5), "the queue must drain even when logging cannot"
+        assert ran == [((2,), {})]
+
+    def test_wait_idle_honours_its_timeout(self) -> None:
+        """
+        It used to take the argument and ignore it — `queue.join()` has no timeout. A
+        caller that asked for a bound and silently got an unbounded wait is worse off
+        than one that never asked.
+        """
+        w = InlineWorker()
+        w._queue.put(("never", _Recorder([]), (), {}))  # queued behind no thread
+
+        assert w.wait_idle(timeout=0.05) is False
+
     def test_the_thread_is_started_lazily_and_reused(self) -> None:
         w = InlineWorker()
         assert w._thread is None, "a process that queues nothing starts no thread"

@@ -35,6 +35,27 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
+def _quietly(log, event: str, **fields: Any) -> None:
+    """
+    Log, and never raise doing it.
+
+    A logger is not usually a thing that throws. This one has: `structlog` is
+    configured with `PrintLoggerFactory(sys.stdout)`, so it writes to whatever stream
+    stdout was at configuration time — and a Windows console at cp1252 cannot encode
+    everything handed to it (the tracing sink hit exactly that on a `▶`, nine minutes
+    into a run), while a redirected stream can be closed underneath it.
+
+    The loop below is one thread serving every job in the process. An exception that
+    escapes it does not fail one job — it ends every job after it, silently, for the
+    life of the process. Logging is the least important thing happening here and must
+    never be the thing that stops it.
+    """
+    try:
+        log(event, **fields)
+    except Exception:  # noqa: BLE001 - deliberately the end of the line
+        pass
+
+
 class InlineWorker:
     """Runs task bodies on a single background thread, in submission order."""
 
@@ -55,7 +76,10 @@ class InlineWorker:
         ident = f"inline-{uuid.uuid4()}"
         self._ensure_thread()
         self._queue.put((ident, task, args, kwargs or {}))
-        logger.info("inline_task_queued", task=getattr(task, "name", str(task)), id=ident)
+        # Quietly, and after the `put`: this runs on the caller's thread — a request
+        # handler — and a logger that throws here would fail the request for a job
+        # that has in fact been queued.
+        _quietly(logger.info, "inline_task_queued", task=getattr(task, "name", str(task)), id=ident)
         return ident
 
     def _ensure_thread(self) -> None:
@@ -68,25 +92,50 @@ class InlineWorker:
             self._thread.start()
 
     def _loop(self) -> None:
-        while True:
-            ident, task, args, kwargs = self._queue.get()
-            name = getattr(task, "name", str(task))
-            try:
-                # `apply` runs the task body in this thread and handles `bind=True`,
-                # so the same function serves both profiles. `runner.run` inside it
-                # finds this thread's persistent loop.
-                task.apply(args=args, kwargs=kwargs, throw=True)
-                logger.info("inline_task_finished", task=name, id=ident)
-            except Exception:
-                # The task has already recorded its own failure on the job row; this
-                # thread must survive it, or one bad job ends every later one.
-                logger.exception("inline_task_failed", task=name, id=ident)
-            finally:
-                self._queue.task_done()
+        """
+        The thread, which must not end.
 
-    def wait_idle(self, timeout: float | None = None) -> None:
-        """Block until the queue drains. For tests and for `codelith analyse`."""
-        self._queue.join()
+        Both guards are here because the failure mode is *silence*. A thread that dies
+        does not fail the job it was running — that job has already recorded its own
+        failure on the job row — it fails every job submitted afterwards, which then sit
+        in the queue with nothing to take them, and a caller waiting on the queue waits
+        for ever.
+        """
+        while True:
+            try:
+                self._run_one()
+            except Exception:  # pragma: no cover - nothing is allowed past here
+                _quietly(logger.exception, "inline_worker_recovered")
+
+    def _run_one(self) -> None:
+        ident, task, args, kwargs = self._queue.get()
+        name = getattr(task, "name", str(task))
+        try:
+            # `apply` runs the task body in this thread and handles `bind=True`.
+            # `runner.run` inside it finds this thread's persistent loop.
+            task.apply(args=args, kwargs=kwargs, throw=True)
+            _quietly(logger.info, "inline_task_finished", task=name, id=ident)
+        except Exception:
+            # The task has already recorded its own failure on the job row; this
+            # thread must survive it, or one bad job ends every later one.
+            _quietly(logger.exception, "inline_task_failed", task=name, id=ident)
+        finally:
+            # Before anything else can go wrong. A missed `task_done` is not a lost
+            # log line, it is a `wait_idle` that never returns.
+            self._queue.task_done()
+
+    def wait_idle(self, timeout: float | None = None) -> bool:
+        """
+        Block until the queue drains. `True` if it did, `False` if `timeout` elapsed.
+
+        `queue.join()` takes no timeout, so this waits on the same condition by hand.
+        A caller that asked for a bound and silently got an unbounded wait is worse off
+        than one that never asked.
+        """
+        with self._queue.all_tasks_done:
+            return self._queue.all_tasks_done.wait_for(
+                lambda: self._queue.unfinished_tasks == 0, timeout
+            )
 
 
 #: One per process, because one process is the whole point.
