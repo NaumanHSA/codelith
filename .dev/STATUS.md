@@ -186,7 +186,7 @@ pytest tests/integration/  # needs Docker
 
 ## Where the plans live
 
-`.dev/` holds three documents now. The phase plans that built the product were deleted
+`.dev/` holds four documents now. The phase plans that built the product were deleted
 once complete — keeping a finished plan next to a living one makes the reader guess which
 is which, and the git history is the better record of how something was built.
 
@@ -195,6 +195,7 @@ is which, and the git history is the better record of how something was built.
 | `STATUS.md` | This file. What exists, what is weak, what is open |
 | `QA_AGENT_PLAN.md` | Quality, Q0–Q8, plus what was deliberately left out. Kept because the app returns from `feat/qa` and this is the contract it returns to |
 | `ASK_SCORECARD.md` | Twenty questions hand-scored against `neurosurfer`. Kept because it is measurement, not a plan — it cost a manual pass and cannot be cheaply regenerated |
+| `ROADMAP.md` | What comes next, in phases: the CLI, solo mode, MCP as the headline, drift, agent pre-flight. The only forward-looking document here — everything else records what happened |
 
 Deleted 31 August 2026, all complete: `PLAN.md` / `PROGRESS.md` (analyse/compose
 rearchitecture, A–D), `SITE_PLAN.md` (S1–S6), `UX_PLAN.md` / `UX_PROGRESS.md` (U1–U7),
