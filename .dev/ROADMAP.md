@@ -279,6 +279,47 @@ Three portability bugs only that run could have found:
 maintainer uses daily, or it will be broken and nobody will know — and the check above
 is exactly the one nobody will remember to run.
 
+## Phase 2b — One mode ✅
+
+*Done 2 September 2026. The answer to "why two modes if the functionality is the same?"*
+
+There was no functional difference — only operational, and every operational
+advantage server mode had was cancelled by the fact that one LM Studio answers one
+request at a time. Two modes was a tax on every change and a standing promise that
+the less-used one still worked.
+
+- [x] **Server mode deleted.** PostgreSQL, Redis, Neo4j, MinIO and Celery, along with
+      their settings, their containers, their dependencies and the `CODELITH_PROFILE`
+      that chose between them. Six containers to zero.
+- [x] **Zero configuration.** The database is a file under `~/.codelith`, created at
+      startup; artefacts are a folder beside it. No `.env` needed, no migrate step.
+- [x] **Fourteen migrations squashed to one.** The chain was PostgreSQL-shaped and
+      could never be replayed here. The history is in git.
+- [x] **Integration tests on a temporary SQLite file**, so CI no longer provisions
+      Postgres and Redis to run them. 1,052 tests passing.
+- [x] **`test_storage_seams.py` inverted** — from "each service has one door" to
+      "these libraries do not come back", including that they are not declared as
+      dependencies. An unused dependency is still an invitation.
+- [x] **Re-analysed a real repository end to end**: a JavaScript SDK, 42 files in the
+      code graph, 401 symbols, 373 chunks, 20 modules — then asked a question and got
+      an answer with nine checked citations. The whole knowledge base is a 459KB file.
+
+**Three real bugs, all latent under PostgreSQL and all found by running it:**
+
+- `_kb_statuses` used `DISTINCT ON`, which only PostgreSQL implements. Elsewhere
+  SQLAlchemy silently drops it — and it did not merely return extra rows, it returned
+  the wrong ones. A re-analysed project reported the status of its *first* analysis.
+- The site's uniqueness is two partial indexes, declared with `postgresql_where` — a
+  dialect-only kwarg SQLite ignores. They became fully unique and every versioned
+  snapshot collided.
+- `scripts/seed_dev.py` never disposed its engine, so aiosqlite's connection thread
+  kept the process alive after the work was done. It looked exactly like a hang.
+
+**What was genuinely given up:** redelivery. A job interrupted by the process stopping
+is not retried — the startup reconciliation hands back its pages so nothing is stuck,
+but the work is lost. For one machine that beats running a broker to guard against
+closing your own laptop.
+
 ## Phase 3 — MCP as the headline
 
 The best pitch in the repository, currently a footnote gated behind `PYTHONPATH="."` and
