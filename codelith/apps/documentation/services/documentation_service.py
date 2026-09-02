@@ -48,6 +48,7 @@ class DocumentationService:
         a job that fails ten minutes into a Celery worker.
         """
         from codelith.apps.documentation.tasks.composition_tasks import run_composition
+        from codelith.workers.dispatch import dispatch
 
         await self.projects.get(project_id, user)
 
@@ -90,6 +91,6 @@ class DocumentationService:
             config_overrides={"kb_id": kb.id},
             scope=scope,
         )
-        task = run_composition.delay(job.id)
-        await self.jobs.start(job.id, task.id)
+        task_id = dispatch(run_composition, job.id)
+        await self.jobs.start(job.id, task_id)
         return await self.jobs.get(job.id)

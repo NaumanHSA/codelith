@@ -464,11 +464,12 @@ async def create_job(
     `/compose`, which avoids re-analysing for every document type.
     """
     from codelith.apps.documentation.tasks.generation_tasks import run_documentation_workflow
+    from codelith.workers.dispatch import dispatch
 
     svc = JobService(db)
     job = await svc.create(project_id, req, user)
-    task = run_documentation_workflow.delay(job.id)
-    await svc.start(job.id, task.id)
+    task_id = dispatch(run_documentation_workflow, job.id)
+    await svc.start(job.id, task_id)
 
     await AuditService(db).log(
         "job.create", "job",
@@ -651,6 +652,7 @@ async def approve_composition(
     reviewer never saw would defeat the gate.
     """
     from codelith.apps.documentation.tasks.composition_tasks import resume_composition
+    from codelith.workers.dispatch import dispatch
 
     svc = JobService(db)
     job = await svc.get(job_id)
@@ -667,8 +669,8 @@ async def approve_composition(
     if req.approved:
         # Dispatch after the status write, so a worker that picks it up instantly
         # never sees the job still marked `awaiting_review`.
-        task = resume_composition.delay(job_id)
-        await svc.repo.update(job_id, celery_task_id=task.id)
+        task_id = dispatch(resume_composition, job_id)
+        await svc.repo.update(job_id, celery_task_id=task_id)
         await db.commit()
     else:
         # The pages have been `generating` since before the hold. Rejecting ends the

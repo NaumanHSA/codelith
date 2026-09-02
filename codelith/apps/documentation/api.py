@@ -44,7 +44,8 @@ async def export_document(
     format: str = Query(..., description="pdf | docx | html | mkdocs | docusaurus"),
 ):
     from codelith.apps.documentation.tasks.export_tasks import export_document_task
+    from codelith.workers.dispatch import dispatch
 
-    export_document_task.delay(document_id, format)
+    dispatch(export_document_task, document_id, format)
     # Return a polling URL — the worker will upload and record the real path when done
     return {"url": f"/api/v1/documents/{document_id}/export/status?format={format}"}

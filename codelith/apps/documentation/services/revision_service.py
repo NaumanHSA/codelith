@@ -138,9 +138,10 @@ class RevisionService:
         )
 
         from codelith.apps.documentation.tasks.revision_tasks import run_revision
+        from codelith.workers.dispatch import dispatch
 
-        task = run_revision.delay(job.id)
-        await self.jobs.start(job.id, task.id)
+        task_id = dispatch(run_revision, job.id)
+        await self.jobs.start(job.id, task_id)
         logger.info(
             "revision_queued",
             job_id=job.id,

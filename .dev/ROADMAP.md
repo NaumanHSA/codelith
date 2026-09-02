@@ -144,7 +144,7 @@ a client, so that there is exactly one place a project is created or a question 
 answered. Phase 2 removes the requirement for the single-machine case rather than
 duplicating the service layer here.
 
-## Phase 2 — Solo mode 🟨 *in progress*
+## Phase 2 — Solo mode ✅
 
 One person, one machine, no containers. The phase this whole plan is for.
 
@@ -195,9 +195,19 @@ nowhere near it.
       paths, so the store is browsable — on one machine the exports somebody generated
       should be findable in a file manager rather than only through the application
       that wrote them. Keys that escape the root are refused.
-- [ ] **Inline execution** instead of Celery: the six `.delay()` sites run the coroutine
-      directly with a progress callback. The studio's job rows still get written, so the
-      UI works unchanged if somebody opens it.
+- [x] **Inline execution.** All six `.delay()` sites go through `dispatch()`, which is
+      `delay` in server mode and an in-process worker in solo mode. Both return an id
+      for the job row, so the studio and the CLI poll exactly as before.
+
+      **One thread, not one per job.** The thread owns the event loop, and the loop is
+      what the SQLAlchemy pool and the `AsyncOpenAI` client's httpx pool are bound to —
+      a thread per job would rebuild them each time and hand the second job connections
+      belonging to a loop that had gone. Serial is also the honest setting: server mode
+      already runs `--pool=solo` because one LM Studio answers one request at a time.
+
+      The failure mode worth guarding is silence, not an error: one thread serves every
+      job, so an exception escaping the loop would end every job after it and say
+      nothing. There is a test for that.
 - [x] **`aiosqlite`** — the one package solo mode genuinely adds. The vector search it
       also needs is numpy, which was already here.
 - [x] **The schema builds on SQLite.** All 23 tables. Two column types were the whole
@@ -243,8 +253,18 @@ nowhere near it.
       swap into a refactor, and it always looks reasonable in review. Verified to bite
       by adding a violation and watching it fail.
 
+**Done 2 September 2026.** Every seam has two implementations and one interface, and
+`test_storage_seams.py` fails if a second module reaches past any of them.
+
+**What is not done, and is worth stating plainly.** Solo mode is *assembled* but has
+never run a full analysis end to end — the pieces are each proven (a schema built and
+searched on SQLite, cancellation without Redis, storage on a folder, a job dispatched
+inline) and the whole has not been. That, plus wiring `CODELITH_PROFILE=solo` into the
+CLI so `codelith analyse .` needs no containers, is the first thing to do next.
+
 **The risk to watch.** A second-class path rots. Solo mode must be the profile the
-maintainer uses daily, or it will be broken and nobody will know.
+maintainer uses daily, or it will be broken and nobody will know — and the check above
+is exactly the one nobody will remember to run.
 
 ## Phase 3 — MCP as the headline
 

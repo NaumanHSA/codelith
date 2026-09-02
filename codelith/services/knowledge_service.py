@@ -40,6 +40,7 @@ class KnowledgeService:
 
     async def start_analysis(self, project_id: int, user: User, force: bool = False) -> Job:
         """Queue an analysis job. No document type is chosen at this point."""
+        from codelith.workers.dispatch import dispatch
         from codelith.workers.tasks.analysis_tasks import run_analysis
 
         await self.projects.get(project_id, user)  # authorises and 404s
@@ -51,8 +52,8 @@ class KnowledgeService:
             job_type=JobType.ANALYSIS,
             config_overrides={"force": force},
         )
-        task = run_analysis.delay(job.id, force)
-        await self.jobs.start(job.id, task.id)
+        task_id = dispatch(run_analysis, job.id, force)
+        await self.jobs.start(job.id, task_id)
         return await self.jobs.get(job.id)
 
     # ── Reads ─────────────────────────────────────────────────────────────────
