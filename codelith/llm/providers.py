@@ -32,6 +32,28 @@ EMBEDDING = "embedding"
 #: SDK refuses an empty string — and a real key has no business reaching localhost.
 _NO_KEY = "not-needed"
 
+#: Where a provider talks when nothing says otherwise.
+#:
+#: This exists because "moving a tier is a one-word edit" has to be true. The base URL
+#: used to default to LM Studio whatever the provider said, so setting only
+#: `MODEL_QUALITY_PROVIDER=openai` sent the API key to `localhost:1234` — and LM Studio
+#: **answered**, ignoring the model name and replying as whatever it had loaded. Every
+#: quality call was served by the 1.2b fast model while the settings page said
+#: `gpt-5.6-luna`, and nothing failed. A wrong endpoint that returns 200 is worse than
+#: one that refuses, because there is nothing to notice.
+_DEFAULT_BASE_URL = {
+    LOCAL: "http://localhost:1234/v1",
+    OPENAI: "https://api.openai.com/v1",
+}
+
+#: Hosts that cannot be a hosted provider, whatever the settings claim.
+_LOOPBACK = ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal")
+
+
+def _resolve_base_url(provider: str, configured: str) -> str:
+    """An explicit setting always wins; otherwise the provider decides."""
+    return configured.strip() or _DEFAULT_BASE_URL.get(provider, _DEFAULT_BASE_URL[LOCAL])
+
 
 @dataclass(frozen=True)
 class ModelSpec:
@@ -89,7 +111,7 @@ def spec_for_tier(tier: str) -> ModelSpec:
         tier=tier,
         provider=provider,
         model=model,
-        base_url=base_url,
+        base_url=_resolve_base_url(provider, base_url),
         api_key=s.OPENAI_API_KEY if provider == OPENAI else _NO_KEY,
         context_window=window,
     )
@@ -111,12 +133,25 @@ def missing_configuration() -> list[str]:
 
     Checked at startup so "you selected openai and gave no key" is a message rather
     than a 401 forty minutes into an analysis run.
+
+    The loopback check is here for a failure that never produced a 401 at all. A tier
+    set to `openai` while its base URL points at LM Studio does not fail — LM Studio
+    answers, ignores the model name, and replies as whatever it has loaded. The
+    settings page said `gpt-5.6-luna` and a 1.2b model wrote every page. Nothing in a
+    log or a trace showed it, because from the caller's side the call succeeded.
     """
     problems: list[str] = []
     for tier, spec in configured_specs().items():
         upper = tier.upper()
         if spec.provider == OPENAI and not spec.api_key.strip():
             problems.append(f"MODEL_{upper}_PROVIDER is openai but OPENAI_API_KEY is empty")
+        if spec.provider == OPENAI and any(h in spec.base_url for h in _LOOPBACK):
+            problems.append(
+                f"MODEL_{upper}_PROVIDER is openai but MODEL_{upper}_BASE_URL points at "
+                f"this machine ({spec.base_url}). A local server will answer and reply "
+                f"as whatever model it has loaded, not as {spec.model}. Unset it to use "
+                f"{_DEFAULT_BASE_URL[OPENAI]}."
+            )
         if not spec.model.strip():
             problems.append(f"MODEL_{upper} is empty — no model name to call")
         if not spec.base_url.strip():

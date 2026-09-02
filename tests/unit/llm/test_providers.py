@@ -183,3 +183,67 @@ class TestRouting:
         assert select_tier("classify") == FAST
         # Unclassified degrades in cost, not in output.
         assert select_tier("something-new") == QUALITY
+
+
+class TestTheEndpointFollowsTheProvider:
+    """
+    Moving a tier to a hosted model has to be the one-word edit the settings comment
+    promises. It was not, and the way it failed is the reason these are pinned.
+
+    `MODEL_QUALITY_PROVIDER=openai` with no base URL used to resolve to LM Studio,
+    because the base URL defaulted to localhost whatever the provider said. LM Studio
+    **answered** — it ignores the model name and replies as whatever it has loaded —
+    so every quality call was served by the 1.2b fast model while the settings page
+    read `gpt-5.6-luna`, and no call ever failed. An endpoint that returns 200 for the
+    wrong model leaves nothing to notice.
+    """
+
+    def test_openai_with_no_base_url_goes_to_openai(self, settings_factory) -> None:
+        settings_factory(MODEL_QUALITY_PROVIDER=OPENAI, MODEL_QUALITY_BASE_URL="")
+        assert providers.spec_for_tier(QUALITY).base_url == "https://api.openai.com/v1"
+
+    def test_local_with_no_base_url_goes_to_lm_studio(self, settings_factory) -> None:
+        settings_factory(MODEL_QUALITY_BASE_URL="")
+        assert providers.spec_for_tier(QUALITY).base_url == "http://localhost:1234/v1"
+
+    def test_an_explicit_base_url_still_wins(self, settings_factory) -> None:
+        """A proxy, a gateway, or another vendor's OpenAI-shaped endpoint."""
+        settings_factory(
+            MODEL_QUALITY_PROVIDER=OPENAI,
+            MODEL_QUALITY_BASE_URL="https://gateway.internal/v1",
+        )
+        assert providers.spec_for_tier(QUALITY).base_url == "https://gateway.internal/v1"
+
+    def test_resolving_one_tier_does_not_move_another(self, settings_factory) -> None:
+        """The rule the rest of this file exists for, restated for the new default."""
+        settings_factory(MODEL_QUALITY_PROVIDER=OPENAI, MODEL_QUALITY_BASE_URL="")
+        assert providers.spec_for_tier(FAST).base_url == "http://localhost:1234/v1"
+        assert providers.embedding_spec().base_url == "http://localhost:1234/v1"
+
+
+class TestTheStartupCheckCatchesTheSilentOne:
+    def test_openai_pointed_at_this_machine_is_reported(self, settings_factory) -> None:
+        settings_factory(
+            MODEL_QUALITY_PROVIDER=OPENAI,
+            MODEL_QUALITY_BASE_URL="http://localhost:1234/v1",
+            OPENAI_API_KEY="sk-test",
+        )
+        problems = providers.missing_configuration()
+        assert any("points at this machine" in p for p in problems)
+
+    @pytest.mark.parametrize("host", ["127.0.0.1", "0.0.0.0", "host.docker.internal"])
+    def test_every_loopback_spelling_counts(self, settings_factory, host: str) -> None:
+        settings_factory(
+            MODEL_QUALITY_PROVIDER=OPENAI,
+            MODEL_QUALITY_BASE_URL=f"http://{host}:1234/v1",
+            OPENAI_API_KEY="sk-test",
+        )
+        assert any("points at this machine" in p for p in providers.missing_configuration())
+
+    def test_a_correctly_configured_hosted_tier_is_quiet(self, settings_factory) -> None:
+        settings_factory(
+            MODEL_QUALITY_PROVIDER=OPENAI,
+            MODEL_QUALITY_BASE_URL="",
+            OPENAI_API_KEY="sk-test",
+        )
+        assert providers.missing_configuration() == []

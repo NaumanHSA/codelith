@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # That is the whole difference between the two providers — everything else is
     # the same four values, so a tier moves between them by editing one word.
     #
+    # BASE_URL is blank by default and resolved from the provider (see
+    # `llm/providers.py`), because "edit one word" has to be true. It used to default
+    # to localhost whatever the provider said, so setting only PROVIDER=openai sent
+    # the API key to LM Studio — which answered, with whatever model it had loaded,
+    # under a different name. A wrong endpoint that returns 200 is worse than one
+    # that refuses. Set it explicitly to point a tier anywhere else.
+    #
     # `app/llm/router.py` picks the tier by task type, never the caller:
     #   write/review/validate/architecture/plan/select/diagram → QUALITY
     #   classify/extract/summarize                             → FAST
@@ -68,12 +75,12 @@ class Settings(BaseSettings):
     # locally while a hosted model writes the prose is the setup this is for.
     MODEL_QUALITY_PROVIDER: str = "local"
     MODEL_QUALITY: str = "local-model"
-    MODEL_QUALITY_BASE_URL: str = "http://localhost:1234/v1"
+    MODEL_QUALITY_BASE_URL: str = ""
     MODEL_QUALITY_CONTEXT_WINDOW: int = 21000
 
     MODEL_FAST_PROVIDER: str = "local"
     MODEL_FAST: str = "local-model"
-    MODEL_FAST_BASE_URL: str = "http://localhost:1234/v1"
+    MODEL_FAST_BASE_URL: str = ""
     MODEL_FAST_CONTEXT_WINDOW: int = 21000
 
     # The embedding model is a third tier, and deliberately not tied to the other
@@ -83,7 +90,7 @@ class Settings(BaseSettings):
     # the embedder with it. No context window — nothing reads one for embeddings.
     MODEL_EMBEDDING_PROVIDER: str = "local"
     MODEL_EMBEDDING: str = "text-embedding-nomic-embed-text-v1.5"
-    MODEL_EMBEDDING_BASE_URL: str = "http://localhost:1234/v1"
+    MODEL_EMBEDDING_BASE_URL: str = ""
 
     #: Used by whichever tiers are set to `openai`.
     OPENAI_API_KEY: str = ""
