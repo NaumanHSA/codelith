@@ -8,6 +8,7 @@ import { countLabel, humanize, languageShares, relativeTime, shortSha } from '..
 import type { Project } from '../../lib/types'
 import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
+import Preflight from '../../components/projects/Preflight'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import AppGrid from '../../components/projects/AppGrid'
@@ -297,6 +298,11 @@ export default function ProjectDetailPage() {
                   <KnowledgeMap kb={kb.data} />
                 </div>
               </Panel>
+
+              {/* Directly under the knowledge base, because it is the one thing
+                  on this page you ask *before* doing something rather than
+                  after. */}
+              <Preflight projectId={id} />
 
               {(kb.data.sample_routes?.length ||
                 kb.data.key_dependencies?.length ||

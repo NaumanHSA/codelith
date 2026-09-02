@@ -155,6 +155,66 @@ class SqlGraphStore:
             out["DEPENDS_ON"] = out["Package"]
         return out
 
+    async def find_file(self, project_id: int, target: str) -> str | None:
+        """
+        The repository path a caller meant, or `None`.
+
+        People and agents name files the way they see them — `client.py`,
+        `llm/client.py`, an absolute path out of an editor — and the graph stores one
+        canonical repository-relative path. An exact hit wins; otherwise the target is
+        matched as a path *suffix*, on segment boundaries, so `client.py` finds
+        `codelith/llm/client.py` but `nt.py` does not.
+
+        Ambiguity returns `None` rather than a guess. Answering about the wrong
+        `models.py` is worse than saying which ones exist.
+        """
+        target = target.strip().replace("\\", "/").lstrip("./")
+        if not target:
+            return None
+
+        exact = await self.db.execute(
+            select(GraphFile.path)
+            .where(GraphFile.project_id == project_id, GraphFile.path == target)
+            .limit(1)
+        )
+        if hit := exact.scalar_one_or_none():
+            return hit
+
+        rows = await self.db.execute(
+            select(GraphFile.path)
+            .where(GraphFile.project_id == project_id, GraphFile.path.endswith("/" + target))
+            .distinct()
+            .limit(5)
+        )
+        matches = [r[0] for r in rows]
+        return matches[0] if len(matches) == 1 else None
+
+    async def find_symbol(self, project_id: int, name: str) -> list[dict]:
+        """
+        Where a function or class is defined.
+
+        Matched on the bare name as well as the qualified one, because a caller
+        writing `Service.fetch` and a caller writing `fetch` mean the same thing and
+        only one of them matches `qname`.
+        """
+        bare = name.strip().split(".")[-1]
+        if not bare:
+            return []
+        stmt = (
+            select(GraphSymbol.path, GraphSymbol.qname, GraphSymbol.kind, GraphSymbol.line)
+            .where(
+                GraphSymbol.project_id == project_id,
+                (GraphSymbol.qname == name.strip()) | (GraphSymbol.name == bare),
+            )
+            .distinct()
+            .order_by(GraphSymbol.path, GraphSymbol.line)
+            .limit(20)
+        )
+        return [
+            {"file": p, "qname": q, "kind": k, "line": ln}
+            for p, q, k, ln in await self.db.execute(stmt)
+        ]
+
     async def get_imports(self, project_id: int, file_path: str) -> list[str]:
         rows = await self.db.execute(
             select(GraphImport.dst)

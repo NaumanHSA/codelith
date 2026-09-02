@@ -7,10 +7,15 @@ graph — and pinned the result to a commit. This exposes that so Claude Code, C
 anything else speaking MCP can ask instead of re-deriving.
 
 **It is not an app.** Apps consume the knowledge base and add something of their own;
-this adds nothing. It is a second transport over `codelith/knowledge/tools.py`, which
-already defines these six in tool-schema shape because `Ask` needed them. The isolation
-rules therefore do not apply the way they do to `codelith/apps/` — there is nothing here
-to keep separate from the base, only a different way in.
+this adds nothing. It is a second transport over the base: six of the tools come from
+`codelith/knowledge/tools.py`, already in tool-schema shape because `Ask` needed them,
+and `before_edit` from `codelith/knowledge/preflight.py`. The isolation rules therefore
+do not apply the way they do to `codelith/apps/` — there is nothing here to keep
+separate from the base, only a different way in.
+
+`before_edit` is the one that changes what Codelith is for. The other six answer
+questions about a codebase; that one is called *before* a change, and turns the
+knowledge base into something an agent consults rather than something a person reads.
 
 **Read-only, and local.** Nothing here writes, and nothing reaches the network beyond
 the databases Codelith already talks to. The same claim the product makes holds for the
@@ -31,6 +36,7 @@ from mcp.types import TextContent, Tool
 
 from codelith.db.session import AsyncSessionLocal
 from codelith.knowledge.constants import KBStatus
+from codelith.knowledge.preflight import PreflightService
 from codelith.knowledge.tools import TOOL_SCHEMAS, CodebaseTools
 from codelith.models.knowledge import KnowledgeBase
 from codelith.models.project import Project
@@ -50,6 +56,41 @@ _LIST_CODEBASES = Tool(
     ),
     inputSchema={"type": "object", "properties": {}},
 )
+
+
+#: The one worth calling before an edit rather than after.
+#:
+#: Not in `TOOL_SCHEMAS` on purpose. Those six are what an *answering* model reaches
+#: for mid-question, and `Ask` offers exactly those; this is for an agent about to
+#: change something, which is a different moment and a different caller. Putting it in
+#: the shared list would hand it to a model that has no edit to make.
+_PREFLIGHT = {
+    "type": "function",
+    "function": {
+        "name": "before_edit",
+        "description": (
+            "Call this BEFORE editing a file or a function. Given a path or a symbol "
+            "name, returns what depends on it — direct importers, everything that "
+            "reaches it transitively, its call sites, whether any test covers it, and "
+            "which written pages describe it. Cheap: indexed lookups, no model call. "
+            "The failure it prevents is an edit that is correct in the file and breaks "
+            "four callers you never looked for."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": (
+                        "A repository path (codelith/llm/client.py, or just client.py) "
+                        "or a function/class name (select_spec, Service.fetch)."
+                    ),
+                }
+            },
+            "required": ["target"],
+        },
+    },
+}
 
 
 def _with_codebase(schema: dict) -> Tool:
@@ -72,7 +113,11 @@ def _with_codebase(schema: dict) -> Tool:
 
 def build_server() -> Server:
     server: Server = Server(SERVER_NAME)
-    tools = [_LIST_CODEBASES, *(_with_codebase(s) for s in TOOL_SCHEMAS)]
+    tools = [
+        _LIST_CODEBASES,
+        _with_codebase(_PREFLIGHT),
+        *(_with_codebase(s) for s in TOOL_SCHEMAS),
+    ]
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -115,6 +160,12 @@ async def _dispatch(name: str, args: dict[str, Any]) -> str:
                 f"That codebase is {kb.status} and cannot be queried yet. "
                 "Analysis has to finish first."
             )
+
+        if name == "before_edit":
+            report = await PreflightService(db, kb.id, kb.project_id).inspect(
+                str(args.get("target") or "")
+            )
+            return report.brief()
 
         text, _evidence = await CodebaseTools(db, kb.id, kb.project_id).run(name, args)
         return text
@@ -159,9 +210,23 @@ async def _list_codebases() -> str:
 
 
 async def main() -> None:
+    """
+    Serve until the client disconnects, then let the process end.
+
+    The `dispose` is not tidiness. `aiosqlite` runs each connection on its own
+    non-daemon thread, so an engine that still holds one keeps the interpreter alive
+    after the stdio loop returns — the editor closes the pipe, the server stops
+    answering, and the process never exits. `scripts/seed_dev.py` hung for exactly
+    this reason before it started disposing its engine.
+    """
     server = build_server()
-    async with stdio_server() as (read, write):
-        await server.run(read, write, server.create_initialization_options())
+    try:
+        async with stdio_server() as (read, write):
+            await server.run(read, write, server.create_initialization_options())
+    finally:
+        from codelith.db.session import engine
+
+        await engine.dispose()
 
 
 __all__ = ["build_server", "main", "SERVER_NAME"]
