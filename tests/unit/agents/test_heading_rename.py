@@ -29,8 +29,8 @@ import pytest
 
 from codelith.apps.documentation.agents.linker import LinkerAgent
 from codelith.apps.documentation.agents.reviser import ReviserAgent
-from codelith.knowledge.blocks import find_blocks, split_blocks
 from codelith.apps.documentation.services.revision_service import RevisionService
+from codelith.knowledge.blocks import find_blocks, split_blocks
 
 PAGE_MD = """Opening line.
 

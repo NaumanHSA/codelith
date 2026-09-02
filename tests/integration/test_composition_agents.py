@@ -345,5 +345,8 @@ class TestGraphShape:
         """
         from pathlib import Path
 
-        narrate = Path("ui/src/app/lib/narrate.ts").read_text()
+        # `encoding` is not optional: the default is the platform's, which is cp1252
+        # on Windows, and this file is full of em-dashes. The test failed there
+        # before it could assert anything.
+        narrate = Path("ui/src/app/lib/narrate.ts").read_text(encoding="utf-8")
         assert "'linker_agent'" in narrate

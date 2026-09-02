@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-import pytest
+
 from codelith.ingestion.parsers.code_parser import CodeParser
 
 

@@ -23,11 +23,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from codelith.apps.ask.service import AskService
+from codelith.apps.ask.threads import ChatService
 from codelith.core.cancellation import JobCancelled
 from codelith.core.exceptions import NotFoundError, ValidationError
 from codelith.dependencies import CurrentUser, DbSession
-from codelith.apps.ask.service import AskService
-from codelith.apps.ask.threads import ChatService
 from codelith.services.project_service import ProjectService
 
 logger = structlog.get_logger(__name__)

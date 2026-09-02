@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
-
 
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 
@@ -44,7 +42,7 @@ class ParsedApiSpec:
             lines.append(f"  ... and {len(self.endpoints) - 20} more")
         if self.schemas:
             lines.append(f"Schemas: {', '.join(list(self.schemas)[:10])}")
-        return "\n".join(l for l in lines if l)
+        return "\n".join(line for line in lines if line)
 
 
 class OpenApiParser:

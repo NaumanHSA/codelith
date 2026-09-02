@@ -1,4 +1,5 @@
 from sqlalchemy import select
+
 from codelith.db.repositories.base import BaseRepository
 from codelith.models.organization import Organization
 

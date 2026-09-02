@@ -4,6 +4,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, Response, UploadFile
 
+from codelith.apps import APPS, state_for
+from codelith.apps.documentation.services.documentation_service import DocumentationService
+from codelith.apps.documentation.services.page_builder_service import PageBuilderService
+from codelith.apps.documentation.services.revision_service import RevisionService
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.config import get_settings
 from codelith.dependencies import CurrentUser, DbSession, ManagerUser, ReviewerUser
 from codelith.schemas.job import (
@@ -13,11 +18,10 @@ from codelith.schemas.job import (
     ReviewOut,
     ReviewPageOut,
 )
-from codelith.apps import APPS, state_for
 from codelith.schemas.knowledge import (
-    AppOut,
     AddPageRequest,
     AnalyzeRequest,
+    AppOut,
     ComposeRequest,
     KnowledgeBaseSummary,
     ReviseRequest,
@@ -41,12 +45,8 @@ from codelith.schemas.site import (
 )
 from codelith.services.audit_service import AuditService
 from codelith.services.job_service import JobService
-from codelith.apps.documentation.services.documentation_service import DocumentationService
 from codelith.services.knowledge_service import KnowledgeService
-from codelith.apps.documentation.services.page_builder_service import PageBuilderService
-from codelith.apps.documentation.services.revision_service import RevisionService
 from codelith.services.project_service import ProjectService
-from codelith.apps.documentation.services.site_service import SiteService
 from codelith.services.source_service import SourceService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])

@@ -1,6 +1,5 @@
 import re
 
-
 _VALID_STARTERS = (
     "graph", "flowchart", "sequencediagram", "classdiagram",
     "statediagram", "erdiagram", "gantt", "pie", "gitgraph",

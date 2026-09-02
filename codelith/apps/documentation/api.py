@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Query
-from codelith.dependencies import DbSession, CurrentUser
-from codelith.schemas.document import DocumentOut, DocumentUpdate, ExportUrlOut
+
 from codelith.apps.documentation.services.document_service import DocumentService
+from codelith.dependencies import CurrentUser, DbSession
+from codelith.schemas.document import DocumentOut, DocumentUpdate, ExportUrlOut
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 

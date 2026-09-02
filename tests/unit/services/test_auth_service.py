@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from codelith.services.auth_service import AuthService
+
+import pytest
+
 from codelith.core.exceptions import AuthenticationError, ConflictError
-from codelith.schemas.auth import RegisterRequest, LoginRequest
+from codelith.schemas.auth import LoginRequest, RegisterRequest
+from codelith.services.auth_service import AuthService
 
 
 @pytest.mark.asyncio

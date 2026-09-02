@@ -1,7 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+
 from codelith.db.repositories.base import BaseRepository
-from codelith.models.job import Job, JobStep, AgentLog
+from codelith.models.job import AgentLog, Job, JobStep
 
 
 class JobRepository(BaseRepository[Job]):

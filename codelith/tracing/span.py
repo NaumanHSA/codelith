@@ -1,9 +1,10 @@
 # neurosurfer/tracing/span.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Union, Callable, List
-import time
 import logging
+import time
+from collections.abc import Callable
+from typing import Any
 
 default_logger = logging.getLogger("neurosurfer.tracing")
 
@@ -17,7 +18,7 @@ class SpanTracer:
     tracing utilities (e.g., Tracer) to emit human-readable logs.
     """
 
-    def span(self, name: str, attrs: Optional[Dict[str, Any]] = None):
+    def span(self, name: str, attrs: dict[str, Any] | None = None):
         raise NotImplementedError
 
 
@@ -29,7 +30,7 @@ class ConsoleTracer(SpanTracer):
         [trace] ▶ step.llm step_id=1 label='agent.llm.ask'
     """
 
-    def span(self, name: str, attrs: Optional[Dict[str, Any]] = None):
+    def span(self, name: str, attrs: dict[str, Any] | None = None):
         return _Span(name, attrs, sink=print)
 
 
@@ -40,7 +41,7 @@ try:
         Compact Rich span tracer.
         """
 
-        def __init__(self, console: Optional[Console] = None):
+        def __init__(self, console: Console | None = None):
             self.console = console or Console(
                 force_jupyter=False,
                 force_terminal=True,
@@ -52,7 +53,7 @@ try:
         def span(
             self,
             name: str,
-            attrs: Optional[Union[Dict[str, Any], str]] = None,
+            attrs: dict[str, Any] | str | None = None,
         ):
             def sink(msg: str):
                 self.console.print(
@@ -97,10 +98,10 @@ class LoggerTracer(SpanTracer):
     Each span line is logged at INFO level.
     """
 
-    def __init__(self, logger: Optional[logging.Logger] = None):
+    def __init__(self, logger: logging.Logger | None = None):
         self.logger = logger or default_logger
 
-    def span(self, name: str, attrs: Optional[Dict[str, Any]] = None):
+    def span(self, name: str, attrs: dict[str, Any] | None = None):
         return _Span(
             name,
             attrs,
@@ -116,9 +117,9 @@ class MemorySpanTracer(SpanTracer):
     """
 
     def __init__(self):
-        self.events: List[Dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
 
-    def span(self, name: str, attrs: Optional[Dict[str, Any]] = None):
+    def span(self, name: str, attrs: dict[str, Any] | None = None):
         tracer = self
 
         class _MemSpan(_Span):
@@ -158,7 +159,7 @@ class NullSpanTracer(SpanTracer):
     but no human-readable logs.
     """
 
-    def span(self, name: str, attrs: Optional[Dict[str, Any]] = None):
+    def span(self, name: str, attrs: dict[str, Any] | None = None):
         return _Span(name, attrs, sink=lambda *_: None)
 
 
@@ -183,7 +184,7 @@ class _Span:
     def __init__(
         self,
         name: str,
-        attrs: Optional[Union[Dict[str, Any], str]] = None,
+        attrs: dict[str, Any] | str | None = None,
         sink: Callable[[str], None] = print,
     ):
         self.name = name
@@ -191,7 +192,7 @@ class _Span:
         self.indent_chars = 4
         self._sink = sink
 
-        self.step_id: Optional[int] = None
+        self.step_id: int | None = None
         self.level: int = 0
 
         # Only dict attrs get special handling

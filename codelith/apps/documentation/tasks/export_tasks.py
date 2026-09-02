@@ -15,11 +15,11 @@ def export_document_task(self, document_id: int, format: str) -> dict:
 async def _export(document_id: int, format: str) -> dict:
     async with AsyncSessionLocal() as db:
         try:
+            from codelith.apps.documentation.formatters.markdown import MarkdownFormatter
             from codelith.db.repositories.document_repo import (
                 DocumentExportRepository,
                 DocumentRepository,
             )
-            from codelith.apps.documentation.formatters.markdown import MarkdownFormatter
             from codelith.storage.s3 import StorageClient
 
             doc = await DocumentRepository(db).get_by_id(document_id)

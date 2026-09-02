@@ -22,7 +22,12 @@ async def _run_workflow(job_id: int) -> dict:
         reset_artifact_writer,
         set_artifact_writer,
     )
-    from codelith.tracing.runtime import create_tracer, reset_tracer, save_trace_artifacts, set_tracer
+    from codelith.tracing.runtime import (
+        create_tracer,
+        reset_tracer,
+        save_trace_artifacts,
+        set_tracer,
+    )
 
     sandbox = JobSandbox(job_id)
     sandbox.setup()
@@ -42,9 +47,11 @@ async def _run_workflow(job_id: int) -> dict:
         job_svc = JobService(db)
         with time_job(), workflow_span(job_id):
             try:
+                from codelith.apps.documentation.workflows.documentation_workflow import (
+                    DocumentationWorkflow,
+                )
                 from codelith.db.repositories.job_repo import JobRepository
                 from codelith.db.repositories.project_repo import ProjectRepository
-                from codelith.apps.documentation.workflows.documentation_workflow import DocumentationWorkflow
 
                 job = await JobRepository(db).get_with_steps(job_id)
                 if not job:

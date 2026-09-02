@@ -296,10 +296,15 @@ class GraphStore:
         affected", never as a complete list.
         """
         return await self.query(
-            "MATCH path = (src:File {project_id: $project_id})-[:IMPORTS*1..%d]->"
+            # The depth is interpolated because Cypher will not accept a parameter
+            # inside a variable-length pattern. It is clamped to 1..6 first: it is the
+            # only value in this query that is not a bound parameter, and an unbounded
+            # traversal of a large import graph does not come back.
+            f"MATCH path = (src:File {{project_id: $project_id}})"
+            f"-[:IMPORTS*1..{max(1, min(depth, 6))}]->"
             "(f:File {project_id: $project_id, path: $path}) "
             "RETURN DISTINCT src.path AS file, min(length(path)) AS distance "
-            "ORDER BY distance, file LIMIT 200" % max(1, min(depth, 6)),
+            "ORDER BY distance, file LIMIT 200",
             project_id=project_id, path=file_path,
         )
 

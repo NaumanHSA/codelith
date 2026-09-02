@@ -1,6 +1,7 @@
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from codelith.config import get_settings
 from codelith.db.base import Base, TimestampMixin
 

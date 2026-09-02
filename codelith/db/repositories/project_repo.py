@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+
 from codelith.db.repositories.base import BaseRepository
 from codelith.models.project import Project, ProjectSource
 

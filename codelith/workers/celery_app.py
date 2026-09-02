@@ -1,6 +1,7 @@
 import sys
 
 from celery import Celery
+from celery.signals import worker_init, worker_process_init, worker_ready
 
 from codelith.config import get_settings
 
@@ -19,8 +20,6 @@ celery_app = Celery(
         "codelith.apps.documentation.tasks.export_tasks",
     ],
 )
-
-from celery.signals import worker_init, worker_process_init, worker_ready
 
 
 # `worker_process_init` fires per forked child and never fires at all under the

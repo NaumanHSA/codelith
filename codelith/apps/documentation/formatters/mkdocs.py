@@ -5,7 +5,11 @@ import zipfile
 
 import yaml
 
-from codelith.apps.documentation.formatters.site_tree import SiteTree, rewrite_links, slugify_filename
+from codelith.apps.documentation.formatters.site_tree import (
+    SiteTree,
+    rewrite_links,
+    slugify_filename,
+)
 from codelith.models.document import Document
 
 _NAV_LABEL = {

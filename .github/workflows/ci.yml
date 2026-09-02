@@ -1,7 +1,10 @@
 name: CI
 
 on:
-  workflow_dispatch:  # manual trigger only — re-enable push/PR triggers when ready for CI
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -13,13 +16,16 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install ruff
         run: pip install ruff
 
       - name: Run ruff
-        run: ruff check app/ tests/
+        # `codelith/`, not `app/` — the package was renamed and this step had been
+        # pointing at a path that no longer exists since. It never failed, because the
+        # workflow was never triggered.
+        run: ruff check codelith/ tests/
 
   test:
     name: Unit Tests
@@ -30,7 +36,7 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: "pip"
 
       - name: Install dependencies
@@ -81,7 +87,7 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: "pip"
 
       - name: Install dependencies

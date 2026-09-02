@@ -1,16 +1,17 @@
 from dataclasses import dataclass
 from pathlib import Path
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from codelith.ingestion.repo.local import LocalRepoIngester
-from codelith.ingestion.repo.github import GitHubRepoIngester
-from codelith.ingestion.repo.gitlab import GitLabRepoIngester
-from codelith.ingestion.repo.bitbucket import BitbucketRepoIngester
 from codelith.ingestion.parsers.code_parser import CodeParser, ParsedCodebase
+from codelith.ingestion.parsers.infra_parser import InfraParser, ParsedInfra
 from codelith.ingestion.parsers.markdown_parser import MarkdownParser
 from codelith.ingestion.parsers.openapi_parser import OpenApiParser, ParsedApiSpec
-from codelith.ingestion.parsers.infra_parser import InfraParser, ParsedInfra
+from codelith.ingestion.repo.bitbucket import BitbucketRepoIngester
+from codelith.ingestion.repo.github import GitHubRepoIngester
+from codelith.ingestion.repo.gitlab import GitLabRepoIngester
+from codelith.ingestion.repo.local import LocalRepoIngester
 
 logger = structlog.get_logger(__name__)
 

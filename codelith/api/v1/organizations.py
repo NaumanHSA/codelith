@@ -1,8 +1,9 @@
 from fastapi import APIRouter
-from codelith.dependencies import DbSession, CurrentUser, AdminUser
-from codelith.schemas.organization import OrgCreate, OrgOut, OrgUpdate
-from codelith.db.repositories.org_repo import OrgRepository
+
 from codelith.core.exceptions import ConflictError, NotFoundError
+from codelith.db.repositories.org_repo import OrgRepository
+from codelith.dependencies import AdminUser, CurrentUser, DbSession
+from codelith.schemas.organization import OrgCreate, OrgOut, OrgUpdate
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 

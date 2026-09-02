@@ -23,7 +23,7 @@ Two failure modes, and the second is the expensive one:
 
 from __future__ import annotations
 
-from codelith.knowledge.questions import EvidenceBundle, Evidence, QuestionPlan, plan_question
+from codelith.knowledge.questions import Evidence, EvidenceBundle, QuestionPlan, plan_question
 
 SYMBOLS = {
     "ToolPool", "get", "register_tool_factory", "create_async_engine",

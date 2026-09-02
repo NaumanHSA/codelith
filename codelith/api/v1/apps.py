@@ -16,8 +16,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from codelith.dependencies import CurrentUser
 from codelith.apps import APPS
+from codelith.dependencies import CurrentUser
 
 router = APIRouter(prefix="/apps", tags=["Apps"])
 

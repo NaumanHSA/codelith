@@ -1,10 +1,11 @@
 import time
 import uuid
 from typing import Any
+
 import structlog
+import structlog.contextvars
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-import structlog.contextvars
 
 
 def register_middleware(app: FastAPI) -> None:

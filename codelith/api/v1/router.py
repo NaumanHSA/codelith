@@ -1,14 +1,15 @@
 from fastapi import APIRouter
+
+from codelith.api.v1.apps import router as apps_router
 from codelith.api.v1.auth import router as auth_router
+from codelith.api.v1.jobs import router as job_router
 from codelith.api.v1.organizations import router as org_router
 from codelith.api.v1.projects import router as project_router
-from codelith.api.v1.jobs import router as job_router
-from codelith.apps.documentation.api import router as document_router
-from codelith.apps.ask import router as chat_router
-from codelith.api.v1.apps import router as apps_router
-from codelith.apps.ask import threads_router as chat_threads_router
 from codelith.api.v1.retrieval import router as retrieval_router
 from codelith.api.v1.settings import router as settings_router
+from codelith.apps.ask import router as chat_router
+from codelith.apps.ask import threads_router as chat_threads_router
+from codelith.apps.documentation.api import router as document_router
 
 v1_router = APIRouter()
 

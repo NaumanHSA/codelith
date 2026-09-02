@@ -1,8 +1,9 @@
 # neurosurfer/tracing/workflow.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, List, Literal
 import time
+from typing import Any
+
 
 class TraceStepContext:
     """
@@ -24,18 +25,18 @@ class TraceStepContext:
         tracer,
         step_id: int,
         kind: str,
-        start_message: Optional[str],
-        end_message: Optional[str],
-        label: Optional[str],
-        inputs: Dict[str, Any],
-        agent_id: Optional[str],
-        meta: Dict[str, Any],
+        start_message: str | None,
+        end_message: str | None,
+        label: str | None,
+        inputs: dict[str, Any],
+        agent_id: str | None,
+        meta: dict[str, Any],
     ) -> None:
         self._tracer = tracer
         self._start_message = start_message
         self._end_message = end_message
 
-        self._step_data: Dict[str, Any] = {
+        self._step_data: dict[str, Any] = {
             "step_id": step_id,
             "kind": kind,
             "label": label,
@@ -52,7 +53,7 @@ class TraceStepContext:
         self._span_cm = None
         self._is_closed = False
 
-    def __enter__(self) -> "TraceStepContext":
+    def __enter__(self) -> TraceStepContext:
         # increase nesting depth for this tracer
         self.log(message=self._start_message, type="cyan", append_to_logs=False)
 
@@ -73,7 +74,7 @@ class TraceStepContext:
         self._step_data["error"] = error
         self._step_data["ok"] = False
 
-    def add_meta(self, **kwargs: Dict[str, Any]) -> None:
+    def add_meta(self, **kwargs: dict[str, Any]) -> None:
         self._step_data["meta"].update(kwargs)
     
     def outputs(self, **kwargs: Any) -> None:
@@ -116,7 +117,10 @@ class TraceStepContext:
                 type_keyword=False,
                 stream=True
             )
-        except:
+        except Exception:
+            # Tracing must never break the work it describes. Narrowed from a bare
+            # `except`, which also swallowed KeyboardInterrupt and SystemExit — nothing
+            # in this block can raise `JobCancelled`, since it only formats a line.
             pass
 
     def log(self,  message: str,  type: str = "info",  type_keyword: bool = True, append_to_logs: bool = True, **data: Any) -> None:
@@ -151,7 +155,7 @@ class TraceStepContext:
             stream=False,
         )
 
-    def start(self) -> "TraceStepContext":
+    def start(self) -> TraceStepContext:
         self.__enter__()
         return self
 

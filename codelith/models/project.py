@@ -1,5 +1,6 @@
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from codelith.db.base import Base, TimestampMixin
 
 

@@ -1,11 +1,13 @@
 import asyncio
 import json
+
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
-from codelith.dependencies import DbSession, CurrentUser, CurrentUserOrToken, ManagerUser
-from codelith.schemas.job import JobOut, AgentLogOut
-from codelith.services.job_service import JobService
+
+from codelith.dependencies import CurrentUser, CurrentUserOrToken, DbSession, ManagerUser
+from codelith.schemas.job import AgentLogOut, JobOut
 from codelith.services.audit_service import AuditService
+from codelith.services.job_service import JobService
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -78,7 +80,7 @@ async def stream_job_logs(job_id: int, db: DbSession, user: CurrentUserOrToken):
     Server-Sent Events stream. Accepts JWT via Authorization header or ?token= query param
     (needed because EventSource cannot set custom headers).
     """
-    from codelith.db.repositories.job_repo import JobRepository, AgentLogRepository
+    from codelith.db.repositories.job_repo import AgentLogRepository, JobRepository
     from codelith.db.session import AsyncSessionLocal
 
     async def event_generator():

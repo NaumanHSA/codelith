@@ -70,10 +70,10 @@ async def _run_composition(job_id: int) -> dict:
 
     async with AsyncSessionLocal() as db, CancellationToken(job_id) as token:
         set_token(token)
+        from codelith.apps.documentation.workflows.composition_workflow import CompositionWorkflow
         from codelith.db.repositories.job_repo import JobRepository
         from codelith.db.repositories.project_repo import ProjectRepository
         from codelith.services.job_service import JobService
-        from codelith.apps.documentation.workflows.composition_workflow import CompositionWorkflow
 
         job_svc = JobService(db)
         with time_job(), workflow_span(job_id):

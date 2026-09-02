@@ -4,7 +4,11 @@ import io
 import json
 import zipfile
 
-from codelith.apps.documentation.formatters.site_tree import SiteTree, rewrite_links, slugify_filename
+from codelith.apps.documentation.formatters.site_tree import (
+    SiteTree,
+    rewrite_links,
+    slugify_filename,
+)
 from codelith.models.document import Document
 
 _SIDEBAR_POSITION = {

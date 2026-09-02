@@ -1,18 +1,15 @@
 # neurosurfer/tracing/workflow.py
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Optional, List, Literal
-import time
 import logging
+from pathlib import Path
+from typing import Any, Literal
 
-from pydantic import BaseModel
-
-from .models import TraceStep, TraceResult
-from .span import SpanTracer, RichTracer, NullSpanTracer
-from .step_context import TraceStepContext
+from .config import RICH_LOG_TYPES_MAPPING, TracerConfig
+from .models import TraceResult, TraceStep
 from .render import render_trace_result
-from .config import TracerConfig, RICH_LOG_TYPES_MAPPING
+from .span import NullSpanTracer, RichTracer, SpanTracer
+from .step_context import TraceStepContext
 
 logger = logging.getLogger("neurosurfer.tracing.tracer")
 
@@ -26,7 +23,7 @@ class _NoOpStepContext:
     - __exit__ does NOT suppress exceptions
     """
 
-    def __enter__(self) -> "_NoOpStepContext":
+    def __enter__(self) -> _NoOpStepContext:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
@@ -103,11 +100,11 @@ class Tracer:
     def __init__(
         self,
         *,
-        config: Optional[TracerConfig] = None,
-        span_tracer: Optional[SpanTracer] = None,
-        meta: Optional[Dict[str, Any]] = None,
+        config: TracerConfig | None = None,
+        span_tracer: SpanTracer | None = None,
+        meta: dict[str, Any] | None = None,
         depth: int = 0,
-        logger_: Optional[logging.Logger] = None,
+        logger_: logging.Logger | None = None,
     ) -> None:
         self.config = config or TracerConfig()
         self.logger = logger_ or logger
@@ -117,7 +114,7 @@ class Tracer:
         else:
             self._span_tracer = RichTracer() if self.config.log_steps else NullSpanTracer()
 
-        self._meta: Dict[str, Any] = dict(meta or {})
+        self._meta: dict[str, Any] = dict(meta or {})
         self._result = TraceResult(meta=self._meta)  # single shared instance
 
         self._counter: int = 0
@@ -130,7 +127,7 @@ class Tracer:
     # Global metadata
     # ------------------------------------------------------------------
     @property
-    def meta(self) -> Dict[str, Any]:
+    def meta(self) -> dict[str, Any]:
         """
         Metadata attached to the whole trace run (e.g. graph_name, run_id).
         """
@@ -169,12 +166,12 @@ class Tracer:
         self,
         *,
         kind: str,
-        start_message: Optional[str] = None,
-        end_message: Optional[str] = None,
-        label: Optional[str] = None,
-        inputs: Optional[Dict[str, Any]] = None,
-        agent_id: Optional[str] = None,
-        meta: Optional[Dict[str, Any]] = None,
+        start_message: str | None = None,
+        end_message: str | None = None,
+        label: str | None = None,
+        inputs: dict[str, Any] | None = None,
+        agent_id: str | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> TraceStepContext:
         """
         Create a traced step context.
@@ -212,7 +209,7 @@ class Tracer:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _record_step(self, raw: Dict[str, Any]) -> None:
+    def _record_step(self, raw: dict[str, Any]) -> None:
         """
         Convert raw dict from TraceStepContext into a TraceStep and store it.
         When _live_steps_dir is set, also flush the step to disk immediately.
@@ -232,7 +229,7 @@ class Tracer:
         except Exception as e:  # pragma: no cover - defensive
             self.logger.warning("Failed to record trace step: %s", e)
     
-    def _span(self, name: str, attrs: Dict[str, Any]):
+    def _span(self, name: str, attrs: dict[str, Any]):
         """
         Internal helper to create a low-level span (or a no-op if log_steps=False).
         Here we inject `_level` automatically based on current self._depth.
@@ -253,7 +250,7 @@ class Tracer:
         step_id: int,
         indent_level: int,
         message: str,
-        type: Optional[str] = None,
+        type: str | None = None,
         type_keyword: bool = True,
         stream: bool = False,
     ) -> None:
@@ -281,7 +278,7 @@ class Tracer:
                 self._stream_started: set[int] = set()
             if not hasattr(self, "_stream_at_line_start"):
                 # True means "next char will be at the beginning of a logical line"
-                self._stream_at_line_start: Dict[int, bool] = {}
+                self._stream_at_line_start: dict[int, bool] = {}
 
             # pick formatter (colors / style)
             fmt = RICH_LOG_TYPES_MAPPING.get(type or "info", "{message}")
@@ -356,7 +353,7 @@ class Tracer:
         st = self._span_tracer
         try:
             from rich.console import Console  # type: ignore
-            console: Optional[Console] = getattr(st, "console", None)
+            console: Console | None = getattr(st, "console", None)
             if console is not None:
                 for line in formatted_lines:
                     console.print(line)

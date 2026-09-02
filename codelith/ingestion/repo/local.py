@@ -1,5 +1,5 @@
-import os
 from pathlib import Path
+
 from codelith.ingestion.repo.base import BaseRepoIngester, CloneResult
 
 

@@ -1,6 +1,8 @@
 import logging
 import sys
+
 import structlog
+
 from codelith.config import get_settings
 
 

@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from codelith.config import get_settings
-from codelith.tracing import Tracer, TracerConfig, RichTracer, NullSpanTracer
-
+from codelith.tracing import NullSpanTracer, RichTracer, Tracer, TracerConfig
 
 _current_tracer: contextvars.ContextVar[Tracer | None] = contextvars.ContextVar(
     "docany_current_tracer",

@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
 
 from codelith.languages.registry import registry
 

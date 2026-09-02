@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import re
-from io import BytesIO
 from datetime import UTC, datetime
+from io import BytesIO
 
 from docx import Document as WordDocument
 from docx.shared import Pt, RGBColor
-from docx.oxml.ns import qn
 
 from codelith.models.document import Document
-
 
 _CODE_FENCE_RE = re.compile(r"```(?:\w+)?\n(.*?)```", re.DOTALL)
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")

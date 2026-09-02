@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
 #: What to check for, and what each one would tell a reader. Deliberately short:
 #: this is the list somebody scans to orient themselves in an unfamiliar repository,
 #: not an inventory. Every entry has to be a file whose presence or absence changes

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Literal, Tuple, Union
-import math
+from typing import Any, Literal
 
-from .models import TraceResult, TraceStep
 from .config import TracerConfig
+from .models import TraceResult, TraceStep
 
 
 @dataclass
@@ -27,7 +26,7 @@ class PrettyTraceConfig:
     arrow_open: str = "▶"
     arrow_close: str = "◀"
 
-def render_trace_result(trace: Union[TraceResult, Dict[str, Any]], cfg: Optional[TracerConfig] = None, format: Literal["text", "markdown"] = "text") -> str:
+def render_trace_result(trace: TraceResult | dict[str, Any], cfg: TracerConfig | None = None, format: Literal["text", "markdown"] = "text") -> str:
     """
     Convert TraceResult into a pretty, nested log string (optionally Markdown).
 
@@ -39,7 +38,7 @@ def render_trace_result(trace: Union[TraceResult, Dict[str, Any]], cfg: Optional
         trace = TraceResult(**trace)
 
     events = _build_timeline_events(trace, cfg)
-    lines: List[str] = []
+    lines: list[str] = []
 
     if format == "markdown":
         lines.append("# Execution Trace\n")
@@ -55,12 +54,12 @@ def render_trace_result(trace: Union[TraceResult, Dict[str, Any]], cfg: Optional
 class _Event:
     t: float
     kind: Literal["start", "end", "log"]
-    step: Optional[TraceStep] = None
-    log: Optional[Dict[str, Any]] = None
+    step: TraceStep | None = None
+    log: dict[str, Any] | None = None
 
 
-def _build_timeline_events(trace: TraceResult, cfg: TracerConfig) -> List[_Event]:
-    events: List[_Event] = []
+def _build_timeline_events(trace: TraceResult, cfg: TracerConfig) -> list[_Event]:
+    events: list[_Event] = []
 
     for s in trace.steps:
         if s.started_at is None:
@@ -86,9 +85,9 @@ def _build_timeline_events(trace: TraceResult, cfg: TracerConfig) -> List[_Event
     events.sort(key=lambda e: (e.t, order[e.kind], getattr(e.step, "step_id", 0) if e.step else 0))
     return events
 
-def _render_events(events: List[_Event], cfg: TracerConfig) -> List[str]:
-    lines: List[str] = []
-    stack: List[TraceStep] = []
+def _render_events(events: list[_Event], cfg: TracerConfig) -> list[str]:
+    lines: list[str] = []
+    stack: list[TraceStep] = []
     active_ids: set[int] = set()
 
     # Keep a small helper to compute indent

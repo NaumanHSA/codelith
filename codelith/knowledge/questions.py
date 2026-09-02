@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge import artefacts
 from codelith.knowledge.narratives import topics_for_doc_type
-from codelith.knowledge.policy import QUESTION_ANSWERING, PROSE_TYPES
+from codelith.knowledge.policy import QUESTION_ANSWERING
 from codelith.knowledge.retrieval import SectionContextBuilder
 from codelith.memory.graph_store import GraphStore
 

@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge.narratives import topics_for_doc_type
 from codelith.knowledge.policy import (
     CODE,
     DOCS_GENERATION,
@@ -29,7 +30,6 @@ from codelith.knowledge.policy import (
     PROSE_TYPES,
     RetrievalPolicy,
 )
-from codelith.knowledge.narratives import topics_for_doc_type
 from codelith.llm.client import create_embedding
 from codelith.llm.context_manager import count_text_tokens
 from codelith.memory.vector_store import VectorStore

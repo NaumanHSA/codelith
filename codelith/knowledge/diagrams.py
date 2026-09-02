@@ -21,11 +21,11 @@ from collections import Counter, defaultdict
 
 from codelith.knowledge.constants import EntityKind
 from codelith.tools.d2 import (
-    ident,
     SHAPE_PACKAGE,
     SHAPE_QUEUE,
     SHAPE_STORE,
     D2Diagram,
+    ident,
 )
 
 #: Below this an "architecture" diagram is a restatement of the file list.

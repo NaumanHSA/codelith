@@ -1,6 +1,8 @@
 import uuid
 from pathlib import Path
+
 import git
+
 from codelith.config import get_settings
 from codelith.ingestion.repo.base import BaseRepoIngester, CloneResult
 

@@ -1,6 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from codelith.core.exceptions import AuthenticationError, ConflictError
-from codelith.core.security import create_access_token, create_refresh_token, hash_password, verify_password, decode_token
+from codelith.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    hash_password,
+    verify_password,
+)
 from codelith.db.repositories.user_repo import UserRepository
 from codelith.models.user import User
 from codelith.schemas.auth import LoginRequest, RegisterRequest, TokenResponse

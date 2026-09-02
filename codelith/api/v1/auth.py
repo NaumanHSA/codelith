@@ -1,6 +1,13 @@
 from fastapi import APIRouter
-from codelith.dependencies import DbSession, CurrentUser
-from codelith.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserOut
+
+from codelith.dependencies import CurrentUser, DbSession
+from codelith.schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserOut,
+)
 from codelith.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])

@@ -20,8 +20,6 @@ back to rules rather than returning nothing.
 
 from __future__ import annotations
 
-import pytest
-
 from codelith.knowledge.questions import KBVocabulary, LLMQuestionPlanner
 
 VOCAB = KBVocabulary(

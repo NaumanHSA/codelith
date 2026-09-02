@@ -1,7 +1,8 @@
 # neurosurfer/tracing/models.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -11,7 +12,7 @@ class TraceLog(BaseModel):
     """
     ts: float
     message: str
-    data: Dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
     type: str = "info"
 
 class TraceStep(BaseModel):
@@ -28,21 +29,21 @@ class TraceStep(BaseModel):
 
     step_id: int
     kind: str                       # e.g. "llm", "tool", "graph", "other"
-    label: Optional[str] = None     # e.g. "agent.llm.ask", "tool.web_search"
-    node_id: Optional[str] = None   # graph node id (if any)
-    agent_id: Optional[str] = None  # agent id/name (if any)
+    label: str | None = None     # e.g. "agent.llm.ask", "tool.web_search"
+    node_id: str | None = None   # graph node id (if any)
+    agent_id: str | None = None  # agent id/name (if any)
 
     started_at: float
     duration_ms: int
 
-    inputs: Dict[str, Any] = Field(default_factory=dict)
-    outputs: Dict[str, Any] = Field(default_factory=dict)
-    meta: Dict[str, Any] = Field(default_factory=dict)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
     ok: bool
-    error: Optional[str] = None
+    error: str | None = None
 
-    logs: List[TraceLog] = Field(default_factory=list)
+    logs: list[TraceLog] = Field(default_factory=list)
 
 
 class TraceResult(BaseModel):
@@ -52,8 +53,8 @@ class TraceResult(BaseModel):
     You can attach this object directly to Agent / GraphExecutor outputs.
     """
 
-    steps: List[TraceStep] = Field(default_factory=list)
-    meta: Dict[str, Any] = Field(default_factory=dict)
+    steps: list[TraceStep] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
     def summary(self) -> str:
         ok_count = sum(1 for s in self.steps if s.ok)
@@ -64,7 +65,7 @@ class TraceResult(BaseModel):
         )
 
     @model_validator(mode="after")
-    def _sort_steps_by_step_id(cls, m: "TraceResult") -> "TraceResult":
+    def _sort_steps_by_step_id(cls, m: TraceResult) -> TraceResult:
         """
         Ensure steps are always ordered by step_id ascending.
 

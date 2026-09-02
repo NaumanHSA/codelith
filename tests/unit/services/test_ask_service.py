@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import pytest
 
-from codelith.knowledge.questions import Evidence, EvidenceBundle, QuestionPlan
 from codelith.apps.ask.service import AskService
+from codelith.knowledge.questions import Evidence, EvidenceBundle, QuestionPlan
 
 
 def _bundle(*titles: str) -> EvidenceBundle:

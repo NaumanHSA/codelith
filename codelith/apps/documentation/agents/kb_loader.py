@@ -21,9 +21,9 @@ from __future__ import annotations
 from typing import Any
 
 from codelith.agents.base import BaseAgent
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge.constants import KBStatus
-from codelith.apps.documentation.services.site_service import SiteService
 from codelith.tracing.artifacts import save_artifact
 
 

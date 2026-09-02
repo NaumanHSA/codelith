@@ -1,6 +1,9 @@
-from typing import Any, Generic, Sequence, TypeVar
-from sqlalchemy import select, update, delete
+from collections.abc import Sequence
+from typing import Any, Generic, TypeVar
+
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from codelith.db.base import Base
 
 ModelT = TypeVar("ModelT", bound=Base)

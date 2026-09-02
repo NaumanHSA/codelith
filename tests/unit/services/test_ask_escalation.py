@@ -21,10 +21,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from codelith.llm.client import ToolsUnsupported
 from codelith.apps.ask import service as ask_service
 from codelith.apps.ask.service import AskService
 from codelith.knowledge.questions import Evidence, EvidenceBundle, QuestionPlan
+from codelith.llm.client import ToolsUnsupported
 
 
 def _bundle() -> EvidenceBundle:

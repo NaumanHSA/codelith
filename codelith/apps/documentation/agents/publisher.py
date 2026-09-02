@@ -15,10 +15,10 @@ Nothing here decides which; the scope on the job did, back in `kb_loader`.
 from typing import Any
 
 from codelith.agents.base import BaseAgent
-from codelith.services.audit_service import AuditService
 from codelith.apps.documentation.services.document_service import DocumentService
 from codelith.apps.documentation.services.site_service import SiteService
 from codelith.knowledge.grounding import check_page, vocabulary_for
+from codelith.services.audit_service import AuditService
 from codelith.tracing.artifacts import save_artifact, save_text_artifact
 
 

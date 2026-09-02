@@ -1,10 +1,11 @@
 from fastapi import FastAPI
+
+from codelith.api.v1.router import v1_router
 from codelith.config import get_settings
+from codelith.core.events import lifespan
+from codelith.core.exceptions import register_exception_handlers
 from codelith.core.logging import setup_logging
 from codelith.core.middleware import register_middleware
-from codelith.core.exceptions import register_exception_handlers
-from codelith.core.events import lifespan
-from codelith.api.v1.router import v1_router
 
 setup_logging()
 

@@ -8,14 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from codelith.agents.architecture import ArchitectureAgent
 from codelith.agents.code_understanding import CodeUnderstandingAgent
 from codelith.agents.coordinator import CoordinatorAgent
-from codelith.apps.documentation.agents.diagram import DiagramAgent
-from codelith.apps.documentation.agents.formatter import FormatterAgent
 from codelith.agents.planner import PlannerAgent
-from codelith.apps.documentation.agents.publisher import PublisherAgent
-from codelith.apps.documentation.agents.qa import QAAgent
 from codelith.agents.repo_analyzer import RepoAnalyzerAgent
 from codelith.agents.strategy import StrategyAgent
 from codelith.agents.writer import WriterAgent
+from codelith.apps.documentation.agents.diagram import DiagramAgent
+from codelith.apps.documentation.agents.formatter import FormatterAgent
+from codelith.apps.documentation.agents.publisher import PublisherAgent
+from codelith.apps.documentation.agents.qa import QAAgent
 from codelith.apps.documentation.workflows.states import DocumentationState
 
 logger = structlog.get_logger(__name__)

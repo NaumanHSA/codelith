@@ -2,9 +2,9 @@ import textwrap
 from typing import Any
 
 from codelith.agents.base import BaseAgent
-from codelith.llm.client import create_embedding
 from codelith.knowledge.builder import SourceFile
 from codelith.knowledge.graph import build_code_graph
+from codelith.llm.client import create_embedding
 from codelith.memory.graph_store import GraphScope, GraphStore
 from codelith.memory.long_term import LongTermMemory
 from codelith.memory.vector_store import VectorStore

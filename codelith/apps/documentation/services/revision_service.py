@@ -21,6 +21,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.core.exceptions import NotFoundError, ValidationError
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.db.repositories.site_repo import DocPageRepository, DocSiteRepository
@@ -31,7 +32,6 @@ from codelith.models.user import User
 from codelith.schemas.job import JobConfig, JobCreate
 from codelith.services.job_service import JobService
 from codelith.services.project_service import ProjectService
-from codelith.apps.documentation.services.site_service import SiteService
 
 logger = structlog.get_logger(__name__)
 

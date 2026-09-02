@@ -31,6 +31,7 @@ import json
 from typing import Any
 
 from codelith.agents.base import BaseAgent
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.config import get_settings
 from codelith.core.cancellation import JobCancelled
 from codelith.db.repositories.knowledge import KnowledgeRepositories
@@ -42,7 +43,6 @@ from codelith.knowledge.sites import (
     derive_site_map,
 )
 from codelith.llm.prompts.analysis_prompts import SITE_PLAN
-from codelith.apps.documentation.services.site_service import SiteService
 from codelith.tracing.artifacts import save_artifact, save_input_artifact
 
 #: How much of each module summary survives into a downstream prompt.

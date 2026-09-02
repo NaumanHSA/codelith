@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from codelith.dependencies import CurrentUser, DbSession, AdminUser
+from codelith.dependencies import AdminUser, CurrentUser, DbSession
 from codelith.models.setting import SystemSetting
 
 router = APIRouter(prefix="/settings", tags=["Settings"])

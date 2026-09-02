@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.config import get_settings
 from codelith.core.exceptions import NotFoundError
 from codelith.db.repositories.knowledge import KnowledgeRepositories
-from codelith.apps.documentation.services.site_service import SiteService
 from codelith.knowledge.constants import JobType, KBStatus
 from codelith.models.job import Job
 from codelith.models.user import User

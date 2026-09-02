@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import structlog
+from slugify import slugify
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from slugify import slugify
-from codelith.core.exceptions import NotFoundError, AuthorizationError
+
+from codelith.core.exceptions import AuthorizationError, NotFoundError
 from codelith.db.repositories.project_repo import ProjectRepository, ProjectSourceRepository
-from codelith.models.project import Project
 from codelith.memory.graph_store import GraphStore
+from codelith.models.project import Project
 from codelith.models.user import User
-from codelith.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectStats, LatestJobOut
+from codelith.schemas.project import (
+    LatestJobOut,
+    ProjectCreate,
+    ProjectOut,
+    ProjectStats,
+    ProjectUpdate,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -113,8 +120,8 @@ class ProjectService:
 
     async def _to_out(self, project: Project) -> ProjectOut:
         """Full ProjectOut with stats + latest_job (3 extra queries — used only on single-get)."""
-        from codelith.models.job import Job
         from codelith.models.document import Document
+        from codelith.models.job import Job
 
         job_count = await self.db.scalar(
             select(func.count()).select_from(Job).where(Job.project_id == project.id)

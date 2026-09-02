@@ -14,13 +14,17 @@ tool. A sentence explaining the problem lets it try something else — the same 
 
 from __future__ import annotations
 
-import pytest
-
 from types import SimpleNamespace
 
 from codelith.knowledge.constants import KBStatus
 from codelith.knowledge.tools import TOOL_SCHEMAS
-from codelith.mcp.server import SERVER_NAME, _LIST_CODEBASES, _dispatch, _with_codebase, build_server
+from codelith.mcp.server import (
+    _LIST_CODEBASES,
+    SERVER_NAME,
+    _dispatch,
+    _with_codebase,
+    build_server,
+)
 
 
 def _ready_kb_session():

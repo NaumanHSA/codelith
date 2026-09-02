@@ -15,7 +15,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from codelith.agents.analysis import KBPersisterAgent, SemanticIndexerAgent, StructuredExtractorAgent
+from codelith.agents.analysis import (
+    KBPersisterAgent,
+    SemanticIndexerAgent,
+    StructuredExtractorAgent,
+)
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
 from codelith.knowledge.constants import EntityKind, KBStatus, ModuleRole, PageStatus
@@ -464,5 +468,8 @@ class TestGraphShape:
         """
         from pathlib import Path
 
-        narrate = Path("ui/src/app/lib/narrate.ts").read_text()
+        # `encoding` is not optional: the default is the platform's, which is cp1252
+        # on Windows, and this file is full of em-dashes. The test failed there
+        # before it could assert anything.
+        narrate = Path("ui/src/app/lib/narrate.ts").read_text(encoding="utf-8")
         assert "'site_planner_agent'" in narrate

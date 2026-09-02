@@ -11,9 +11,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from codelith.core.exceptions import NotFoundError
 from codelith.db.repositories.knowledge import KnowledgeRepositories
-from codelith.knowledge.constants import EntityKind, JobType, KBStatus
+from codelith.knowledge.constants import EntityKind, JobType
 from codelith.knowledge.roles import suggest_doc_types
 from codelith.models.job import Job
 from codelith.models.knowledge import KnowledgeBase
