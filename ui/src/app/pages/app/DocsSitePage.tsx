@@ -187,6 +187,19 @@ export default function DocsSitePage() {
     setRevising(null)
   }, [address])
 
+  /** Ticked pages that already have text. The run replaces them, so the bar has to
+   *  say so — the coverage list is framed entirely around what is left to write, and
+   *  a finished page ticked inside that framing reads as filling a gap. */
+  const rewrites = useMemo(() => {
+    if (!site) return 0
+    const written = new Set(
+      site.sections.flatMap(sec =>
+        sec.pages.filter(p => !isPending(p.status)).map(p => `${sec.slug}/${p.slug}`),
+      ),
+    )
+    return [...picked].filter(a => written.has(a)).length
+  }, [site, picked])
+
   const suffix = version ? `?v=${encodeURIComponent(version)}` : ''
   const open = (section: string, p: SitePage) =>
     navigate(`/app/projects/${id}/docs/${section}/${p.slug}${suffix}`)
@@ -472,6 +485,7 @@ ${body}
           />
           <WriteBar
             count={picked.size}
+            rewrites={rewrites}
             review={review}
             onReview={setReview}
             depth={depth}
@@ -766,6 +780,40 @@ function PageBody({
             </Button>
           )}
         </div>
+      )}
+
+      {/* A written page had no way to write itself again: the only full rewrite was
+          the one offered when a page went stale, so regenerating a finished page
+          meant going back to the coverage list and ticking it — inside a panel whose
+          every other affordance is about pages that do not exist yet. That is the
+          confusion, and this is the half of the fix that keeps the capability. */}
+      {canGenerate && page.status === 'ready' && markdown && (
+        <details className="mb-4 border border-rule bg-sunk/40">
+          <summary className="cursor-pointer px-3 py-2 text-[12px] text-ink-mid transition-colors select-none hover:text-hot-ink">
+            ↻ Write this page again
+          </summary>
+          <div className="flex flex-col gap-3 border-t border-rule px-3 py-2.5">
+            <p className="font-sans text-[11.5px] leading-relaxed text-warn">
+              This replaces the {page.word_count} words currently on the page. To change
+              part of it instead, use the rewrite button beside a heading.
+            </p>
+            <WriteOptions
+              depth={depth}
+              onDepth={onDepth}
+              review={review}
+              onReview={onReview}
+              disabled={generating}
+            />
+            <Button
+              variant="hot"
+              className="self-start"
+              onClick={onGenerate}
+              disabled={generating}
+            >
+              {generating ? 'rewriting…' : '↻ Replace this page'}
+            </Button>
+          </div>
+        </details>
       )}
 
       {showDiff && previous && markdown ? (

@@ -144,17 +144,29 @@ export default function Coverage({
               {section.pages.map(page => (
                 <li key={page.id} className="flex items-stretch border-b border-rule last:border-b-0">
                   {canGenerate && (
+                    // A written page can still be picked — it is the only way to
+                    // regenerate one whole, and the reason to is usually depth. But
+                    // it must not look like the unwritten ones: this list is headed
+                    // "Coverage", counts "planned pages written", and offers "write N
+                    // remaining", so an identical checkbox on a finished page reads as
+                    // filling a gap right up until it replaces work.
                     <label
-                      className="flex cursor-pointer items-start pt-[9px] pl-3 select-none"
+                      className={`flex cursor-pointer items-start pt-[9px] pl-3 select-none ${
+                        isPending(page.status) ? '' : 'opacity-60'
+                      }`}
                       title={
                         isPending(page.status)
                           ? 'Write this page in the next run'
-                          : 'Rewrite this page in the next run'
+                          : 'REPLACE this page — it is already written, and rewriting discards the current text'
                       }
                     >
                       <input
                         type="checkbox"
-                        className="accent-[var(--hot)]"
+                        className={
+                          isPending(page.status)
+                            ? 'accent-[var(--hot)]'
+                            : 'accent-[var(--warn)]'
+                        }
                         checked={selected.has(`${section.slug}/${page.slug}`)}
                         onChange={() => onToggleSelect(`${section.slug}/${page.slug}`)}
                       />
@@ -183,7 +195,14 @@ export default function Coverage({
                         </span>
                       )}
                     </span>
-                    <span className="tag shrink-0 pt-[3px] text-ink-dim">{page.status}</span>
+                    {!isPending(page.status) &&
+                    selected.has(`${section.slug}/${page.slug}`) ? (
+                      <span className="tag shrink-0 border border-warn/50 bg-warn-wash px-1.5 pt-[1px] text-warn">
+                        will be replaced
+                      </span>
+                    ) : (
+                      <span className="tag shrink-0 pt-[3px] text-ink-dim">{page.status}</span>
+                    )}
                   </button>
                 </li>
               ))}
