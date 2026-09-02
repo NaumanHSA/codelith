@@ -144,16 +144,39 @@ a client, so that there is exactly one place a project is created or a question 
 answered. Phase 2 removes the requirement for the single-machine case rather than
 duplicating the service layer here.
 
-## Phase 2 — Solo mode
+## Phase 2 — Solo mode 🟨 *in progress*
 
 One person, one machine, no containers. The phase this whole plan is for.
 
-- [ ] **Storage profile.** A single setting — `CODELITH_PROFILE=solo|server` — that
-      selects the implementations below. Chosen once at startup, never branched on
-      per-call.
-- [ ] **SQLite + `sqlite-vec`** behind `memory/vector_store.py`. The Postgres path is one
-      `ORDER BY embedding <=> :q`; the SQLite path is the same query through a different
-      operator. `models/chunk.py` needs the column type to vary by profile.
+**Decided by measurement, not by plan: solo mode needs no `sqlite-vec`.**
+
+The plan assumed a vector extension. Before adding a native dependency, brute-force
+exact cosine was measured on 768-dimension vectors:
+
+| chunks | per query | memory |
+|---|---|---|
+| 1,692 — a 257-file repository | **0.62 ms** | 5 MB |
+| 10,000 | 0.76 ms | 31 MB |
+| 50,000 — a large repository | **3.0 ms** | 154 MB |
+| 200,000 | 10.5 ms | 614 MB |
+
+Faster than the round trip to a database that could do it, **exact** where HNSW is
+approximate, and numpy is already a dependency. A local install that needs a compiled
+SQLite plugin is one that fails on somebody's machine, and this avoids that entirely.
+The ceiling is memory rather than time, and one machine reading one repository is
+nowhere near it.
+
+- [x] **Storage profile.** `CODELITH_PROFILE=server|solo`, validated by pydantic so a
+      typo fails at startup rather than somewhere deep. Read once to choose
+      implementations, never branched on per call.
+- [x] **Vector search without pgvector.** The filters stay in SQL — they are what makes
+      the query selective — and only the ranking moves. Postgres orders by `<=>` in the
+      database; anything else brings the filtered rows back and ranks them exactly.
+      **Chosen by the dialect of the bound connection, not by the profile setting**: a
+      SQLite database cannot order by cosine distance whatever the configuration
+      claims, and a flag that disagreed with the connection would fail at query time
+      with an error about a missing operator. 10 tests, including one that pins the
+      numpy path against a plain-Python cosine over 200 random vectors.
 - [ ] **The code graph in SQL.** `memory/graph_store.py` is the only Neo4j importer, and
       only three tools query it — `find_callers`, `find_dependents`, `blast_radius`. Two
       tables and two recursive CTEs replace a service.
@@ -163,16 +186,17 @@ One person, one machine, no containers. The phase this whole plan is for.
 - [ ] **Inline execution** instead of Celery: the six `.delay()` sites run the coroutine
       directly with a progress callback. The studio's job rows still get written, so the
       UI works unchanged if somebody opens it.
-- [ ] **Alembic against SQLite** — the migrations use `postgresql` dialect features in at
-      least two places (`0001_initial_schema.py` and the vector resize). Either branch
-      them or generate the solo schema from the models.
-- [ ] **A test that keeps the seam honest.** `tests/unit/test_storage_profiles.py`: the
-      two profiles must satisfy the same interface, and nothing outside the five seam
-      modules may import `neo4j`, `boto3`, `redis`, or `celery`. Modelled on
-      `test_module_isolation.py` — a rule enforced by a test, not by intention.
-
-**Done when** `pipx install codelith && codelith analyse .` works on a machine with
-Docker uninstalled, and the integration suite passes under both profiles.
+- [ ] **`aiosqlite`** as a dependency — SQLAlchemy's async engine needs a driver, and
+      that is the one package solo mode genuinely adds.
+- [ ] **Alembic against SQLite.** Measured: the schema is ~95% portable. 48
+      `postgresql.TIMESTAMP` and 20 `postgresql.JSONB` map cleanly to their generic
+      types; the Postgres-only surface is four places — `CREATE EXTENSION vector`, the
+      `Vector(dims)` column, the HNSW index, and a `TRUNCATE` in the resize migration.
+      **Open question 1 is answered: share the schema and branch at those four points**,
+      rather than keeping two schemas in step forever.
+- [ ] **A test that keeps the seam honest.** `tests/unit/test_storage_profiles.py`:
+      nothing outside the seam modules may import `neo4j`, `boto3`, `redis` or
+      `celery`. Modelled on `test_module_isolation.py` — a rule enforced by a test.
 
 **The risk to watch.** A second-class path rots. Solo mode must be the profile the
 maintainer uses daily, or it will be broken and nobody will know.

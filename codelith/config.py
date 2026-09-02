@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -6,6 +7,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # ── How this installation runs ────────────────────────────────────────────
+    #: `server` is the deployment the studio was built for: Postgres, Redis, Neo4j,
+    #: MinIO and a Celery worker. `solo` is one person on one machine with none of
+    #: them — SQLite, in-process everything, no containers.
+    #:
+    #: Read once at startup to choose implementations, never branched on per call.
+    #: Where a choice can be made from the connection instead it is: the vector store
+    #: asks the dialect who can rank, because a SQLite database cannot order by cosine
+    #: distance whatever this setting says.
+    CODELITH_PROFILE: Literal["server", "solo"] = "server"
 
     # Application
     APP_ENV: str = "development"
