@@ -201,11 +201,22 @@ class Settings(BaseSettings):
     # D2 renders the graph-derived diagrams. SVG rather than PNG: ~10x smaller in
     # a data: URI, crisp at any zoom, and themeable — the mermaid path bakes a
     # white background, which is a latent bug for a dark studio.
-    # Diagrams built from the code graph rather than written by a model. On by
-    # default: they cannot contain an invented node or invalid syntax, which is
-    # what DIAGRAMS_ENABLED was turned off for. That flag still gates the
-    # model-written ones.
-    DIAGRAMS_FROM_GRAPH: bool = True
+    # Diagrams built from the code graph rather than written by a model.
+    #
+    # **Off, along with the model-written ones — no document ships a diagram today.**
+    # The graph-derived set does what it claimed: it cannot invent a node or emit
+    # invalid syntax, which is what DIAGRAMS_ENABLED was turned off for. What it
+    # cannot do is be *worth looking at*. A module-dependency picture of twenty
+    # packages is a hairball, and a system-context diagram that lists every hostname
+    # the code mentions is a list with arrows on it. Correct and not useful is still
+    # not useful, and each one costs a d2 render plus ~40KB of base64 inlined into
+    # the page.
+    #
+    # Kept rather than deleted because the pipeline around it is sound — derived
+    # from real edges, rendered locally, embedded so exports stay self-contained.
+    # What needs rethinking is which diagrams are worth drawing and how to lay them
+    # out, and that is a design question, not a bug.
+    DIAGRAMS_FROM_GRAPH: bool = False
     DIAGRAM_RENDER_SVG: bool = True
     #: Node runs the WASM shim in scripts/d2render.mjs. Empty means: find it on PATH.
     D2_NODE_PATH: str = ""
