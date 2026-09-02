@@ -81,14 +81,28 @@ class KBModuleRepository(BaseRepository[KBModule]):
         """
         if not file_paths:
             return []
-        result = await self.session.execute(
-            select(KBModule).where(
-                KBModule.kb_id == kb_id,
-                # `?|` ("has any key") requires text[] on the right, not jsonb.
-                KBModule.files_json.op("?|")(cast(array(tuple(file_paths)), ARRAY(Text))),
+
+        bind = self.session.get_bind()
+        if getattr(getattr(bind, "dialect", None), "name", "") == "postgresql":
+            result = await self.session.execute(
+                select(KBModule).where(
+                    KBModule.kb_id == kb_id,
+                    # `?|` ("has any key") requires text[] on the right, not jsonb.
+                    KBModule.files_json.op("?|")(cast(array(tuple(file_paths)), ARRAY(Text))),
+                )
             )
+            return result.scalars().all()
+
+        # No `?|` outside PostgreSQL, and no array type to cast to. A knowledge base
+        # holds tens of modules — 45 for a 257-file repository — so reading them and
+        # intersecting in Python is exact and costs nothing measurable. The filter is
+        # `kb_id`, which is what makes the query selective; the operator was only ever
+        # the last step.
+        wanted = set(file_paths)
+        result = await self.session.execute(
+            select(KBModule).where(KBModule.kb_id == kb_id)
         )
-        return result.scalars().all()
+        return [m for m in result.scalars().all() if wanted & set(m.files_json or [])]
 
     async def role_breakdown(self, kb_id: int) -> dict[str, int]:
         result = await self.session.execute(

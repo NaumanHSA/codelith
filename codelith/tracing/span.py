@@ -56,13 +56,27 @@ try:
             attrs: dict[str, Any] | str | None = None,
         ):
             def sink(msg: str):
-                self.console.print(
-                    f"[dim]{msg}[/dim]",
-                    end="\n",
-                    soft_wrap=False,
-                    overflow="fold",
-                    highlight=False,
-                )
+                try:
+                    self.console.print(
+                        f"[dim]{msg}[/dim]",
+                        end="\n",
+                        soft_wrap=False,
+                        overflow="fold",
+                        highlight=False,
+                    )
+                except Exception:
+                    # Tracing must never kill the run it describes. The spans draw `▶`
+                    # and `◀`, and a stream that cannot encode them — a cp1252 console
+                    # on Windows, which is what a redirected stdout defaults to —
+                    # raised `UnicodeEncodeError` out of `console.print` and took the
+                    # whole analysis down with it. Nine minutes of model time lost to a
+                    # decorative arrow.
+                    #
+                    # ASCII is a poorer trace. A poorer trace is not a failed job.
+                    try:
+                        print(msg.encode("ascii", "replace").decode("ascii"))
+                    except Exception:
+                        pass
             return _Span(name, attrs, sink=sink)
         
     # class RichTracer(SpanTracer):

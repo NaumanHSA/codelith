@@ -346,7 +346,7 @@ class ReActMixin:
 
     def _make_graph_tool(self, project_id: int):
         """Return a Neo4j code-graph query tool as a LangChain tool."""
-        from codelith.memory.graph_store import GraphStore
+        from codelith.memory import get_graph_store
 
         @lc_tool
         async def query_code_graph(query: str) -> str:
@@ -360,7 +360,7 @@ class ReActMixin:
             """
             q = query.lower().strip()
             try:
-                async with GraphStore() as graph:
+                async with get_graph_store() as graph:
                     if q.startswith("imports of "):
                         path = query.split("imports of ", 1)[1].strip()
                         deps = await graph.get_imports(project_id, path)

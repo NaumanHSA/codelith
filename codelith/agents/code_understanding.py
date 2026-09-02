@@ -5,7 +5,8 @@ from codelith.agents.base import BaseAgent
 from codelith.knowledge.builder import SourceFile
 from codelith.knowledge.graph import build_code_graph
 from codelith.llm.client import create_embedding
-from codelith.memory.graph_store import GraphScope, GraphStore
+from codelith.memory import get_graph_store
+from codelith.memory.graph_store import GraphScope
 from codelith.memory.long_term import LongTermMemory
 from codelith.memory.vector_store import VectorStore
 
@@ -85,7 +86,7 @@ class CodeUnderstandingAgent(BaseAgent):
                     SourceFile(path=f.path, content=f.content, language=f.language)
                     for f in (getattr(codebase, "files", None) or [])
                 ])
-                async with GraphStore() as graph:
+                async with get_graph_store() as graph:
                     graph_stats = await graph.write(GraphScope(project.id), code_graph)
                 await self._emit_log("info", "Graph built", **graph_stats)
             except Exception as exc:

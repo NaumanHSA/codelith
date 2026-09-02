@@ -136,7 +136,7 @@ class TestEmptyResultsAreAnswers:
             async def get_callers(self, project_id, symbol):
                 return []
 
-        monkeypatch.setattr("codelith.knowledge.tools.GraphStore", _Graph)
+        monkeypatch.setattr("codelith.knowledge.tools.get_graph_store", lambda *a, **k: _Graph())
 
         text, _ = await tools.run("find_callers", {"symbol": "ghost"})
 
@@ -183,7 +183,7 @@ class TestResultsBecomeEvidence:
             async def get_dependents(self, project_id, path):
                 return ["app/a.py", "app/b.py"]
 
-        monkeypatch.setattr("codelith.knowledge.tools.GraphStore", _Graph)
+        monkeypatch.setattr("codelith.knowledge.tools.get_graph_store", lambda *a, **k: _Graph())
 
         text, evidence = await tools.run("find_dependents", {"path": "app/x.py"})
 

@@ -177,14 +177,15 @@ nowhere near it.
       claims, and a flag that disagreed with the connection would fail at query time
       with an error about a missing operator. 10 tests, including one that pins the
       numpy path against a plain-Python cosine over 200 random vectors.
-- [ ] **The code graph in SQL.** Two tables and two recursive CTEs replace a service.
-      *Prepared:* the interface can now be implemented by something that is not Neo4j.
-      Three callers outside the store — the diagram agent twice and the grounding code
-      once — ran raw Cypher, which made the graph the one storage engine whose query
-      language had leaked into agents. They are `get_files`, `get_import_edges` and
-      `get_packages` now, and a test fails if Cypher appears outside the store again.
-      What remains is the SQL implementation itself and choosing between the two by
-      profile.
+- [x] **The code graph in SQL.** Six tables and one recursive CTE replace a service.
+      Two of the three questions the graph exists for are a single join; the third —
+      what might break if I change this — is a transitive walk, which every SQL
+      database has done with a recursive CTE for a decade.
+
+      `get_graph_store()` picks by profile and every caller goes through it. 13 tests
+      run against real SQLite, including a diamond-shaped import graph where a file is
+      reachable at two different depths — a store reporting the longest path, or
+      counting the diamond twice, would still look plausible on a straight chain.
 - [x] **In-process cancellation.** A flag store behind `core/cancellation.py`: Redis
       when the API and a worker are different processes, a set in memory when they are
       the same one. `CancellationToken` and `check_cancelled` are unchanged, so no
@@ -256,11 +257,23 @@ nowhere near it.
 **Done 2 September 2026.** Every seam has two implementations and one interface, and
 `test_storage_seams.py` fails if a second module reaches past any of them.
 
-**What is not done, and is worth stating plainly.** Solo mode is *assembled* but has
-never run a full analysis end to end — the pieces are each proven (a schema built and
-searched on SQLite, cancellation without Redis, storage on a folder, a job dispatched
-inline) and the whole has not been. That, plus wiring `CODELITH_PROFILE=solo` into the
-CLI so `codelith analyse .` needs no containers, is the first thing to do next.
+**Proven end to end on 2 September 2026.** A full analysis on SQLite with no
+Postgres, no pgvector, no Redis, no Neo4j, no MinIO and no Celery: repository walked,
+chunks embedded, modules summarised, architecture synthesised, the code graph written
+to SQL tables, narratives drafted, a site planned — then a question asked and answered
+with a checked citation. The whole knowledge base is a **467KB file**.
+
+Three portability bugs only that run could have found:
+
+- The tracing spans draw `▶`, and a redirected stdout on Windows is cp1252. A
+  `UnicodeEncodeError` escaped `console.print` and killed the analysis nine minutes in.
+  Tracing must never end the run it describes; it degrades to ASCII now.
+- `find_for_files` used the JSONB `?|` operator, which no other database has. A
+  knowledge base holds tens of modules, so the portable path reads them and intersects
+  in Python — the `kb_id` filter is what made the query selective anyway.
+- The engine passed `pool_size` and `max_overflow`, which SQLite's pool refuses, and
+  needed `check_same_thread=False` because the inline worker answers on a different
+  thread from the API.
 
 **The risk to watch.** A second-class path rots. Solo mode must be the profile the
 maintainer uses daily, or it will be broken and nobody will know — and the check above

@@ -2,6 +2,14 @@ from codelith.models.audit import AuditLog
 from codelith.models.chat import ChatMessage, ChatThread
 from codelith.models.chunk import CodeChunk
 from codelith.models.document import Document, DocumentExport
+from codelith.models.graph import (
+    GraphCall,
+    GraphFile,
+    GraphImport,
+    GraphModule,
+    GraphPackage,
+    GraphSymbol,
+)
 from codelith.models.job import AgentLog, Job, JobStep
 from codelith.models.knowledge import KBEntity, KBModule, KBNarrative, KnowledgeBase
 from codelith.models.organization import Organization, OrgMember
@@ -34,4 +42,10 @@ __all__ = [
     "SystemSetting",
     "ChatThread",
     "ChatMessage",
+    "GraphFile",
+    "GraphModule",
+    "GraphSymbol",
+    "GraphImport",
+    "GraphPackage",
+    "GraphCall",
 ]

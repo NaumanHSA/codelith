@@ -22,7 +22,8 @@ from codelith.core.cancellation import JobCancelled
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge.builder import SourceFile
 from codelith.knowledge.graph import build_code_graph
-from codelith.memory.graph_store import GraphScope, GraphStore
+from codelith.memory import get_graph_store
+from codelith.memory.graph_store import GraphScope
 from codelith.tracing.artifacts import save_artifact
 
 
@@ -64,7 +65,7 @@ class GraphBuilderAgent(BaseAgent):
             save_artifact("graph_builder.counts", graph.counts())
 
             try:
-                async with GraphStore() as store:
+                async with get_graph_store() as store:
                     stats = await store.write(
                         GraphScope(
                             project_id=project.id,

@@ -44,7 +44,7 @@ from codelith.knowledge import artefacts
 from codelith.knowledge.narratives import topics_for_doc_type
 from codelith.knowledge.policy import QUESTION_ANSWERING
 from codelith.knowledge.retrieval import SectionContextBuilder
-from codelith.memory.graph_store import GraphStore
+from codelith.memory import get_graph_store
 
 logger = structlog.get_logger(__name__)
 
@@ -611,7 +611,7 @@ class QuestionRouter:
         the same way the analysis pipeline degrades.
         """
         try:
-            async with GraphStore() as graph:
+            async with get_graph_store() as graph:
                 for path in bundle.plan.paths:
                     dependents = await graph.get_dependents(self.project_id, path)
                     radius = await graph.get_blast_radius(self.project_id, path)

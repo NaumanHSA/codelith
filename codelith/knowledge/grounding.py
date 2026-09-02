@@ -222,10 +222,10 @@ async def vocabulary_for(db, kb_id: int, project_id: int) -> frozenset[str]:
 
 async def _imported_names(project_id: int, kb_id: int) -> set[str]:
     """External packages this repository depends on, from the code graph."""
-    from codelith.memory.graph_store import GraphStore
+    from codelith.memory import get_graph_store
 
     try:
-        async with GraphStore() as graph:
+        async with get_graph_store() as graph:
             rows = await graph.get_packages(project_id, kb_id)
     except Exception:  # pragma: no cover - Neo4j optional
         return set()

@@ -27,7 +27,7 @@ from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge.policy import CODE, QUESTION_ANSWERING
 from codelith.knowledge.questions import Evidence
 from codelith.knowledge.retrieval import SectionContextBuilder
-from codelith.memory.graph_store import GraphStore
+from codelith.memory import get_graph_store
 from codelith.memory.vector_store import VectorStore
 
 logger = structlog.get_logger(__name__)
@@ -240,7 +240,7 @@ class CodebaseTools:
         if not symbol:
             return "find_callers needs a symbol.", []
 
-        async with GraphStore() as graph:
+        async with get_graph_store() as graph:
             rows = await graph.get_callers(self.project_id, symbol)
         if not rows:
             return (
@@ -261,7 +261,7 @@ class CodebaseTools:
         if not path:
             return "find_dependents needs a path.", []
 
-        async with GraphStore() as graph:
+        async with get_graph_store() as graph:
             files = await graph.get_dependents(self.project_id, path)
         if not files:
             return f"Nothing imports '{path}'.", []
@@ -278,7 +278,7 @@ class CodebaseTools:
         if not path:
             return "blast_radius needs a path.", []
 
-        async with GraphStore() as graph:
+        async with get_graph_store() as graph:
             rows = await graph.get_blast_radius(self.project_id, path)
         if not rows:
             return f"Nothing depends on '{path}', directly or transitively.", []

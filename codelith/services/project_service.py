@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.core.exceptions import AuthorizationError, NotFoundError
 from codelith.db.repositories.project_repo import ProjectRepository, ProjectSourceRepository
-from codelith.memory.graph_store import GraphStore
+from codelith.memory import get_graph_store
 from codelith.models.project import Project
 from codelith.models.user import User
 from codelith.schemas.project import (
@@ -87,7 +87,7 @@ class ProjectService:
         # and the next project to reuse the id would inherit them. Non-fatal: the
         # project is already gone, and failing here would only make that confusing.
         try:
-            async with GraphStore() as graph:
+            async with get_graph_store() as graph:
                 await graph.clear_project(project_id)
         except Exception as exc:  # pragma: no cover - Neo4j optional
             logger.warning("graph_cleanup_failed", project_id=project_id, error=str(exc))
