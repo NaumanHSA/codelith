@@ -11,7 +11,7 @@ import type {
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
-  JobReview,
+  JobReview, Drift, Preflight,
 } from './types'
 
 export const API_BASE =
@@ -423,6 +423,18 @@ export const api = {
   /** Recent conversations across every project, for the rail. */
   /** Every feature, with no codebase in the picture. For Home.
    *  Named `appCatalog` because `features` is the settings feature-flag call. */
+  /** What changed between the two most recent readings of this codebase. */
+  drift: (projectId: number, signal?: AbortSignal) =>
+    request<Drift>(`/projects/${projectId}/drift`, { signal }),
+
+  /** What an edit to a file or symbol would touch. The same answer a connected
+   *  agent gets from the `before_edit` MCP tool. */
+  preflight: (projectId: number, target: string, signal?: AbortSignal) =>
+    request<Preflight>(
+      `/projects/${projectId}/preflight?target=${encodeURIComponent(target)}`,
+      { signal },
+    ),
+
   appCatalog: (signal?: AbortSignal) =>
     request<AppCatalogItem[]>('/apps', { signal }),
 

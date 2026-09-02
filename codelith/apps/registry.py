@@ -83,6 +83,18 @@ APPS: tuple[App, ...] = (
         needs=("retrieval", "code graph", "entities"),
         route="/app/chat?project={id}&thread=new",
     ),
+    App(
+        id="drift",
+        label="What changed",
+        blurb=(
+            "Compare two readings of the same repository and see what moved — modules "
+            "added or rewritten, routes that came and went, and which written pages "
+            "now describe code that is no longer there. Needs the codebase analysed "
+            "twice; one reading is a photograph, two are a difference."
+        ),
+        needs=("modules", "entities", "written pages"),
+        route="/app/projects/{id}/drift",
+    ),
 )
 
 APPS_BY_ID = {f.id: f for f in APPS}

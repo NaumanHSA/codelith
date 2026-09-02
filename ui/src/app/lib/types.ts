@@ -464,3 +464,82 @@ export interface JobReview {
   flagged_count: number
   pages: ReviewPage[]
 }
+
+
+/* ── Drift: what changed between two readings ─────────────────────────────── */
+
+export interface DriftModule {
+  path: string
+  name: string
+  change: 'added' | 'removed' | 'rewritten' | 'grew' | 'shrank'
+  loc_before: number
+  loc_after: number
+  loc_delta: number
+}
+
+export interface DriftEntity {
+  kind: string
+  name: string
+  change: 'added' | 'removed'
+  source_path: string | null
+}
+
+/** A written page whose source has moved under it. */
+export interface DriftPageAtRisk {
+  address: string
+  title: string
+  changed_files: string[]
+  reason: string
+}
+
+export interface Drift {
+  project_id: number
+  from_commit: string | null
+  to_commit: string | null
+  summary: string
+  /** False when the codebase has been read only once — which is not the same as
+   *  "nothing changed", and must not be rendered as an empty diff. */
+  comparable: boolean
+  modules: DriftModule[]
+  entities: DriftEntity[]
+  pages_at_risk: DriftPageAtRisk[]
+}
+
+/* ── Pre-flight: what an edit would touch ─────────────────────────────────── */
+
+export interface PreflightCaller {
+  file: string
+  symbol: string
+}
+
+/** A file that imports the target, directly or through others. */
+export interface PreflightReached {
+  path: string
+  distance: number
+  is_test: boolean
+}
+
+export interface PreflightCitedBy {
+  address: string
+  title: string
+}
+
+export interface Preflight {
+  target: string
+  /** False when nothing in the codebase resolves to the target — a real answer,
+   *  not an error, and rendered as one. */
+  found: boolean
+  kind: 'file' | 'symbol' | 'unknown'
+  risk: 'low' | 'moderate' | 'high' | 'unknown'
+  headline: string
+  /** The prose a connected agent gets over MCP, verbatim. */
+  brief: string
+  files: string[]
+  defined_at: string[]
+  callers: PreflightCaller[]
+  dependents: string[]
+  reached: PreflightReached[]
+  tests: string[]
+  documented_in: PreflightCitedBy[]
+  facts: string[]
+}
