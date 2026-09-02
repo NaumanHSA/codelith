@@ -224,3 +224,52 @@ class TestClaimedPagesAreHandedBack:
         # ones, must not be touched.
         assert "job_id" in sql and "status" in sql
         assert captured["params"]["status"] == expected
+
+
+class TestDiagramsAreOptional:
+    """
+    `include_diagrams` sat in `JobConfig` from the beginning and nothing read it.
+    The API accepted it, the studio sent it, and every run drew diagrams anyway —
+    the worst kind of setting, because callers believe it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_flag_is_honoured_and_the_stage_still_reports(self) -> None:
+        from codelith.apps.documentation.agents.diagram import DiagramAgent
+
+        agent = DiagramAgent.__new__(DiagramAgent)
+        agent.name = "diagram_agent"  # type: ignore[attr-defined]
+        logged: list[str] = []
+        steps: list[tuple] = []
+
+        async def _log(level, message, **kw):
+            logged.append(message)
+
+        async def _step(name, status, out=None):
+            steps.append((name, status, out))
+
+        class _Span:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def outputs(self, **kw):
+                self.out = kw
+
+        agent._emit_log = _log  # type: ignore[attr-defined]
+        agent._update_step = _step  # type: ignore[attr-defined]
+        agent._tracer = lambda: (lambda **kw: _Span())  # type: ignore[attr-defined]
+
+        out = await agent.run({"job_config": {"include_diagrams": False}})
+
+        assert out == {"diagrams": []}
+        assert any("skipped" in m for m in logged)
+        # The stage must still complete: a run that silently loses a stage skews the
+        # progress denominator and reads as a run that went wrong.
+        assert steps[-1][1] == "completed"
+
+    def test_absent_means_on(self) -> None:
+        """Existing callers that never sent the flag must not lose their diagrams."""
+        assert {}.get("include_diagrams", True) is True

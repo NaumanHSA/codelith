@@ -29,9 +29,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from codelith.agents.base import BaseAgent
-from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.config import get_settings
 from codelith.core.cancellation import JobCancelled
+from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge.constants import EntityKind
 from codelith.knowledge.sites import doc_key
 from codelith.llm.prompts.diagram_prompts import DIAGRAM, DIAGRAM_REPAIR, example_for
@@ -124,6 +124,20 @@ class DiagramAgent(BaseAgent):
             end_message="DiagramAgent: complete",
         ) as t:
             await self._update_step(self.name, "running")
+
+            # `include_diagrams` has been in `JobConfig` since the beginning and nothing
+            # has ever read it: the API accepted the flag, the studio sent it, and every
+            # run drew diagrams regardless. A setting that is accepted and ignored is
+            # worse than one that does not exist, because callers believe it.
+            #
+            # Honoured here rather than by skipping the node, so the stage still reports
+            # and the progress bar keeps its denominator — a run that silently loses a
+            # stage reads as a run that went wrong.
+            if not state.get("job_config", {}).get("include_diagrams", True):
+                await self._emit_log("info", "DiagramAgent: skipped (include_diagrams=false)")
+                t.outputs(diagrams=0, skipped=True)
+                await self._update_step(self.name, "completed", {"diagrams": 0, "skipped": True})
+                return {"diagrams": []}
 
             # Deterministic first, and on by default. These are built from the code
             # graph and the extracted entities by `app/knowledge/diagrams.py` — no
