@@ -44,8 +44,16 @@ dependencies = [
     "langgraph>=0.2.60",
     "langchain-core>=0.3.25",
     "langchain-mcp-adapters>=0.1.0",
-    # <2: mcp 2.0 removed the `@server.list_tools()` / `@server.call_tool()` decorators
-    # that `codelith/mcp/server.py` is built on — `Server` there is handler-registration
+    # <2, and no longer by our choice. `langchain-mcp-adapters` requires `mcp<2.0.0`,
+    # so the ceiling is a transitive constraint: raising it here would not resolve.
+    #
+    # The port itself is also real work rather than a rename. In 2.x the protocol types
+    # moved to a separate `mcp-types` package, `FastMCP` became `MCPServer` whose
+    # `add_tool` derives schemas from Python signatures — ours are data, from
+    # `TOOL_SCHEMAS` — and the SDK pulls in `httpx2`, a second HTTP stack beside the
+    # `httpx` everything else here uses.
+    #
+    # 1.x: `Server` still has the decorators
     # only. Porting is a deliberate piece of work, not something a resolver should do on
     # our behalf, which is what `>=1.0.0` allowed.
     "mcp>=1.24.0,<2.0",

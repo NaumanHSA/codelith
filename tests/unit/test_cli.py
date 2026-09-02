@@ -13,6 +13,7 @@ the moment a spinner or a "signed in" line lands on the same stream.
 
 from __future__ import annotations
 
+import argparse
 import json
 
 import pytest
@@ -170,6 +171,7 @@ class TestTheParser:
             ["ask", "why"],
             ["analyse", "."],
             ["analyze", "."],  # the American spelling is an alias, not a second command
+            ["mcp"],
         ):
             assert parser.parse_args(argv).command is not None
 
@@ -182,3 +184,33 @@ class TestTheParser:
 def test_agent_names_read_as_prose() -> None:
     assert _pretty("composition_writer_agent") == "Composition writer"
     assert _pretty("kb_persister_agent") == "Kb persister"
+
+
+class TestTheMcpCommand:
+    """
+    `codelith mcp` is what an editor launches, and the contract is narrow: stdin and
+    stdout carry JSON-RPC and nothing else.
+
+    It exists so `.mcp.json` can say `{"command": "codelith", "args": ["mcp"]}`. The
+    documented invocation used to be a Python module path plus a `PYTHONPATH`, which
+    only worked from inside a checkout.
+    """
+
+    def test_it_prints_nothing_to_stdout(self, capsys, monkeypatch) -> None:
+        """
+        One line of prose on stdout is a parse error on the client — and the failure
+        surfaces as "the server is broken", not as "the server said hello".
+        """
+        import codelith.mcp.server as server_mod
+        from codelith.cli import commands
+
+        served: list[bool] = []
+
+        async def _fake_serve():
+            served.append(True)
+
+        monkeypatch.setattr(server_mod, "main", _fake_serve)
+
+        assert commands.cmd_mcp(argparse.Namespace(), Output(as_json=False)) == 0
+        assert served == [True]
+        assert capsys.readouterr().out == ""

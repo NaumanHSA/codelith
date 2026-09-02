@@ -1,11 +1,29 @@
 # Codelith
 
-Open-source platform for understanding a codebase — and then doing things with that
-understanding. Point it at a repository; it reads the code once, builds a knowledge
-base, and everything after that is an app consuming it.
+**Your coding agent re-reads your repository from scratch every session, by grepping.
+Codelith reads it once and serves it.**
 
-It runs entirely on your machine against [LM Studio](https://lmstudio.ai/) (or any
-OpenAI-compatible endpoint). Nothing leaves your box.
+```bash
+pipx install codelith          # or: pip install -e .
+codelith analyse .             # reads the repo, builds a knowledge base
+codelith mcp                   # serves it to Claude Code, Cursor, anything MCP
+```
+
+Point an editor at it and the agent can ask *what calls this*, *what breaks if I change
+it*, *where is auth handled* — and get an answer from a structured reading of your code,
+pinned to a commit, instead of thirty tool calls spent rediscovering the same thing.
+
+```jsonc
+// .mcp.json
+{ "mcpServers": { "codelith": { "command": "codelith", "args": ["mcp"] } } }
+```
+
+**Nothing to install and nothing leaves your machine.** The knowledge base is a SQLite
+file under `~/.codelith`; the models run in [LM Studio](https://lmstudio.ai/) or any
+OpenAI-compatible endpoint you point it at. No database to run, no queue, no cloud.
+
+That same knowledge base is what the other apps read — documentation, grounded Q&A —
+and it is why the second thing you ask for is cheap.
 
 ---
 
@@ -180,13 +198,22 @@ session. The MCP server lets them ask instead.
 {
   "mcpServers": {
     "codelith": {
-      "command": "python",
-      "args": ["-m", "codelith.mcp"],
-      "env": { "PYTHONPATH": "." }
+      "command": "codelith",
+      "args": ["mcp"]
     }
   }
 }
 ```
+
+Or, in Claude Code:
+
+```bash
+claude mcp add codelith -- codelith mcp
+```
+
+The server speaks JSON-RPC on stdin and stdout, which is what an editor launches. It
+writes nothing to stdout but the protocol — a stray line of prose there is a parse
+error on the client, which is why `codelith mcp` prints no banner.
 
 Seven tools. `list_codebases` first — every other one takes a `codebase_id`, and the
 ids are not guessable:

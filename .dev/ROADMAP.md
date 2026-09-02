@@ -320,22 +320,38 @@ is not retried — the startup reconciliation hands back its pages so nothing is
 but the work is lost. For one machine that beats running a broker to guard against
 closing your own laptop.
 
-## Phase 3 — MCP as the headline
+## Phase 3 — MCP as the headline ✅
 
-The best pitch in the repository, currently a footnote gated behind `PYTHONPATH="."` and
-six containers.
+*Done 2 September 2026. Three of four; the fourth is blocked by somebody else's pin.*
 
-- [ ] **`codelith mcp`** as a first-class command, so `.mcp.json` is
-      `{"command": "codelith", "args": ["mcp"]}` rather than a Python module path plus an
-      environment variable.
-- [ ] **Port to `mcp>=2.0`.** The pin exists because 2.0 removed the
-      `@server.list_tools()` / `@server.call_tool()` decorators `codelith/mcp/server.py`
-      is built on. Deferred for want of a client to verify against — Phase 1 gives us
-      one, and the pin has been load-bearing for long enough.
-- [ ] **Lead the README with it.** The current opening sells documentation, which is the
-      least differentiated thing here. The knowledge base is the moat.
-- [ ] **A one-command install** for Claude Code and Cursor, verified end to end against a
-      real editor session, with the transcript in the README.
+- [x] **`codelith mcp`** as a first-class command, so `.mcp.json` reads
+      `{"command": "codelith", "args": ["mcp"]}` rather than a Python module path plus
+      a `PYTHONPATH` that only worked from inside a checkout.
+
+      Verified the way an editor uses it: a JSON-RPC handshake over stdio, then
+      `tools/list` returning all seven, then `tools/call list_codebases` returning the
+      real analysed repository. The command prints nothing to stdout — one line of
+      prose there is a parse error on the client, and the failure surfaces as "the
+      server is broken" rather than "the server said hello". There is a test for it.
+- [x] **The README leads with it.** The opening was about documentation, which is the
+      least differentiated thing here. It now opens with the sentence that was buried
+      at line 182: *your coding agent re-reads your repository from scratch every
+      session, by grepping; Codelith reads it once and serves it.*
+- [x] **A one-command install.** `claude mcp add codelith -- codelith mcp`.
+- [ ] **Port to `mcp>=2.0`** — **blocked, and not by our code.**
+
+      The pin said 2.0 removed the decorators `codelith/mcp/server.py` is built on.
+      That is still true — 2.1's `Server` is `add_request_handler` only. But the actual
+      ceiling is `langchain-mcp-adapters`, which requires `mcp<2.0.0`: raising our pin
+      would simply fail to resolve. It is used by `react_mixin.py`, which is reachable
+      only from the legacy single-shot pipeline — so the way out is probably to retire
+      that, not to fight the SDK.
+
+      Worth knowing before anyone tries again: in 2.x the protocol types moved to a
+      separate `mcp-types` package, `FastMCP` became `MCPServer` whose `add_tool`
+      derives schemas from Python *signatures* while ours are data from `TOOL_SCHEMAS`,
+      and the SDK depends on `httpx2` — a second HTTP stack beside the `httpx`
+      everything else here uses. This is a rewrite of the server module, not a rename.
 
 ## Phase 4 — Drift
 

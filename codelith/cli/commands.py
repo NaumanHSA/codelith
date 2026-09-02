@@ -391,3 +391,25 @@ def _embedding_dimension(settings) -> int | None:
         return len(r.json()["data"][0]["embedding"])
     except Exception:
         return None
+
+
+def cmd_mcp(args, o: Output) -> int:
+    """
+    Serve the knowledge base over MCP, on stdin and stdout.
+
+    This is the command an editor launches, so it must be the *only* thing on stdout —
+    the protocol is JSON-RPC over that pipe, and one stray line of prose is a parse
+    error on the client. `codelith.mcp` speaks it; nothing here prints.
+
+    It exists so `.mcp.json` can say `{"command": "codelith", "args": ["mcp"]}` rather
+    than a Python module path plus a `PYTHONPATH` — which is what stood between "read
+    the README" and "it works".
+    """
+    import asyncio
+
+    from codelith.mcp.server import main as serve
+
+    # No banner, no confirmation. Diagnostics belong on stderr and the server logs
+    # there already.
+    asyncio.run(serve())
+    return 0

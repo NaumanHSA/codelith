@@ -61,6 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("doctor", help="Check the configuration before it fails somewhere deep")
 
+    p = sub.add_parser(
+        "mcp",
+        help="Serve the knowledge base over MCP, for Claude Code, Cursor and the rest",
+    )
+
     return parser
 
 
@@ -82,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         "status": commands.cmd_status,
         "studio": commands.cmd_studio,
         "doctor": commands.cmd_doctor,
+        "mcp": commands.cmd_mcp,
     }[args.command]
 
     o = Output(args.as_json)
