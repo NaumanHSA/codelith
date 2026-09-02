@@ -120,9 +120,18 @@ class SiteService:
         if site.title != title:
             site.title = title
 
-        existing = {
-            (p.section_slug, p.slug): p for p in await self.pages.list_for_site(site.id)
-        }
+        rows = await self.pages.list_for_site(site.id)
+        existing = {(p.section_slug, p.slug): p for p in rows}
+        # Second way in, and the reason it exists: a page is matched across runs by
+        # its address, and the slug in that address used to come from the model. One
+        # run phrased it differently — `getting-started-introduction` where the last
+        # had said `introduction` — and all twenty-one pages of a real site were
+        # orphaned and re-proposed under new addresses, doubling it in a single pass.
+        #
+        # Slugs are derived from titles now (`knowledge/sites.py::_page_slug`), so a
+        # stable title gives a stable address. This catches the rest: a retitled page,
+        # and every site already carrying addresses from before that fix.
+        by_title = self._index_by_title(rows)
         proposed: set[tuple[str, str]] = set()
 
         for section in sections:
@@ -134,11 +143,17 @@ class SiteService:
                 slug = page.get("slug")
                 if not slug:
                     continue
-                key = (section_slug, slug)
-                proposed.add(key)
-                if (row := existing.get(key)) is not None:
+                row = existing.get((section_slug, slug)) or by_title.get(
+                    (section_slug, _title_key(page.get("title")))
+                )
+                if row is not None:
+                    # Its own address, not the proposed one. The slug is a URL somebody
+                    # may have bookmarked and other pages may have linked to, so
+                    # recognising a page must never move it.
+                    proposed.add((row.section_slug, row.slug))
                     self._update_page(row, page, counts)
                 else:
+                    proposed.add((section_slug, slug))
                     await self._insert_page(site.id, section_slug, page, counts)
 
         # Anything the proposal dropped. Pinned pages are the user's, not analysis's.
@@ -160,6 +175,27 @@ class SiteService:
         counts.site_id = site.id
         counts.total_pages = sum((await self.pages.status_breakdown(site.id)).values())
         return counts
+
+    @staticmethod
+    def _index_by_title(rows) -> dict[tuple[str, str], Any]:
+        """
+        One row per `(section, title)`, for matching a proposal that moved its slug.
+
+        A section can legitimately hold two rows with the same title — an orphan from
+        an earlier naming and the page that replaced it — so the tie-break matters and
+        is ordered by what a reader would lose. A live page beats an orphan; a page
+        with prose beats an empty one; after that the older row wins, because it is the
+        one whose address has been around long enough to be linked to.
+        """
+        best: dict[tuple[str, str], Any] = {}
+        for row in rows:
+            key = (row.section_slug, _title_key(row.title))
+            if not key[1]:
+                continue
+            current = best.get(key)
+            if current is None or _match_rank(row) > _match_rank(current):
+                best[key] = row
+        return best
 
     async def _insert_page(
         self, site_id: int, section_slug: str, page: dict, counts: MergeCounts
@@ -954,3 +990,17 @@ class SiteService:
 
 
 __all__ = ["SiteService", "MergeCounts"]
+
+
+def _title_key(title: Any) -> str:
+    """Titles compared as a reader would: case and spacing are not a rename."""
+    return " ".join(str(title or "").split()).casefold()
+
+
+def _match_rank(row) -> tuple[int, int, int]:
+    """Higher is a better page to recognise a proposal as. See `_index_by_title`."""
+    return (
+        0 if row.status == PageStatus.ORPHANED else 1,
+        1 if (row.content_markdown or "").strip() else 0,
+        -(row.id or 0),
+    )

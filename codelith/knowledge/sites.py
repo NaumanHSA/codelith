@@ -156,6 +156,7 @@ def coerce_site_map(
         pages = _coerce_pages(
             entry.get("pages"),
             known_files=known_files,
+            section_slug=slug,
             # Slugs are unique per section, but the fallback map and the UI both read
             # better when they are unique across the site, so one namespace is used.
             taken=page_slugs,
@@ -180,7 +181,7 @@ def coerce_site_map(
 
 
 def _coerce_pages(
-    raw: Any, *, known_files: set[str], taken: set[str], limit: int
+    raw: Any, *, known_files: set[str], taken: set[str], limit: int, section_slug: str = ""
 ) -> list[dict]:
     pages: list[dict] = []
     for entry in raw or []:
@@ -191,7 +192,7 @@ def _coerce_pages(
         title = str(entry.get("title") or "").strip()
         if not title:
             continue
-        slug = unique_slug(slugify(entry.get("slug") or title), taken)
+        slug = unique_slug(_page_slug(entry, title, section_slug), taken)
         taken.add(slug)
         pages.append(
             {
@@ -208,6 +209,34 @@ def _coerce_pages(
             }
         )
     return pages
+
+
+def _page_slug(entry: Any, title: str, section_slug: str) -> str:
+    """
+    A page's slug, derived from its title rather than taken from the model.
+
+    **Identity, not decoration.** A page is matched across re-analyses by
+    `(section_slug, slug)`, so whatever produces the slug decides whether a second
+    run recognises the pages it already has or retires all of them and inserts a fresh
+    set. Reading it out of the model's `slug` field made that a free-text choice made
+    again on every run — and once it did change, all twenty-one pages of a real site
+    were orphaned and re-proposed under new addresses, doubling it in one pass.
+
+    The title is the stable thing: it is the name a reader sees, so the model has a
+    reason to keep it the same. `slug` is now only a hint used when there is no usable
+    title.
+
+    A leading section prefix is stripped, because the address already carries it —
+    `getting-started/getting-started-introduction` says it twice, and the run that
+    produced those slugs is exactly the one that orphaned the site.
+    """
+    proposed = slugify(str((entry or {}).get("slug") or "")) if isinstance(entry, dict) else ""
+    slug = slugify(title) or proposed or "page"
+
+    prefix = f"{section_slug}-"
+    if section_slug and slug.startswith(prefix) and len(slug) > len(prefix):
+        slug = slug[len(prefix):]
+    return slug
 
 
 def _confidence(raw: Any) -> float:
