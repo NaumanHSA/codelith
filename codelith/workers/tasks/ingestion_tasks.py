@@ -3,13 +3,13 @@ import structlog
 from codelith.db.session import AsyncSessionLocal
 from codelith.services.job_service import JobService
 from codelith.workers import runner
-from codelith.workers.celery_app import celery_app
+from codelith.workers.task import task
 
 logger = structlog.get_logger(__name__)
 
 
-@celery_app.task(name="ingestion.run_ingestion_pipeline", bind=True, max_retries=2)
-def run_ingestion_pipeline(self, job_id: int) -> dict:
+@task("ingestion.run_ingestion_pipeline")
+def run_ingestion_pipeline(job_id: int) -> dict:
     return runner.run(_run_ingestion(job_id))
 
 

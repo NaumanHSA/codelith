@@ -18,8 +18,25 @@ def _engine_kwargs() -> dict:
     unless told the caller is handling the serialisation — which SQLAlchemy's pool is.
     """
     if settings.DATABASE_URL.startswith("sqlite"):
+        _ensure_parent_dir(settings.DATABASE_URL)
         return {"connect_args": {"check_same_thread": False}}
     return {"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True}
+
+
+def _ensure_parent_dir(url: str) -> None:
+    """
+    Make the folder the database file lives in.
+
+    SQLite creates a missing *file* and refuses a missing *directory* — the error is
+    `unable to open database file`, which reads like a permissions problem and is
+    not. Since the default path is under the user's home and nothing else creates it,
+    a first run on a clean machine would fail on its own default.
+    """
+    from pathlib import Path
+
+    path = url.split("///", 1)[-1]
+    if path and path != ":memory:":
+        Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 
 engine = create_async_engine(
@@ -27,6 +44,34 @@ engine = create_async_engine(
     echo=settings.SQLALCHEMY_ECHO,
     **_engine_kwargs(),
 )
+
+def tune_sqlite(dbapi_connection, _record) -> None:
+    """
+    Two pragmas that decide whether this is usable with more than one connection.
+
+    **WAL.** The default rollback journal takes a lock over the whole database for
+    every write, so a reader and a writer block each other — and this design has the
+    API answering requests while a background thread writes an analysis. In WAL they
+    do not block: readers see the last committed state while a write is in progress.
+
+    **`busy_timeout`.** Without it, a lock that is held for a moment raises "database
+    is locked" immediately rather than waiting. Five seconds is far longer than any
+    contention here and turns a spurious failure into a pause nobody notices.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    # Foreign keys are off by default in SQLite, which would silently let the
+    # `ondelete=CASCADE` the models declare do nothing at all.
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
+if settings.DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy import event
+
+    event.listen(engine.sync_engine, "connect", tune_sqlite)
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

@@ -18,7 +18,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from codelith.db.base import Base
-from codelith.memory.graph_store import CodeGraph, GraphScope
+from codelith.memory.code_graph import CodeGraph, GraphScope
 from codelith.memory.sql_graph_store import SqlGraphStore
 from codelith.models.organization import Organization
 from codelith.models.project import Project

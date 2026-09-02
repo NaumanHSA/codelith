@@ -23,7 +23,7 @@ from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge.builder import SourceFile
 from codelith.knowledge.graph import build_code_graph
 from codelith.memory import get_graph_store
-from codelith.memory.graph_store import GraphScope
+from codelith.memory.code_graph import GraphScope
 from codelith.tracing.artifacts import save_artifact
 
 

@@ -5,13 +5,13 @@ from codelith.observability.metrics import job_total, time_job
 from codelith.observability.tracing import workflow_span
 from codelith.services.job_service import JobService
 from codelith.workers import runner
-from codelith.workers.celery_app import celery_app
+from codelith.workers.task import task
 
 logger = structlog.get_logger(__name__)
 
 
-@celery_app.task(name="generation.run_documentation_workflow", bind=True, max_retries=1)
-def run_documentation_workflow(self, job_id: int) -> dict:
+@task("generation.run_documentation_workflow")
+def run_documentation_workflow(job_id: int) -> dict:
     return runner.run(_run_workflow(job_id))
 
 

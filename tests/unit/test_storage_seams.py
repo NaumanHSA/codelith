@@ -1,21 +1,18 @@
 """
-One module per external service, and the query language stays inside it.
+The services that are gone, and stay gone.
 
-Solo mode — one person, one machine, no containers — is a substitution behind a few
-seams rather than a rewrite, and that is only true for as long as each service has
-exactly one door. Today it does: Neo4j is imported by one file, boto3 by one, redis by
-one, Celery by one. Nothing enforced that; it was a happy consequence of "all DB
-access goes through repositories" and a graph builder written as a pure function.
+Codelith used to run on Postgres, Redis, Neo4j and MinIO with a Celery worker beside
+it — six containers before anybody could try it. All of that was replaced by a SQLite
+file, a folder, a set in memory and a background thread, and then deleted.
 
-A happy consequence is not a guarantee. The second file to `import boto3` is the one
-that makes filesystem storage a refactor instead of a swap, and it will look entirely
-reasonable in review — it always does. So the rule is a test, like
-`test_module_isolation.py`, and for the same reason: conventions decay silently.
+This is what stops it coming back. Each of these libraries is easy to reach for and
+individually reasonable in review: an import of `redis` for a cache, of `boto3` for
+one upload. The second one is what turns "runs anywhere with Python" back into "and
+here are the containers you need first", and nobody notices until somebody tries to
+install it.
 
-The Cypher rule is the same rule one level down. Three call sites outside the graph
-store used to run raw Cypher — a diagram agent and the grounding code — which made the
-graph the one storage engine whose query language had leaked into agents. An interface
-you cannot reimplement is not an interface.
+The rule is a test rather than a note, for the same reason `test_module_isolation.py`
+is one: conventions decay silently.
 """
 
 from __future__ import annotations
@@ -28,25 +25,13 @@ import pytest
 
 APP = Path(__file__).resolve().parents[2] / "codelith"
 
-#: The external service, and the single module allowed to speak to it.
-#:
-#: Each of these is a seam solo mode replaces: a graph in SQL, a directory instead of a
-#: bucket, an in-process flag instead of Redis, a coroutine instead of a task queue.
-SEAMS: dict[str, str] = {
-    "neo4j": "memory/graph_store.py",
-    "boto3": "storage/s3.py",
-    "redis": "core/cancellation.py",
-    "celery": "workers/celery_app.py",
-}
+#: Removed along with the second way of running this. Each was one module; each is
+#: now nothing.
+REMOVED = ("neo4j", "boto3", "redis", "celery", "asyncpg", "pgvector")
 
-#: Cypher is Neo4j's language and belongs behind its door. Matched on clause keywords
-#: that do not otherwise appear in Python at the start of a string.
+#: Cypher clause keywords. The code graph is SQL now, so any of these means a
+#: Neo4j-shaped query written against a database that does not speak it.
 _CYPHER = re.compile(r"\b(MATCH \(|UNWIND \$|MERGE \(|DETACH DELETE)\b")
-
-#: Files that legitimately dispatch Celery tasks. A task is queued from the composition
-#: root that knows what kind of work it is, which is a different thing from importing
-#: Celery itself — these name `.delay()`, not the library.
-_TASK_DISPATCHERS = "apps/", "api/v1/", "services/", "workers/"
 
 
 def _python_files(root: Path) -> list[Path]:
@@ -58,7 +43,7 @@ def _rel(path: Path) -> str:
 
 
 def _imported_roots(path: Path) -> set[str]:
-    """Top-level package names this file imports, parsed rather than grepped."""
+    """Top-level packages this file imports, parsed rather than grepped."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError):  # pragma: no cover - defensive
@@ -73,54 +58,59 @@ def _imported_roots(path: Path) -> set[str]:
     return found
 
 
-class TestEachServiceHasOneDoor:
-    @pytest.mark.parametrize("library,owner", sorted(SEAMS.items()))
-    def test_only_its_own_module_imports_it(self, library: str, owner: str) -> None:
-        offenders = [
-            _rel(f)
-            for f in _python_files(APP)
-            if _rel(f) != owner and library in _imported_roots(f)
+class TestTheServicesAreGone:
+    @pytest.mark.parametrize("library", REMOVED)
+    def test_nothing_imports_it(self, library: str) -> None:
+        offenders = [_rel(f) for f in _python_files(APP) if library in _imported_roots(f)]
+        assert not offenders, (
+            f"`{library}` is back, in:\n  "
+            + "\n  ".join(offenders)
+            + "\nCodelith runs with nothing installed. Reaching for this puts a "
+            "container back between somebody and trying it."
+        )
+
+    @pytest.mark.parametrize("library", REMOVED)
+    def test_it_is_not_a_dependency_either(self, library: str) -> None:
+        """An unused dependency is still installed, and is still an invitation."""
+        pyproject = (APP.parent / "pyproject.toml").read_text(encoding="utf-8")
+        declared = [
+            line.strip()
+            for line in pyproject.splitlines()
+            if line.strip().startswith(f'"{library}')
         ]
-        assert not offenders, (
-            f"`{library}` is imported outside {owner}:\n  " + "\n  ".join(offenders) + "\n"
-            f"Solo mode replaces {owner}. A second importer makes that a refactor "
-            "rather than a swap — put what you need behind the seam instead."
-        )
+        assert not declared, f"{library} is still declared: {declared}"
 
-    def test_every_named_owner_exists(self) -> None:
+
+class TestCypherIsGone:
+    def test_no_module_writes_cypher(self) -> None:
+        offenders = [
+            _rel(f) for f in _python_files(APP) if _CYPHER.search(f.read_text(encoding="utf-8"))
+        ]
+        assert not offenders, "Cypher found in:\n  " + "\n  ".join(offenders)
+
+
+class TestThereIsOnlyOneWayToRun:
+    def test_there_is_no_profile_setting(self) -> None:
         """
-        A seam whose owner has been moved or renamed silently stops being enforced,
-        and the test keeps passing because nothing imports a file that is not there.
+        There was a `CODELITH_PROFILE` choosing between two sets of implementations.
+        One mode means no setting: a knob with one position is a knob somebody
+        eventually turns.
         """
-        for library, owner in SEAMS.items():
-            assert (APP / owner).exists(), f"{owner} is gone — who owns {library} now?"
+        from codelith.config import get_settings
 
+        assert not hasattr(get_settings(), "CODELITH_PROFILE")
 
-class TestCypherStaysBehindTheGraphStore:
-    def test_no_agent_writes_cypher(self) -> None:
-        owner = SEAMS["neo4j"]
-        offenders = []
-        for f in _python_files(APP):
-            if _rel(f) == owner:
-                continue
-            if _CYPHER.search(f.read_text(encoding="utf-8")):
-                offenders.append(_rel(f))
+    def test_the_database_needs_nothing_installed(self) -> None:
+        from codelith.config import get_settings
 
-        assert not offenders, (
-            "Cypher outside the graph store:\n  " + "\n  ".join(offenders) + "\n"
-            "Add a named method to `GraphStore` instead. An interface that callers "
-            "bypass with raw queries cannot be implemented by anything else."
-        )
+        assert get_settings().DATABASE_URL.startswith("sqlite")
 
-    def test_the_store_still_offers_what_those_callers_needed(self) -> None:
-        """
-        The three methods that replaced raw queries. Named here so that deleting one
-        fails loudly rather than sending somebody back to `query()`.
-        """
-        from codelith.memory.graph_store import GraphStore
+    @pytest.mark.parametrize(
+        "setting",
+        ["REDIS_URL", "CELERY_BROKER_URL", "NEO4J_URI", "S3_BUCKET_NAME", "POSTGRES_HOST"],
+    )
+    def test_the_settings_for_them_are_gone_too(self, setting: str) -> None:
+        """A setting for a service nobody runs is a promise that cannot be kept."""
+        from codelith.config import get_settings
 
-        for method in ("get_files", "get_import_edges", "get_packages"):
-            assert callable(getattr(GraphStore, method, None)), (
-                f"`GraphStore.{method}` is gone. It exists because a caller outside "
-                "this module needed it without writing Cypher."
-            )
+        assert not hasattr(get_settings(), setting)

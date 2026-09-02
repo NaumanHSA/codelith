@@ -13,17 +13,14 @@ Real cancellation needs three parts, and this module is the middle one:
   3. the in-flight HTTP request is abandoned mid-generation, which is why LLM calls
      stream rather than waiting for one big response
 
-Redis is the signalling channel in server mode because the API process and the Celery
-worker are different processes; a module-level flag would never be seen. In solo mode
-they are the same process — the work runs inline in the command that started it — and
-the flag is a set in memory. Nothing below the flag store knows which is in use.
+The work runs on a background thread of this process, so the flag is a set in memory.
+It was Redis when the API and a Celery worker were separate processes and the signal
+had to cross between them.
 """
 
 from __future__ import annotations
 
 import structlog
-
-from codelith.config import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -35,24 +32,26 @@ def _key(job_id: int) -> str:
     return f"job:cancel:{job_id}"
 
 
+class JobCancelled(Exception):
+    """Raised inside a workflow when the user has asked for it to stop."""
+
+    def __init__(self, job_id: int) -> None:
+        super().__init__(f"Job {job_id} was cancelled")
+        self.job_id = job_id
+
+
 # ── Where the flag lives ──────────────────────────────────────────────────────
 #
-# Server mode has two processes — the API sets the flag, the worker polls it — so the
-# signal has to leave the process, and Redis carries it. Solo mode has one: the work
-# runs inline in the command that started it, and a set in memory is not merely
-# sufficient but strictly better, because there is no round trip and nothing to install.
+# A set in memory. The work runs on a background thread of this process, so the
+# signal never has to leave it.
 #
-# The rest of this module does not know which is in use.
+# It used to be Redis, because the API and a Celery worker were different processes
+# and a module-level flag would never have been seen. That is the only thing Redis
+# was doing here.
 
 
-class _MemoryFlags:
-    """
-    Cancellation flags for a single process.
-
-    A module-level set is exactly the wrong answer when the API and the worker are
-    different processes — the signal would never be seen, which is why Redis is here
-    at all. It is exactly the right one when they are the same process.
-    """
+class _Flags:
+    """Cancellation flags for a single process."""
 
     def __init__(self) -> None:
         self._flagged: set[int] = set()
@@ -70,45 +69,13 @@ class _MemoryFlags:
         return None
 
 
-class _RedisFlags:
-    """Cancellation flags shared between the API process and a Celery worker."""
-
-    def __init__(self) -> None:
-        from redis.asyncio import Redis
-
-        self._redis = Redis.from_url(get_settings().REDIS_URL)
-
-    async def set(self, job_id: int) -> None:
-        await self._redis.set(_key(job_id), "1", ex=_TTL_SECONDS)
-
-    async def clear(self, job_id: int) -> None:
-        await self._redis.delete(_key(job_id))
-
-    async def is_set(self, job_id: int) -> bool:
-        return bool(await self._redis.exists(_key(job_id)))
-
-    async def close(self) -> None:
-        await self._redis.aclose()
+#: One process, one set. Held for the life of the interpreter, because a flag that did
+#: not outlive the call that set it would signal nothing.
+_flags_store = _Flags()
 
 
-#: One process, one set. Held for the life of the interpreter in solo mode, because a
-#: flag that did not outlive the call that set it would signal nothing.
-_memory_flags = _MemoryFlags()
-
-
-def _flags() -> _MemoryFlags | _RedisFlags:
-    """The flag store this installation signals through."""
-    if get_settings().CODELITH_PROFILE == "solo":
-        return _memory_flags
-    return _RedisFlags()
-
-
-class JobCancelled(Exception):
-    """Raised inside a workflow when the user has asked for it to stop."""
-
-    def __init__(self, job_id: int) -> None:
-        super().__init__(f"Job {job_id} was cancelled")
-        self.job_id = job_id
+def _flags() -> _Flags:
+    return _flags_store
 
 
 async def request_cancel(job_id: int) -> None:
@@ -174,7 +141,7 @@ class CancellationToken:
     def __init__(self, job_id: int, poll_interval: float = 1.0) -> None:
         self.job_id = job_id
         self.poll_interval = poll_interval
-        self._flags: _MemoryFlags | _RedisFlags | None = None
+        self._flags: _Flags | None = None
         self._cancelled = False
         self._last_check = 0.0
 

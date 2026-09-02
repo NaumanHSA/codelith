@@ -31,9 +31,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     for problem in missing_configuration():
         logger.warning("llm_configuration_incomplete", problem=problem)
 
-    # Create tables if they don't exist (dev only — prod uses Alembic)
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.create_all)
+    # Build the schema on first run. There is no separate migrate step to forget:
+    # the database is a file this process owns, and an empty one is indistinguishable
+    # from a first launch. Existing databases are left alone.
+    from codelith.db.bootstrap import ensure_schema
+
+    if await ensure_schema(engine):
+        logger.info("database_created", url=engine.url.render_as_string(hide_password=True))
+
+    # Hand back pages a job claimed and never resolved.
+    #
+    # Every path that ends a run releases them, but no path runs at all if the process
+    # is killed outright — and a job in flight when you close the terminal is exactly
+    # that. The claim would otherwise outlive the job, and because the studio polls the
+    # site map for as long as any page is `generating`, one such page makes the
+    # documentation page re-fetch every few seconds for ever.
+    #
+    # Only pages whose job has already reached a terminal status: if the job is over,
+    # nothing is writing its pages.
+    from sqlalchemy import text
+
+    from codelith.db.session import AsyncSessionLocal
+
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text(
+                    "UPDATE doc_pages SET status = 'planned' "
+                    "WHERE status = 'generating' AND job_id IN ("
+                    "  SELECT id FROM jobs WHERE status IN ('completed','failed','cancelled')"
+                    ")"
+                )
+            )
+            await db.commit()
+            if freed := (result.rowcount or 0):
+                logger.info("released_pages_of_finished_jobs", pages=freed)
+    except Exception:  # pragma: no cover - never stop the app booting over cleanup
+        logger.warning("page_reconciliation_failed", exc_info=True)
+
     yield
     logger.info("application_shutdown")
     await engine.dispose()

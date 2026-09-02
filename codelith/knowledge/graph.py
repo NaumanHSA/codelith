@@ -25,7 +25,7 @@ import structlog
 
 from codelith.knowledge.builder import SourceFile
 from codelith.languages.registry import registry
-from codelith.memory.graph_store import CodeGraph
+from codelith.memory.code_graph import CodeGraph
 
 logger = structlog.get_logger(__name__)
 

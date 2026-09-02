@@ -1,21 +1,18 @@
 """
-Starting long work, wherever it is going to run.
+Starting long work.
 
-Six places in the application hand off a job: analysis, ingestion, composition, the
-resumed half of a reviewed composition, a revision, and a document export. All six
-used `task.delay(...)`, which is Celery's and only Celery's.
+Six places hand off a job — analysis, ingestion, composition, the resumed half of a
+reviewed composition, a revision, a document export. They used to call Celery's
+`.delay()`; then a `dispatch()` that chose between Celery and an in-process worker;
+now there is one worker and this is the door to it.
 
-They call `dispatch()` now. In server mode it is `delay` with an extra function call.
-In solo mode it puts the task body on the in-process worker instead, and the caller
-cannot tell — both return an id to record on the job, and the job row is what the
-studio and the CLI poll either way.
+Kept as a function rather than inlined at the six call sites because they should not
+know how work is scheduled — only that it has been.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-from codelith.config import get_settings
 
 __all__ = ["dispatch"]
 
@@ -24,15 +21,10 @@ def dispatch(task: Any, *args: Any, **kwargs: Any) -> str:
     """
     Queue `task`, and return the id to store on the job.
 
-    The id is only ever written to `jobs.celery_task_id` and used to revoke a queued
-    Celery task. Solo mode returns an `inline-…` id that nothing revokes, which costs
-    nothing: cancellation is enforced by the flag the workflow polls, and `revoke`
-    was always best-effort — it stops a task that has not started and does nothing to
-    one that has.
+    The id identifies the run in a log. Nothing revokes it: cancellation is enforced
+    by the flag the workflow polls, which is where it was always actually enforced —
+    Celery's `revoke` only ever stopped a task that had not started.
     """
-    if get_settings().CODELITH_PROFILE == "solo":
-        from codelith.workers.inline import worker
+    from codelith.workers.inline import worker
 
-        return worker.submit(task, args, kwargs)
-
-    return task.delay(*args, **kwargs).id
+    return worker.submit(task, args, kwargs)

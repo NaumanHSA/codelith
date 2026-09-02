@@ -33,6 +33,13 @@ async def main():
         await db.commit()
         print("Seed complete.")
 
+    # Dispose explicitly. aiosqlite runs a thread per connection and the pool holds
+    # them open, so without this the work finishes and the process does not exit —
+    # which looks exactly like a hang, and did.
+    from codelith.db.session import engine
+
+    await engine.dispose()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

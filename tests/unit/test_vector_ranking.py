@@ -1,22 +1,19 @@
 """
 Ranking without a database that can rank.
 
-Postgres orders by `<=>` inside the query. SQLite has no such operator, so solo mode
-brings the filtered rows back and ranks them here. The two paths must choose the same
-chunks in the same order, or "it behaves the same locally" is a claim nobody checked.
+The filters run in the database, because they are what makes the query selective.
+The ranking runs here, over what they narrowed to.
 
-The local path is in fact the more accurate of the two: HNSW is an approximate index
-and this is exact. That is worth knowing when the two ever disagree — the server is
-the one that is allowed to be wrong.
+There was a second path — Postgres ordering by `<=>` over an HNSW index — and it was
+the *less* accurate of the two, because HNSW is approximate and this is exact. It
+went with the rest of the second way of running this.
 """
 
 from __future__ import annotations
 
 import math
 
-import pytest
-
-from codelith.memory.vector_store import VectorStore, _rank_by_cosine
+from codelith.memory.vector_store import _rank_by_cosine
 
 
 class _Chunk:
@@ -99,32 +96,3 @@ class TestRanking:
         """A zero-vector row would divide by zero. It should rank last, not raise."""
         rows = [_Chunk("zero", [0.0, 0.0]), _Chunk("good", [1.0, 0.0])]
         assert _rank_by_cosine(rows, [1.0, 0.0], 2)[0].id == "good"
-
-
-class TestWhoDoesTheRanking:
-    """
-    Decided by the connection, not by configuration.
-
-    A SQLite database cannot order by cosine distance whatever a setting claims, and
-    a profile flag that disagreed with the bind would fail at query time with an
-    error about a missing operator.
-    """
-
-    @pytest.mark.parametrize(
-        "dialect,in_database",
-        [("postgresql", True), ("sqlite", False), ("", False)],
-    )
-    def test_dialect_decides(self, dialect: str, in_database: bool) -> None:
-        class _Dialect:
-            name = dialect
-
-        class _Bind:
-            dialect = _Dialect()
-
-        class _Session:
-            def get_bind(self):
-                return _Bind()
-
-        store = VectorStore.__new__(VectorStore)
-        store.session = _Session()  # type: ignore[assignment]
-        assert store._ranks_in_database() is in_database

@@ -14,7 +14,6 @@ dependencies = [
 
     # Database
     "sqlalchemy[asyncio]>=2.0.36",
-    "asyncpg>=0.30.0",
     # Solo mode runs the same schema on SQLite, and SQLAlchemy's async engine needs a
     # driver for it. The one package that profile genuinely adds — the vector search
     # it also needs is numpy, which is already here.
@@ -55,11 +54,8 @@ dependencies = [
     "rich>=13.0.0",
 
     # Task Queue
-    "celery[redis]>=5.4.0",
-    "redis>=5.2.0",
 
     # Storage
-    "boto3>=1.35.0",
 
     # Ingestion - Repos
     "gitpython>=3.1.43",
@@ -79,11 +75,10 @@ dependencies = [
     "markdown-it-py>=3.0.0",
     "openapi-spec-validator>=0.7.1",
 
-    # Vector search (pgvector — runs inside PostgreSQL, no extra service)
-    "pgvector>=0.3.0",
+    # Vector search runs in this process over the embeddings stored in SQLite —
+    # numpy is what does the arithmetic.
 
     # Graph DB
-    "neo4j>=5.27.0",
 
     # Logging & Observability
     "structlog>=24.4.0",
@@ -145,7 +140,7 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 # Session-scoped fixtures (the test engine) and function-scoped tests must share one
-# event loop, or asyncpg raises "attached to a different loop". pytest-asyncio 1.x
+# event loop, or the driver raises "attached to a different loop". pytest-asyncio 1.x
 # removed the overridable `event_loop` fixture; these settings replace it.
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

@@ -1,8 +1,7 @@
-.PHONY: help infra infra-stop prod prod-stop build migrate migrate-create seed test test-unit test-integration worker lint format typecheck
+.PHONY: help prod prod-stop build migrate migrate-create seed test test-unit test-integration lint format typecheck
 
 PYTHON     := PYTHONPATH=. python
 ALEMBIC    := PYTHONPATH=. alembic
-INFRA      := docker compose -f docker-compose.infra.yml
 PROD       := docker compose -f docker-compose.prod.yml
 
 help:
@@ -10,11 +9,8 @@ help:
 	@echo "codelith — available targets:"
 	@echo ""
 	@echo "  Local development (API runs on your machine):"
-	@echo "    make infra          Start infra services only (postgres, redis, minio, neo4j, ...)"
-	@echo "    make infra-stop     Stop infra services"
 	@echo "    make migrate        Apply DB migrations"
 	@echo "    make seed           Create default org + admin user"
-	@echo "    make worker         Start Celery worker (separate terminal)"
 	@echo ""
 	@echo "  Production (everything in Docker):"
 	@echo "    make prod           Start full production stack"
@@ -34,16 +30,7 @@ help:
 
 # ── Local dev ─────────────────────────────────────────────────────────────────
 
-infra:
-	$(INFRA) up -d
-	@echo ""
-	@echo "Infrastructure is up. Now run:"
-	@echo "  make migrate   (first time only)"
-	@echo "  make seed      (first time only)"
-	@echo "  uvicorn codelith.main:app --reload"
 
-infra-stop:
-	$(INFRA) down
 
 migrate:
 	$(ALEMBIC) upgrade head
@@ -54,11 +41,6 @@ migrate-create:
 seed:
 	$(PYTHON) scripts/seed_dev.py
 
-worker:
-# -Q is not optional: every task is routed to a named queue by `task_routes`, so a
-# worker started without it consumes only the default `celery` queue and sits there
-# looking healthy while jobs queue up behind it. `dev.sh` has always passed these.
-	celery -A codelith.workers.celery_app worker --loglevel=info --concurrency=4 -Q ingestion,generation,export
 
 # ── Production ────────────────────────────────────────────────────────────────
 

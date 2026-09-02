@@ -1,28 +1,31 @@
+import os
 from functools import lru_cache
-from typing import Literal
+from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def codelith_home() -> Path:
+    """
+    Where everything this installation owns lives: the database, artefacts, the
+    CLI's token.
+
+    Under the user's home rather than the working directory, because a knowledge
+    base belongs to the person, not to the repository being read — you analyse many
+    repositories and expect to find them all in one place afterwards. Overridable
+    with `CODELITH_HOME`, which is also what the tests use to stay out of the way.
+    """
+    return Path(os.environ.get("CODELITH_HOME") or (Path.home() / ".codelith"))
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # ── How this installation runs ────────────────────────────────────────────
-    #: `server` is the deployment the studio was built for: Postgres, Redis, Neo4j,
-    #: MinIO and a Celery worker. `solo` is one person on one machine with none of
-    #: them — SQLite, in-process everything, no containers.
-    #:
-    #: Read once at startup to choose implementations, never branched on per call.
-    #: Where a choice can be made from the connection instead it is: the vector store
-    #: asks the dialect who can rank, because a SQLite database cannot order by cosine
-    #: distance whatever this setting says.
-    CODELITH_PROFILE: Literal["server", "solo"] = "server"
-
-    #: Where solo mode keeps artefacts — exports and generated files. A directory
-    #: rather than a bucket, and browsable on purpose: on one machine the exports
-    #: somebody generated should be findable in a file manager.
-    LOCAL_STORAGE_DIR: str = "./.codelith/storage"
+    #: Where artefacts go — exports and generated files. A directory rather than a
+    #: bucket, and browsable on purpose: the exports somebody generated should be
+    #: findable in a file manager, not only through the application that wrote them.
+    STORAGE_DIR: str = str(codelith_home() / "storage")
 
     # Application
     APP_ENV: str = "development"
@@ -39,12 +42,11 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # PostgreSQL
-    DATABASE_URL: str = "postgresql+asyncpg://docuser:docpassword@localhost:5432/documentanything"
+    #: One file, under `codelith_home()`. Nothing to install, nothing to start,
+    #: and the whole knowledge base is a thing you can copy or delete.
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{(codelith_home() / 'codelith.db').as_posix()}"
 
     # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
     # ── Models ────────────────────────────────────────────────────────────────
     # Three of them, and each is described by the same four settings:
@@ -153,16 +155,8 @@ class Settings(BaseSettings):
     COMPOSITION_SECTION_CONCURRENCY: int = 4
 
     # Neo4j
-    NEO4J_URI: str = "bolt://localhost:7687"
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "neo4jpassword"
 
     # MinIO / S3
-    S3_ENDPOINT_URL: str = "http://localhost:9000"
-    S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadmin"
-    S3_BUCKET_NAME: str = "documentanything"
-    S3_REGION: str = "us-east-1"
 
     # OAuth2 (Phase 4)
     GOOGLE_CLIENT_ID: str = ""

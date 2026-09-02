@@ -159,31 +159,10 @@ class VectorStore:
             # silently degrade to no filter at all.
             stmt = stmt.where(CodeChunk.chunk_type.in_(list(chunk_types)))
 
-        # Ranking is the one part of this query that is not portable. Postgres orders
-        # by `<=>` inside the database; SQLite has no such operator, so the same
-        # filtered rows come back and are ranked here. Both return the same chunks —
-        # in fact the local path returns them *more* accurately, because HNSW is an
-        # approximate index and this is exact.
-        if self._ranks_in_database():
-            stmt = stmt.order_by(
-                CodeChunk.embedding.cosine_distance(query_embedding)
-            ).limit(limit)
-            result = await self.session.execute(stmt)
-            return list(result.scalars().all())
-
+        # The filters run in the database — they are what makes this selective. The
+        # ranking runs here, exactly, over what they narrowed to.
         rows = list((await self.session.execute(stmt)).scalars().all())
         return _rank_by_cosine(rows, query_embedding, limit)
-
-    def _ranks_in_database(self) -> bool:
-        """
-        Whether the bound database can order by cosine distance itself.
-
-        Asked of the dialect rather than of a setting: a SQLite database cannot do
-        this whatever the configuration claims, and a profile flag that disagreed
-        with the connection would fail at query time with a confusing error.
-        """
-        bind = self.session.get_bind()
-        return getattr(getattr(bind, "dialect", None), "name", "") == "postgresql"
 
     async def delete_by_project(self, project_id: int) -> None:
         await self.session.execute(

@@ -125,27 +125,22 @@ class JobService:
         """
         Actually stop the job, not just relabel it.
 
-        Three things have to happen or the worker keeps generating: signal the running
-        task (Redis flag the workflow polls), revoke it in Celery so a queued task never
-        starts, and only then record the status.
+        Cancelling used to be cosmetic: the column changed, the UI said "cancelled",
+        and the worker carried on streaming tokens until the document was finished.
+
+        Two things happen here. The flag the running work polls between agents,
+        between sections and between streamed chunks is set — that is what actually
+        stops it. Then the status is recorded.
+
+        There used to be a third: revoking the task in Celery, so one still queued
+        never started. That was always best effort, and with an in-process worker
+        there is no queue to revoke from — a job that has not started yet sees the
+        flag the moment it does.
         """
         from codelith.core.cancellation import request_cancel
 
-        job = await self.get(job_id)
+        await self.get(job_id)
         await request_cancel(job_id)
-
-        if job.celery_task_id:
-            try:
-                from codelith.workers.celery_app import celery_app
-
-                # terminate=False: let the task unwind cooperatively so it can close the
-                # LLM stream and mark its knowledge base, rather than being SIGKILLed
-                # mid-transaction.
-                celery_app.control.revoke(job.celery_task_id, terminate=False)
-            except Exception as exc:  # pragma: no cover - broker may be unavailable
-                # A revoke failure must not stop us recording the cancellation: the
-                # Redis flag above is what the running worker actually polls.
-                logger.warning("celery_revoke_failed", job_id=job_id, error=str(exc))
 
         await self.repo.update(job_id, status="cancelled", completed_at=datetime.now(UTC))
         await self.db.commit()

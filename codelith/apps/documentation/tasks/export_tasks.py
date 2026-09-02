@@ -2,13 +2,13 @@ import structlog
 
 from codelith.db.session import AsyncSessionLocal
 from codelith.workers import runner
-from codelith.workers.celery_app import celery_app
+from codelith.workers.task import task
 
 logger = structlog.get_logger(__name__)
 
 
-@celery_app.task(name="export.export_document", bind=True, max_retries=2)
-def export_document_task(self, document_id: int, format: str) -> dict:
+@task("export.export_document")
+def export_document_task(document_id: int, format: str) -> dict:
     return runner.run(_export(document_id, format))
 
 

@@ -21,7 +21,7 @@ import structlog
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from codelith.memory.graph_store import CodeGraph, GraphScope
+from codelith.memory.code_graph import CodeGraph, GraphScope
 from codelith.models.graph import (
     GraphCall,
     GraphFile,

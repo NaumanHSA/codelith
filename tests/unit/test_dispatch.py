@@ -13,9 +13,6 @@ fail one job — it ends every job after it, silently, for the life of the proce
 
 from __future__ import annotations
 
-import pytest
-
-from codelith.config import get_settings
 from codelith.workers.dispatch import dispatch
 from codelith.workers.inline import InlineWorker
 
@@ -33,23 +30,6 @@ class _Recorder:
         if self._explode:
             raise RuntimeError("boom")
         self._ran.append((args, kwargs or {}))
-
-    def delay(self, *args, **kwargs):
-        self._ran.append(("delay", args, kwargs))
-
-        class _Result:
-            id = "celery-123"
-
-        return _Result()
-
-
-@pytest.fixture
-def solo(monkeypatch):
-    monkeypatch.setenv("CODELITH_PROFILE", "solo")
-    get_settings.cache_clear()
-    yield
-    monkeypatch.undo()
-    get_settings.cache_clear()
 
 
 class TestTheInlineWorker:
@@ -99,24 +79,16 @@ class TestTheInlineWorker:
 
 
 class TestDispatch:
-    def test_solo_runs_it_here(self, solo) -> None:
+    def test_it_runs_the_work_here(self) -> None:
+        """
+        One door. There was a second — `task.delay()` to a Celery broker — chosen by
+        a `CODELITH_PROFILE` setting. Both are gone, and so is the setting.
+        """
         ran: list = []
-        task = _Recorder(ran)
-        ident = dispatch(task, 7)
+        ident = dispatch(_Recorder(ran), 7, force=True)
 
         from codelith.workers.inline import worker
 
         worker.wait_idle()
         assert ident.startswith("inline-")
-        assert ran == [((7,), {})]
-
-    def test_server_hands_it_to_celery(self, monkeypatch) -> None:
-        monkeypatch.setenv("CODELITH_PROFILE", "server")
-        get_settings.cache_clear()
-        try:
-            ran: list = []
-            assert dispatch(_Recorder(ran), 7, force=True) == "celery-123"
-            assert ran == [("delay", (7,), {"force": True})]
-        finally:
-            monkeypatch.undo()
-            get_settings.cache_clear()
+        assert ran == [((7,), {"force": True})]

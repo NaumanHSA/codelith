@@ -23,7 +23,7 @@ class FilesystemStorage:
 
     def __init__(self, root: Path | str | None = None) -> None:
         settings = get_settings()
-        self.root = Path(root or settings.LOCAL_STORAGE_DIR).expanduser().resolve()
+        self.root = Path(root or settings.STORAGE_DIR).expanduser().resolve()
 
     def _path(self, key: str) -> Path:
         """

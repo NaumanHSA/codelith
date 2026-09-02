@@ -60,14 +60,15 @@ if the base imports an app, or if one app imports another. Known exceptions live
 ## Stack
 
 - **API**: FastAPI + Python 3.11+ (async throughout)
-- **DB**: PostgreSQL via SQLAlchemy 2.0 async + Alembic migrations
-- **Cache / Queue broker**: Redis
-- **Vector search**: pgvector extension inside PostgreSQL — `code_chunks` table with HNSW index (no extra service)
-- **Graph DB**: Neo4j (code entity relationships)
-- **Task queue**: Celery (background ingestion + generation jobs)
+- **DB**: SQLite via SQLAlchemy 2.0 async + Alembic. One file under `~/.codelith`,
+  created on first run. There is no separate migrate step and nothing to install
+- **Vector search**: exact cosine in numpy over `code_chunks.embedding` (packed float32).
+  The filters run in SQL; only the ranking runs in the process
+- **Code graph**: six `graph_*` tables, walked with a recursive CTE
+- **Background work**: one thread in this process, serial. `codelith/workers/inline.py`
 - **Agent workflow**: LangGraph StateGraph
 - **LLM**: `openai.AsyncOpenAI`. Three model tiers — quality, fast, embedding — each described by `MODEL_<TIER>_PROVIDER` (`local` | `openai`), `MODEL_<TIER>`, `MODEL_<TIER>_BASE_URL` and a context window, resolved by `codelith/llm/providers.py`. The provider decides only whether `OPENAI_API_KEY` is sent
-- **Storage**: MinIO (S3-compatible) via boto3
+- **Storage**: a directory under `~/.codelith`
 - **Logging**: structlog (JSON in prod, colored in dev)
 - **UI**: React 19 + Vite 8 + Tailwind 4, in `ui/` (same repo — there is no separate UI repository). **Needs Node ≥ 20.19**; the studio is a pnpm project
 
@@ -75,9 +76,7 @@ if the base imports an app, or if one app imports another. Known exceptions live
 
 ```bash
 cp .env.example .env       # fill in values
-make dev                   # starts Docker infra + hot-reload API on :8000
-make migrate               # apply DB migrations
-make worker                # start Celery worker in another terminal
+uvicorn codelith.main:app --reload   # API on :8000. Nothing to start first
 
 cd ui && pnpm install && pnpm dev      # studio on :5173 — needs Node >= 20.19
 ```
@@ -113,7 +112,7 @@ codelith/                 the importable package (distribution name: codelith)
   config.py        All settings (env-driven)
   api/v1/          Route handlers (thin) — mounts each app's router
   core/            Security, logging, exceptions, middleware
-    cancellation.py  Redis-backed CancellationToken + JobCancelled
+    cancellation.py  CancellationToken + JobCancelled
   db/              SQLAlchemy session + repositories
   models/          ORM models — ALL of them, including each app's
   schemas/         Pydantic v2 request/response
@@ -135,12 +134,12 @@ codelith/                 the importable package (distribution name: codelith)
                      testgen, deep (its own analysis pass), api
   mcp/             The KB over MCP — a second transport, not an app
   ingestion/       Repo cloning + file parsers
-  memory/          Short/long-term, pgvector, Neo4j
+  memory/          Vector store, the code graph in SQL
   llm/             LLM client, model router, prompt templates
   tools/           Agent tools (file, git, search, diagram)
   tracing/         Per-job trace artifacts under ./runs/{job_id}/
-  storage/         S3/MinIO client
-  workers/         Celery app + analysis/ingestion tasks
+  storage/         Artefacts on disk
+  workers/         The inline worker + analysis/ingestion tasks
   observability/   OpenTelemetry + Prometheus
 
 ui/                React studio (Vite) — see ui/README.md

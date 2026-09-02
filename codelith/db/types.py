@@ -1,10 +1,8 @@
 """
-Column types that mean the same thing on more than one database.
+The two column types that are not plain SQL.
 
-The knowledge base is the same knowledge base whether it lives in Postgres on a
-server or in a file on somebody's laptop. Only two column types differ, and both are
-handled here so that no model or migration has to know which database it is talking
-to.
+Both existed to paper over a difference between two databases. There is one database
+now, so both are simply what they always were underneath.
 """
 
 from __future__ import annotations
@@ -12,20 +10,18 @@ from __future__ import annotations
 from array import array
 
 from sqlalchemy import LargeBinary, types
-from sqlalchemy.dialects import postgresql
 
 
 class PackedVector(types.TypeDecorator):
     """
-    An embedding on a database with no vector type.
+    An embedding, stored as packed float32.
 
-    Stored as packed float32 rather than JSON: 768 dimensions is 3KB packed against
-    roughly 15KB as text, and the whole column is read into a matrix on every search.
-    float32 is also what the ranking does its arithmetic in, so nothing is lost by
-    storing that precision rather than Python's float64.
+    3KB for 768 dimensions, against roughly 15KB as JSON text — and the whole column
+    is read into a matrix on every search, so the difference is felt. float32 is also
+    the precision the ranking does its arithmetic in, so nothing is lost by storing
+    that rather than Python's float64.
 
-    Reading gives back a plain `list[float]`, so callers cannot tell which database
-    they are on — which is the point.
+    Reads back as a plain `list[float]`, so no caller has to know it is bytes.
     """
 
     impl = LargeBinary
@@ -44,25 +40,19 @@ class PackedVector(types.TypeDecorator):
         return list(buf)
 
 
-def embedding_column(dimensions: int):
+def embedding_column(dimensions: int | None = None):
     """
-    `vector(n)` on Postgres, packed float32 everywhere else.
+    The embedding column.
 
-    Postgres gets the real type because it can index and rank with it. Everything
-    else gets bytes, and the ranking happens in the process — measured faster than
-    the round trip for any repository that fits on one machine, and exact where the
-    HNSW index is approximate.
+    `dimensions` is accepted and ignored. It mattered when this was `vector(n)` in
+    PostgreSQL, where the width is part of the type and changing it meant a migration
+    that truncated the table. A blob has no declared width, so changing the embedding
+    model now costs a re-ingest and no schema change at all — which is the good half
+    of a trade that also gave up an index.
     """
-    from pgvector.sqlalchemy import Vector
-
-    return Vector(dimensions).with_variant(PackedVector(), "sqlite")
+    return PackedVector()
 
 
 def json_column():
-    """
-    `JSONB` on Postgres, generic JSON everywhere else.
-
-    Existing migrations name `postgresql.JSONB` directly; this exists for new columns
-    and for the day those are made portable.
-    """
-    return types.JSON().with_variant(postgresql.JSONB(), "postgresql")
+    """A JSON column. It was `JSONB` on PostgreSQL and generic everywhere else."""
+    return types.JSON()

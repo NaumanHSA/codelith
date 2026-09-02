@@ -55,16 +55,14 @@ why adding an app never means touching analysis.
 |---|---|
 | API | FastAPI + Python 3.11+ (async) |
 | UI | React 19 + Vite 8 + Tailwind 4 (light studio, Node ≥ 20.19) |
-| Database | PostgreSQL + SQLAlchemy 2.0 async + Alembic |
-| Cache / Queue broker | Redis |
-| Task queue | Celery |
+| Database | SQLite + SQLAlchemy 2.0 async + Alembic — one file, nothing to install |
+| Background work | One thread, in process |
 | Agent workflow | LangGraph |
 | LLM | `openai` package → LM Studio (offline, OpenAI-compatible) |
-| Vector search | pgvector (PostgreSQL extension — no extra service) |
-| Graph DB | Neo4j (provisioned; graph ingestion not yet wired into the workflow) |
-| Object storage | MinIO (S3-compatible) |
-| Observability | Prometheus + Grafana + OpenTelemetry |
-| Containerization | Docker + Docker Compose |
+| Vector search | Exact cosine in numpy, over embeddings stored as float32 |
+| Artefact storage | A directory under `~/.codelith` |
+| Observability | OpenTelemetry + Prometheus metrics (exposed; scrape them if you want) |
+| Containers | None |
 
 ---
 
@@ -139,28 +137,22 @@ Or with uv (recommended):
 uv sync
 ```
 
-### 4. Start infrastructure
+### 4. Start it
 
 ```bash
-make dev
+uvicorn codelith.main:app --reload      # API on http://localhost:8000
+make seed                                # admin@docany.dev / admin1234
 ```
 
-This starts: PostgreSQL (with pgvector), Redis, Neo4j, MinIO, Prometheus, Grafana — then launches the API on `http://localhost:8000`.
+There is nothing to install first and no migrate step. The knowledge base is a SQLite
+file under `~/.codelith`, created on first run; artefacts go in a folder beside it.
 
-### 5. Run migrations & seed
+This used to be six containers — PostgreSQL with pgvector, Redis, Neo4j, MinIO,
+Prometheus, Grafana — plus a Celery worker in its own terminal, and it is why nobody
+tried this. They were replaced by a file, a folder, a set in memory and a background
+thread, and then deleted.
 
-```bash
-make migrate          # creates all DB tables
-make seed             # creates admin@docany.dev / admin1234
-```
-
-### 6. Start Celery worker (second terminal)
-
-```bash
-make worker
-```
-
-### 7. Start the UI (third terminal)
+### 5. Start the UI (second terminal)
 
 ```bash
 cd ui
@@ -227,7 +219,7 @@ Agents (codelith/agents/)   ←→   LangGraph Workflows (codelith/workflows/)
     ↓                            ↕
 Repositories (codelith/db/repositories/)   Language providers (codelith/languages/)
     ↓
-PostgreSQL + pgvector / Neo4j / MinIO
+SQLite — one file
 ```
 
 ### Analysis workflow (`analysis_workflow.py`)
@@ -237,7 +229,7 @@ Seven nodes, run once per commit. Produces a knowledge base, not a document.
 ```
 repo_analyzer  →  structured_extractor  →  semantic_indexer  →  module_summarizer
      clone            routes, deps,           embed chunks         per-module
-   + inventory        env vars, …             into pgvector         summaries
+   + inventory        env vars, …             into the index        summaries
                                                                         ↓
                               kb_persister  ←  narrative_writer  ←  architecture_synthesizer
                               mark READY        how it works          layers, flows
@@ -276,9 +268,9 @@ and registering it — no changes to the agents, workflows or schema.
 
 ### Cancellation
 
-Cancelling actually stops work. `POST /jobs/{id}/cancel` sets a Redis-backed
+Cancelling actually stops work. `POST /jobs/{id}/cancel` sets an in-process
 `CancellationToken` (the signal has to cross the API→worker process boundary) and
-revokes the Celery task. LLM calls stream by default so the token can be checked
+flag the workflow polls. LLM calls stream by default so the flag can be checked
 between chunks and the HTTP request aborted mid-generation — without that, cancelling
 just relabels a job that keeps generating.
 
@@ -290,7 +282,7 @@ codelith/                       the importable package
 ├── config.py                   All settings (env-driven via pydantic-settings)
 ├── api/v1/                     Route handlers (thin) — mounts each app's router
 ├── core/                       Security, logging, exceptions, middleware
-│   └── cancellation.py         Redis-backed CancellationToken + JobCancelled
+│   └── cancellation.py         CancellationToken + JobCancelled
 ├── db/ models/ schemas/        Persistence and contracts, shared by every app
 ├── services/                   Shared logic only — auth, audit, job, project,
 │                               source, knowledge. An app's services live with it
@@ -306,7 +298,7 @@ codelith/                       the importable package
 │   └── documentation/          Agents, workflows, services, tasks,
 │                               formatters, routes
 ├── ingestion/ memory/ llm/     Cloning, stores, model client
-├── storage/ workers/ tracing/  MinIO, Celery, per-job artifacts
+├── storage/ workers/ tracing/  files, the inline worker, per-job artifacts
 └── observability/              OpenTelemetry + Prometheus
 
 ui/                             React studio (Vite)
@@ -394,7 +386,7 @@ and indexed for retrieval; they just do not yet contribute extracted symbols.
 
 ## Output Formats
 
-Chosen per job via `output_formats`; the formatter agent writes each one to MinIO.
+Chosen on export rather than before writing — the stored page is markdown, and every target is a transform of it.
 
 | Format | Generated by a job | Standalone `/documents/{id}/export` |
 |---|---|---|
@@ -426,8 +418,6 @@ make test         # full pytest suite
 |---|---|
 | API | http://localhost:8000 |
 | Swagger UI | http://localhost:8000/docs |
-| MinIO Console | http://localhost:9001 (minioadmin / minioadmin) |
-| Neo4j Browser | http://localhost:7474 (neo4j / neo4jpassword) |
 | Grafana | http://localhost:3000 (admin / admin) |
 | Prometheus | http://localhost:9090 |
 
@@ -448,9 +438,7 @@ See `.env.example` for the full list. Key variables:
 | `OPENAI_API_KEY` | — | Required only for tiers set to `openai` |
 | `LLM_MAX_TOKENS` | `8192` | **Local only.** Hosted models are sent no ceiling |
 | `LLM_STREAMING` | `true` | Stream completions — required for cancellation to interrupt generation |
-| `DATABASE_URL` | postgres://... | PostgreSQL async connection string |
-| `REDIS_URL` | redis://localhost:6379/0 | Redis connection (also carries cancellation flags) |
-| `S3_ENDPOINT_URL` | http://localhost:9000 | MinIO endpoint |
+| `DATABASE_URL` | `sqlite+aiosqlite:///~/.codelith/codelith.db` | Rarely set. The default is a file under `CODELITH_HOME` |
 | `VECTOR_DIMENSIONS` | `1536` | Must match your embedding model's output dimensions |
 | `ANALYSIS_MAX_SUMMARISED_MODULES` | `40` | Cap on modules sent for summarisation |
 | `ANALYSIS_SUMMARY_CONCURRENCY` | `6` | Parallel summary calls against the LLM |

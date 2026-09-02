@@ -48,43 +48,17 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: docuser
-          POSTGRES_PASSWORD: docpassword
-          POSTGRES_DB: documentanything
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    # No services. These used to need a Postgres container with pgvector and a Redis
+    # one, plus a test database created by hand. They run against a temporary SQLite
+    # file now, like the application does.
     env:
-      DATABASE_URL: "postgresql+asyncpg://docuser:docpassword@localhost:5432/documentanything"
-      REDIS_URL: "redis://localhost:6379/0"
-      CELERY_BROKER_URL: "redis://localhost:6379/1"
-      CELERY_RESULT_BACKEND: "redis://localhost:6379/2"
       APP_SECRET_KEY: "ci-test-secret"
       JWT_SECRET_KEY: "ci-test-jwt-secret"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -92,9 +66,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
-
-      - name: Run migrations
-        run: alembic upgrade head
 
       - name: Run integration tests
         run: pytest tests/integration/ -v --tb=short --no-header

@@ -6,7 +6,7 @@ from codelith.knowledge.builder import SourceFile
 from codelith.knowledge.graph import build_code_graph
 from codelith.llm.client import create_embedding
 from codelith.memory import get_graph_store
-from codelith.memory.graph_store import GraphScope
+from codelith.memory.code_graph import GraphScope
 from codelith.memory.long_term import LongTermMemory
 from codelith.memory.vector_store import VectorStore
 

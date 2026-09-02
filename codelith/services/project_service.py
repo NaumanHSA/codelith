@@ -182,18 +182,21 @@ class ProjectService:
                 )
             ).all()
         )
-        # DISTINCT ON needs the distinct expression to lead the ORDER BY.
-        latest_jobs = {
-            job.project_id: job
-            for job in (
-                await self.db.execute(
-                    select(Job)
-                    .where(Job.project_id.in_(ids))
-                    .distinct(Job.project_id)
-                    .order_by(Job.project_id, Job.created_at.desc())
-                )
-            ).scalars()
-        }
+        # The latest job per project.
+        #
+        # This was `DISTINCT ON`, which only PostgreSQL implements — everywhere else
+        # SQLAlchemy silently drops it, leaving a plain `SELECT` that returns *every*
+        # job and a dict comprehension that keeps whichever arrived last. Ordering
+        # newest-first and taking the first seen gives the same answer on any
+        # database, and says what it means.
+        latest_jobs: dict[int, Job] = {}
+        rows = await self.db.execute(
+            select(Job)
+            .where(Job.project_id.in_(ids))
+            .order_by(Job.project_id, Job.created_at.desc(), Job.id.desc())
+        )
+        for job in rows.scalars():
+            latest_jobs.setdefault(job.project_id, job)
 
         page_counts = await self._page_counts(ids)
         kb_statuses = await self._kb_statuses(ids)
@@ -246,13 +249,21 @@ class ProjectService:
 
         if not ids:
             return {}
+        # Was `DISTINCT ON`, which only PostgreSQL implements. Everywhere else
+        # SQLAlchemy silently drops it — and this one did not merely return extra
+        # rows, it returned the wrong answer: with every generation ordered
+        # newest-first, a dict comprehension keeps the *last* row it sees, which is
+        # the oldest knowledge base. A re-analysed project reported the status of its
+        # first analysis.
         rows = await self.db.execute(
             select(KnowledgeBase.project_id, KnowledgeBase.status)
             .where(KnowledgeBase.project_id.in_(ids))
-            .distinct(KnowledgeBase.project_id)
             .order_by(KnowledgeBase.project_id, KnowledgeBase.id.desc())
         )
-        return {pid: status for pid, status in rows.all()}
+        latest: dict[int, str] = {}
+        for pid, status in rows.all():
+            latest.setdefault(pid, status)
+        return latest
 
     def _check_access(self, project: Project, user: User) -> None:
         if project.org_id != (user.org_id or 0) and user.role != "admin":

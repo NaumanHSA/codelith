@@ -6,13 +6,13 @@ from codelith.db.session import AsyncSessionLocal
 from codelith.observability.metrics import job_total, time_job
 from codelith.observability.tracing import workflow_span
 from codelith.workers import runner
-from codelith.workers.celery_app import celery_app
+from codelith.workers.task import task
 
 logger = structlog.get_logger(__name__)
 
 
-@celery_app.task(name="revision.run_revision", bind=True, max_retries=1)
-def run_revision(self, job_id: int) -> dict:
+@task("revision.run_revision")
+def run_revision(job_id: int) -> dict:
     return runner.run(_run_revision(job_id))
 
 
