@@ -539,7 +539,7 @@ export const api = {
   // Readable by any signed-in user, unlike the rest of /settings: the pipeline
   // view needs it to avoid showing a disabled stage as merely queued.
   features: () => request<Features>('/settings/features'),
+  /** Read-only: models are configured in `.env` and resolved at call time. The
+   *  PUT that used to sit beside this wrote a row nothing read back. */
   llmSettings: () => request<LLMSettings>('/settings/llm'),
-  putLlmSettings: (body: LLMSettings) =>
-    request<LLMSettings>('/settings/llm', { method: 'PUT', body }),
 }

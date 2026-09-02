@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from codelith.dependencies import AdminUser, CurrentUser, DbSession
@@ -23,34 +23,49 @@ class Features(BaseModel):
 
 class LlmConfig(BaseModel):
     """
-    What the two tiers are pointed at.
+    What each tier is actually pointed at, resolved.
 
-    Shaped around the choice that is actually made — *per tier, local or hosted* —
-    rather than around one endpoint, which is what it assumed when both tiers had to
-    share a base URL. The local fields are shared by whichever tiers are set to
-    `local`; the OpenAI ones by whichever are set to `openai`.
+    **Read-only, and it says so.** Model configuration lives in `.env` and is read by
+    `llm/providers.py` at call time; this endpoint used to persist an edited copy into
+    the settings table that nothing ever read back, so the page offered fields that
+    changed the display and not the behaviour. It reports the resolved specs now —
+    the same values a job will use — and `editable` tells the studio to render them
+    as facts rather than as inputs.
 
-    `api_key` is deliberately never returned: this endpoint is admin-only, but a
-    secret that is echoed back ends up in browser history, screenshots and bug
-    reports. `openai_key_set` says whether one is configured, which is the only thing
-    the settings page needs to render.
+    Shaped around the choice that is actually made, *per tier*, and the two providers
+    do not carry the same fields:
+
+      * `openai` — a key and a model name. `base_url` and `context_window` come back
+        as what the code will use, not as something to set.
+      * `local` — any OpenAI-compatible server, where all three matter.
+
+    `api_key` is never returned: this endpoint is admin-only, but a secret that is
+    echoed back ends up in browser history, screenshots and bug reports.
+    `openai_key_set` is the only thing the page needs.
     """
 
     quality_provider: str = "local"   # local | openai
     quality_model: str = "local-model"
-    quality_base_url: str = "http://localhost:1234/v1"
+    quality_base_url: str = ""
     quality_context_window: int = 21000
 
     fast_provider: str = "local"
     fast_model: str = "local-model"
-    fast_base_url: str = "http://localhost:1234/v1"
+    fast_base_url: str = ""
     fast_context_window: int = 21000
 
     embedding_provider: str = "local"
     embedding_model: str = ""
-    embedding_base_url: str = "http://localhost:1234/v1"
+    embedding_base_url: str = ""
 
     openai_key_set: bool = False
+
+    #: False while model settings come from `.env`. The studio renders the tiers
+    #: read-only rather than offering inputs that would be silently discarded.
+    editable: bool = False
+    #: Anything `missing_configuration()` found — shown at the top of the page,
+    #: because "openai with no key" should be visible before a job fails on it.
+    problems: list[str] = Field(default_factory=list)
 
     temperature: float = 0.2
     max_tokens: int = 4096
@@ -96,34 +111,40 @@ async def get_features(_: CurrentUser) -> Features:
 
 @router.get("/llm", response_model=LlmConfig)
 async def get_llm_config(db: DbSession, _: AdminUser) -> LlmConfig:
-    data = await _get(db, "llm_config")
-    if data:
-        return LlmConfig(**{k: v for k, v in data.items() if k in LlmConfig.model_fields})
+    """
+    The resolved endpoints, not a stored copy of them.
+
+    Deliberately ignores anything previously persisted under `llm_config`. That row
+    was written by the settings page and read by nothing, so serving it showed a
+    configuration the application was not using — the worst possible answer for a page
+    whose entire job is saying what is configured.
+    """
     from codelith.config import get_settings
+    from codelith.llm.providers import configured_specs, missing_configuration
+
     s = get_settings()
+    specs = configured_specs()
+    quality, fast, embedding = specs["quality"], specs["fast"], specs["embedding"]
+
     return LlmConfig(
-        quality_provider=s.MODEL_QUALITY_PROVIDER,
-        quality_model=s.MODEL_QUALITY,
-        quality_base_url=s.MODEL_QUALITY_BASE_URL,
-        quality_context_window=s.MODEL_QUALITY_CONTEXT_WINDOW,
-        fast_provider=s.MODEL_FAST_PROVIDER,
-        fast_model=s.MODEL_FAST,
-        fast_base_url=s.MODEL_FAST_BASE_URL,
-        fast_context_window=s.MODEL_FAST_CONTEXT_WINDOW,
-        embedding_provider=s.MODEL_EMBEDDING_PROVIDER,
-        embedding_model=s.MODEL_EMBEDDING,
-        embedding_base_url=s.MODEL_EMBEDDING_BASE_URL,
+        quality_provider=quality.provider,
+        quality_model=quality.model,
+        quality_base_url=quality.base_url,
+        quality_context_window=quality.context_window,
+        fast_provider=fast.provider,
+        fast_model=fast.model,
+        fast_base_url=fast.base_url,
+        fast_context_window=fast.context_window,
+        embedding_provider=embedding.provider,
+        embedding_model=embedding.model,
+        embedding_base_url=embedding.base_url,
         openai_key_set=bool(s.OPENAI_API_KEY.strip()),
+        editable=False,
+        problems=missing_configuration(),
         temperature=s.LLM_TEMPERATURE,
         max_tokens=s.LLM_MAX_TOKENS,
         max_react_iterations=s.REACT_MAX_ITERATIONS,
     )
-
-
-@router.put("/llm", response_model=LlmConfig)
-async def update_llm_config(req: LlmConfig, db: DbSession, user: AdminUser) -> LlmConfig:
-    await _set(db, "llm_config", req.model_dump(), user.id)
-    return req
 
 
 # ── Doc Templates ─────────────────────────────────────────────────────────────

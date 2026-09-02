@@ -185,65 +185,120 @@ class TestRouting:
         assert select_tier("something-new") == QUALITY
 
 
-class TestTheEndpointFollowsTheProvider:
+class TestTheProviderDecidesWhatIsRead:
     """
-    Moving a tier to a hosted model has to be the one-word edit the settings comment
-    promises. It was not, and the way it failed is the reason these are pinned.
+    The two providers need genuinely different things, and the provider is dispatched
+    on *before* anything else is read.
 
-    `MODEL_QUALITY_PROVIDER=openai` with no base URL used to resolve to LM Studio,
-    because the base URL defaulted to localhost whatever the provider said. LM Studio
-    **answered** — it ignores the model name and replies as whatever it has loaded —
-    so every quality call was served by the 1.2b fast model while the settings page
-    read `gpt-5.6-luna`, and no call ever failed. An endpoint that returns 200 for the
-    wrong model leaves nothing to notice.
+    They used to share one shape — provider, model, base URL, window — with the
+    provider deciding only whether a real key travelled. So `MODEL_QUALITY_PROVIDER=
+    openai` on its own resolved to LM Studio, which **answered**: it ignores the model
+    name and replies as whatever it has loaded. The quality tier was served by a 1.2b
+    model while the settings said `gpt-5.6-luna`, every call returned 200, and nothing
+    showed it. These pin the shape that makes that unrepresentable.
     """
 
-    def test_openai_with_no_base_url_goes_to_openai(self, settings_factory) -> None:
-        settings_factory(MODEL_QUALITY_PROVIDER=OPENAI, MODEL_QUALITY_BASE_URL="")
-        assert providers.spec_for_tier(QUALITY).base_url == "https://api.openai.com/v1"
-
-    def test_local_with_no_base_url_goes_to_lm_studio(self, settings_factory) -> None:
-        settings_factory(MODEL_QUALITY_BASE_URL="")
-        assert providers.spec_for_tier(QUALITY).base_url == "http://localhost:1234/v1"
-
-    def test_an_explicit_base_url_still_wins(self, settings_factory) -> None:
-        """A proxy, a gateway, or another vendor's OpenAI-shaped endpoint."""
+    def test_openai_needs_only_a_key_and_a_model(self, settings_factory) -> None:
         settings_factory(
             MODEL_QUALITY_PROVIDER=OPENAI,
-            MODEL_QUALITY_BASE_URL="https://gateway.internal/v1",
+            MODEL_QUALITY="gpt-5.6-luna",
+            OPENAI_API_KEY="sk-test",
         )
-        assert providers.spec_for_tier(QUALITY).base_url == "https://gateway.internal/v1"
+        spec = providers.spec_for_tier(QUALITY)
 
-    def test_resolving_one_tier_does_not_move_another(self, settings_factory) -> None:
-        """The rule the rest of this file exists for, restated for the new default."""
-        settings_factory(MODEL_QUALITY_PROVIDER=OPENAI, MODEL_QUALITY_BASE_URL="")
-        assert providers.spec_for_tier(FAST).base_url == "http://localhost:1234/v1"
-        assert providers.embedding_spec().base_url == "http://localhost:1234/v1"
+        assert spec.base_url == providers.OPENAI_BASE_URL
+        assert spec.model == "gpt-5.6-luna"
+        assert spec.api_key == "sk-test"
+        assert spec.context_window == providers.OPENAI_CONTEXT_WINDOW
 
-
-class TestTheStartupCheckCatchesTheSilentOne:
-    def test_openai_pointed_at_this_machine_is_reported(self, settings_factory) -> None:
+    def test_an_openai_tier_ignores_a_base_url_entirely(self, settings_factory) -> None:
+        """
+        The one that matters. A leftover `MODEL_QUALITY_BASE_URL` in somebody's `.env`
+        — which is exactly how this went wrong — cannot redirect a hosted tier.
+        Pointing elsewhere is what the `local` provider is for.
+        """
         settings_factory(
             MODEL_QUALITY_PROVIDER=OPENAI,
             MODEL_QUALITY_BASE_URL="http://localhost:1234/v1",
             OPENAI_API_KEY="sk-test",
         )
-        problems = providers.missing_configuration()
-        assert any("points at this machine" in p for p in problems)
+        assert providers.spec_for_tier(QUALITY).base_url == providers.OPENAI_BASE_URL
 
-    @pytest.mark.parametrize("host", ["127.0.0.1", "0.0.0.0", "host.docker.internal"])
-    def test_every_loopback_spelling_counts(self, settings_factory, host: str) -> None:
+    def test_an_openai_tier_ignores_a_context_window(self, settings_factory) -> None:
+        """Not a number anybody should have to look up to use their own account."""
         settings_factory(
             MODEL_QUALITY_PROVIDER=OPENAI,
-            MODEL_QUALITY_BASE_URL=f"http://{host}:1234/v1",
+            MODEL_QUALITY_CONTEXT_WINDOW=4096,
             OPENAI_API_KEY="sk-test",
         )
-        assert any("points at this machine" in p for p in providers.missing_configuration())
+        assert providers.spec_for_tier(QUALITY).context_window == (
+            providers.OPENAI_CONTEXT_WINDOW
+        )
 
-    def test_a_correctly_configured_hosted_tier_is_quiet(self, settings_factory) -> None:
+    def test_a_compatible_tier_reads_all_three(self, settings_factory) -> None:
+        """vLLM, Ollama, a gateway — nothing about these can be assumed."""
+        settings_factory(
+            MODEL_QUALITY_PROVIDER=LOCAL,
+            MODEL_QUALITY="mistral-7b",
+            MODEL_QUALITY_BASE_URL="http://10.0.0.4:8000/v1",
+            MODEL_QUALITY_CONTEXT_WINDOW=32768,
+        )
+        spec = providers.spec_for_tier(QUALITY)
+
+        assert (spec.base_url, spec.model, spec.context_window) == (
+            "http://10.0.0.4:8000/v1", "mistral-7b", 32768,
+        )
+        assert spec.api_key != "sk-test", "a real key has no business leaving the box"
+
+    def test_a_compatible_tier_with_no_url_falls_back_to_lm_studio(
+        self, settings_factory
+    ) -> None:
+        settings_factory(MODEL_QUALITY_BASE_URL="")
+        assert providers.spec_for_tier(QUALITY).base_url == providers.LOCAL_BASE_URL
+
+    def test_moving_one_tier_to_openai_does_not_move_another(
+        self, settings_factory
+    ) -> None:
+        """
+        The rule the rest of this file exists for. The embedder especially: its output
+        width is written into every stored vector, so moving it is a re-ingest.
+        """
+        settings_factory(MODEL_QUALITY_PROVIDER=OPENAI, OPENAI_API_KEY="sk-test")
+
+        assert providers.spec_for_tier(FAST).base_url == "http://localhost:1234/v1"
+        assert providers.embedding_spec().base_url == "http://localhost:1234/v1"
+        assert providers.embedding_spec().api_key != "sk-test"
+
+
+class TestTheStartupCheck:
+    def test_openai_without_a_key_is_refused(self, settings_factory) -> None:
+        settings_factory(MODEL_QUALITY_PROVIDER=OPENAI, OPENAI_API_KEY="")
+        problems = providers.missing_configuration()
+
+        assert any("OPENAI_API_KEY is empty" in p for p in problems)
+        assert any("MODEL_QUALITY_PROVIDER=local" in p for p in problems), (
+            "say what the alternative is, not just what is missing"
+        )
+
+    def test_a_compatible_tier_with_no_window_is_refused(self, settings_factory) -> None:
+        """Prompts are budgeted against it; zero leaves no room for evidence."""
+        settings_factory(MODEL_QUALITY_CONTEXT_WINDOW=0)
+        assert any(
+            "MODEL_QUALITY_CONTEXT_WINDOW" in p for p in providers.missing_configuration()
+        )
+
+    def test_the_embedder_needs_no_window(self, settings_factory) -> None:
+        """Nothing trims an embedding request."""
+        settings_factory()
+        assert not any(
+            "MODEL_EMBEDDING_CONTEXT_WINDOW" in p for p in providers.missing_configuration()
+        )
+
+    def test_openai_needs_no_url_or_window(self, settings_factory) -> None:
         settings_factory(
             MODEL_QUALITY_PROVIDER=OPENAI,
             MODEL_QUALITY_BASE_URL="",
+            MODEL_QUALITY_CONTEXT_WINDOW=0,
             OPENAI_API_KEY="sk-test",
         )
         assert providers.missing_configuration() == []

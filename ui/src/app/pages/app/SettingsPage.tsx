@@ -1,354 +1,179 @@
-import { useEffect, useState } from 'react'
-import { api, ApiError } from '../../lib/api'
+import { api } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import type { LLMSettings } from '../../lib/types'
-import { Button, Field, PageHead, Panel, inputClass } from '../../components/ui'
-import { ErrorState, SkeletonPanel, Working } from '../../components/States'
+import { PageHead, Panel } from '../../components/ui'
+import { ErrorState, SkeletonPanel } from '../../components/States'
 
 /* ------------------------------------------------------------------ *
- * Settings — LLM configuration (admin-only in the real system).
+ * Settings — what each tier is actually pointed at.
  *
- * GET /settings/llm  →  show current values
- * PUT /settings/llm  →  save
+ * This was a form. It saved to `PUT /settings/llm`, which wrote a row
+ * that nothing ever read back: model configuration comes from `.env`
+ * and is resolved at call time. So the page reported a configuration
+ * the application was not using — the worst possible answer from a
+ * screen whose only job is saying what is configured.
  *
- * The form mirrors the LLMSettings shape exactly; no field is omitted.
+ * It reports the resolved specs now. Two providers, and they carry
+ * different fields on purpose: `openai` is a key and a model name;
+ * `local` is any OpenAI-compatible server, where the URL and the
+ * window matter because neither can be assumed.
  * ------------------------------------------------------------------ */
 
-const DEFAULTS: LLMSettings = {
-  quality_provider: 'local',
-  quality_model: 'local-model',
-  quality_base_url: 'http://localhost:1234/v1',
-  quality_context_window: 21000,
-
-  fast_provider: 'local',
-  fast_model: 'local-model',
-  fast_base_url: 'http://localhost:1234/v1',
-  fast_context_window: 21000,
-
-  embedding_provider: 'local',
-  embedding_model: '',
-  embedding_base_url: 'http://localhost:1234/v1',
-
-  openai_key_set: false,
-
-  temperature: 0.2,
-  max_tokens: 4096,
-  max_react_iterations: 10,
-}
-
-function NumericField({
-  label,
-  name,
-  help,
-  value,
-  onChange,
-  step = 1,
-  min,
-  max,
-}: {
-  label: string
-  name: string
-  help?: string
-  value: number
-  onChange: (v: number) => void
-  step?: number
-  min?: number
-  max?: number
-}) {
+function Row({ k, v, muted }: { k: string; v: string | number; muted?: boolean }) {
   return (
-    <Field label={label} help={help}>
-      <input
-        type="number"
-        name={name}
-        value={value}
-        step={step}
-        min={min}
-        max={max}
-        onChange={e => onChange(parseFloat(e.target.value))}
-        className={inputClass}
-      />
-    </Field>
+    <div className="flex items-baseline gap-3 border-b border-rule px-4 py-2 last:border-b-0">
+      <span className="tag w-[112px] shrink-0 text-ink-dim">{k}</span>
+      <span
+        className={`min-w-0 flex-1 break-all text-[12px] ${
+          muted ? 'text-ink-dim' : 'text-ink'
+        }`}
+      >
+        {v}
+      </span>
+    </div>
   )
 }
 
-function TextField({
-  label,
-  name,
-  help,
-  value,
-  onChange,
-  type = 'text',
+function Tier({
+  index,
+  title,
+  blurb,
+  provider,
+  model,
+  baseUrl,
+  contextWindow,
+  keySet,
 }: {
-  label: string
-  name: string
-  help?: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
+  index: string
+  title: string
+  blurb: string
+  provider: string
+  model: string
+  baseUrl: string
+  contextWindow?: number
+  keySet: boolean
 }) {
+  const hosted = provider === 'openai'
   return (
-    <Field label={label} help={help}>
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className={inputClass}
-      />
-    </Field>
-  )
-}
-
-function SettingsForm({ initial }: { initial: LLMSettings }) {
-  const [form, setForm] = useState<LLMSettings>(initial)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [dirty, setDirty] = useState(false)
-
-  useEffect(() => {
-    setForm(initial)
-    setDirty(false)
-  }, [initial])
-
-  function set<K extends keyof LLMSettings>(k: K, v: LLMSettings[K]) {
-    setForm(prev => ({ ...prev, [k]: v }))
-    setDirty(true)
-    setSaved(false)
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
-    setError(null)
-    try {
-      await api.putLlmSettings(form)
-      setSaved(true)
-      setDirty(false)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save settings.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      {/* Quality tier */}
-      <Panel title="Quality model" index="01">
-        <p className="px-4 pt-3 text-[11.5px] text-ink-mid">
-          Plans, writes, reviews and draws. Everything whose output you read.
-        </p>
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
-          <TextField
-            label="Provider"
-            name="quality_provider"
-            help="local | openai — decides only whether the API key is sent."
-            value={form.quality_provider}
-            onChange={v => set('quality_provider', v)}
-          />
-          <TextField
-            label="Model"
-            name="quality_model"
-            help="Exactly as the endpoint lists it at GET /v1/models."
-            value={form.quality_model}
-            onChange={v => set('quality_model', v)}
-          />
-          <TextField
-            label="Base URL"
-            name="quality_base_url"
-            help="Where to connect."
-            value={form.quality_base_url}
-            onChange={v => set('quality_base_url', v)}
-          />
-          <NumericField
-            label="Context window"
-            name="quality_context_window"
-            help="What the model is SERVED with, not its theoretical maximum."
-            value={form.quality_context_window}
-            onChange={v => set('quality_context_window', v)}
-            step={1024}
-            min={1024}
-          />
-        </div>
-      </Panel>
-
-      {/* Fast tier */}
-      <Panel title="Fast model" index="02">
-        <p className="px-4 pt-3 text-[11.5px] text-ink-mid">
-          Classifies, extracts and summarises — thousands of short calls where a small
-          model is indistinguishable and far cheaper.
-        </p>
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
-          <TextField
-            label="Provider"
-            name="fast_provider"
-            help="local | openai"
-            value={form.fast_provider}
-            onChange={v => set('fast_provider', v)}
-          />
-          <TextField
-            label="Model"
-            name="fast_model"
-            value={form.fast_model}
-            onChange={v => set('fast_model', v)}
-          />
-          <TextField
-            label="Base URL"
-            name="fast_base_url"
-            value={form.fast_base_url}
-            onChange={v => set('fast_base_url', v)}
-          />
-          <NumericField
-            label="Context window"
-            name="fast_context_window"
-            value={form.fast_context_window}
-            onChange={v => set('fast_context_window', v)}
-            step={1024}
-            min={1024}
-          />
-        </div>
-      </Panel>
-
-      {/* Embeddings */}
-      <Panel title="Embedding model" index="03">
-        <p className="px-4 pt-3 text-[11.5px] text-warn">
-          Changing this is destructive. Its output size is written into the database at
-          migration time, so a different model means re-migrating — which truncates every
-          stored chunk — and re-ingesting every project.
-        </p>
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
-          <TextField
-            label="Provider"
-            name="embedding_provider"
-            help="local | openai"
-            value={form.embedding_provider}
-            onChange={v => set('embedding_provider', v)}
-          />
-          <TextField
-            label="Model"
-            name="embedding_model"
-            value={form.embedding_model}
-            onChange={v => set('embedding_model', v)}
-          />
-          <TextField
-            label="Base URL"
-            name="embedding_base_url"
-            value={form.embedding_base_url}
-            onChange={v => set('embedding_base_url', v)}
-          />
-        </div>
-        <p className="px-4 pb-4 text-[11px] text-ink-dim">
-          OpenAI API key: {form.openai_key_set ? 'configured' : 'not set'} — it is read from
-          the server environment and never returned here.
-        </p>
-      </Panel>
-
-      {/* Sampling */}
-      <Panel title="Sampling" index="04">
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
-          <NumericField
-            label="Temperature"
-            name="temperature"
-            help="0.0 = deterministic · 1.0 = creative"
-            value={form.temperature}
-            onChange={v => set('temperature', v)}
-            step={0.05}
-            min={0}
-            max={2}
-          />
-          <NumericField
-            label="Max tokens"
-            name="max_tokens"
-            help="Upper bound per LLM call."
-            value={form.max_tokens}
-            onChange={v => set('max_tokens', v)}
-            min={256}
-            max={128000}
-          />
-          <NumericField
-            label="Max ReAct iterations"
-            name="max_react_iterations"
-            help="How many reasoning loops the agents may run."
-            value={form.max_react_iterations}
-            onChange={v => set('max_react_iterations', v)}
-            min={1}
-            max={50}
-          />
-        </div>
-      </Panel>
-
-      {/* Footer */}
-      <div className="flex items-center gap-3">
-        <Button type="submit" variant="hot" disabled={saving || !dirty}>
-          {saving ? 'Saving…' : 'Save settings'}
-        </Button>
-        {saving && <Working label="Saving" />}
-        {saved && !dirty && (
-          <span className="tag flex items-center gap-1.5 text-ok">
-            <span className="block size-[5px] bg-ok" /> Saved
-          </span>
-        )}
-        {error && <span className="tag text-bad">{error}</span>}
-        {dirty && !saving && (
-          <span className="tag text-ink-dim">Unsaved changes</span>
-        )}
-      </div>
-
-      {/* Reset */}
-      <div className="border-t border-rule pt-4">
-        <button
-          type="button"
-          className="tag text-ink-dim underline-offset-2 hover:text-bad hover:underline transition-colors"
-          onClick={() => {
-            setForm(DEFAULTS)
-            setDirty(true)
-            setSaved(false)
-          }}
+    <Panel
+      title={title}
+      index={index}
+      action={
+        <span
+          className={`tag border px-1.5 py-0.5 ${
+            hosted
+              ? 'border-hot-edge bg-hot-wash text-hot-ink'
+              : 'border-rule bg-sunk text-ink-mid'
+          }`}
         >
-          Reset to defaults
-        </button>
+          {hosted ? 'openai' : 'openai-compatible'}
+        </span>
+      }
+    >
+      <p className="px-4 pt-3 pb-1 font-sans text-[11.5px] leading-relaxed text-ink-mid">
+        {blurb}
+      </p>
+      <div className="border-t border-rule">
+        <Row k="model" v={model || '—'} />
+        {hosted ? (
+          <>
+            <Row k="api key" v={keySet ? 'configured' : 'NOT SET'} muted={keySet} />
+            {/* Shown so the page is complete, dimmed because neither is a
+                setting for a hosted tier — the endpoint is fixed and the
+                window is not a number anybody should have to look up. */}
+            <Row k="endpoint" v={baseUrl} muted />
+            {contextWindow ? <Row k="context" v={contextWindow.toLocaleString()} muted /> : null}
+          </>
+        ) : (
+          <>
+            <Row k="endpoint" v={baseUrl} />
+            {contextWindow ? <Row k="context" v={contextWindow.toLocaleString()} /> : null}
+          </>
+        )}
       </div>
-    </form>
+    </Panel>
+  )
+}
+
+function Resolved({ s }: { s: LLMSettings }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {!!s.problems?.length && (
+        <div className="border border-bad/40 bg-bad-wash px-4 py-3">
+          <span className="tag text-bad">this configuration will not work</span>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {s.problems.map(p => (
+              <li key={p} className="font-sans text-[12px] leading-relaxed text-ink">
+                {p}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <Tier
+        index="01"
+        title="Quality model"
+        blurb="Plans, writes, reviews and draws. Everything whose output you read."
+        provider={s.quality_provider}
+        model={s.quality_model}
+        baseUrl={s.quality_base_url}
+        contextWindow={s.quality_context_window}
+        keySet={s.openai_key_set}
+      />
+      <Tier
+        index="02"
+        title="Fast model"
+        blurb="Classifies, extracts and summarises. Thousands of short calls where a small model is the right tool."
+        provider={s.fast_provider}
+        model={s.fast_model}
+        baseUrl={s.fast_base_url}
+        contextWindow={s.fast_context_window}
+        keySet={s.openai_key_set}
+      />
+      <Tier
+        index="03"
+        title="Embedding model"
+        blurb="Indexes the source for search. Independent of the other two — every stored vector has the width of the model that produced it, so changing this means re-analysing."
+        provider={s.embedding_provider}
+        model={s.embedding_model}
+        baseUrl={s.embedding_base_url}
+        keySet={s.openai_key_set}
+      />
+
+      <Panel title="Sampling" index="04">
+        <Row k="temperature" v={s.temperature} />
+        <Row k="max tokens" v={s.max_tokens.toLocaleString()} />
+        <Row k="react loops" v={s.max_react_iterations} />
+      </Panel>
+    </div>
   )
 }
 
 export default function SettingsPage() {
-  const { data, loading, error, reload } = useAsync(sig => api.llmSettings(), [])
+  const { data, loading, error, reload } = useAsync<LLMSettings>(() => api.llmSettings(), [])
 
   return (
     <div className="mx-auto max-w-[900px] p-5">
-      <PageHead
-        index="06"
-        title="Settings"
-        sub="LLM endpoint and sampling configuration"
-      />
+      <PageHead index="06" title="Settings" sub="What each tier is pointed at" />
 
-      {/* Info strip */}
       <div className="mb-5 border border-rule bg-sunk/40 px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <span className="block size-[7px] rotate-45 bg-hot shrink-0 mt-1" />
+          <span className="mt-1 block size-[7px] shrink-0 rotate-45 bg-hot" />
           <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
-            Codelith connects to any OpenAI-compatible LLM endpoint.
-            Configure Ollama locally or point at a hosted provider.
-            Changes take effect for the next job run.
+            Read-only. Models are configured in <code className="text-hot-ink">.env</code> and
+            resolved when a call is placed, so this is what the next job will actually use.
+            Set a tier to <code className="text-hot-ink">openai</code> and it needs a key and a
+            model name; set it to <code className="text-hot-ink">local</code> for any
+            OpenAI-compatible server — LM Studio, vLLM, Ollama, a gateway — where the endpoint
+            and the context window matter too.
           </p>
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col gap-4">
-          <SkeletonPanel rows={3} />
-          <SkeletonPanel rows={3} />
-        </div>
-      ) : error ? (
-        <ErrorState
-          message={`Could not load settings: ${error}`}
-          onRetry={reload}
-        />
-      ) : (
-        <SettingsForm initial={data ?? DEFAULTS} />
-      )}
+      {loading && <SkeletonPanel rows={6} />}
+      {error && <ErrorState message={error} onRetry={reload} />}
+      {data && <Resolved s={data} />}
     </div>
   )
 }

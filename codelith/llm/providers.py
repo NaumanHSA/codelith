@@ -1,18 +1,30 @@
 """
 Which endpoint a tier actually talks to.
 
-Three tiers — `quality`, `fast` and `embedding` — and each is described by the same
-settings: a provider, a model name, a base URL and (for the two chat tiers) a context
-window. `app/llm/router.py` maps a task type onto a tier; this module turns a tier
-into something you can place a call against.
+**Two providers, and they are not variations on each other.** The provider is decided
+first and only that provider's settings are read afterwards, because the two need
+genuinely different things and pretending otherwise is what broke this:
 
-The provider decides exactly one thing: whether the request carries `OPENAI_API_KEY`
-or a placeholder. Everything else is the same four values either way, which is what
-makes moving a tier between local and hosted a one-word edit.
+  * `openai` — a key and a model name. Nothing else. The endpoint is fixed, and the
+    context window is not something a caller should have to look up.
+  * `local` — any OpenAI-*compatible* server: LM Studio, vLLM, Ollama, llama.cpp,
+    a gateway, another vendor's OpenAI-shaped API. These need a base URL, a model
+    name and a context window, because none of the three can be assumed.
+
+They used to share one shape — provider, model, base URL, window — with the provider
+deciding only whether a real key travelled. That made `MODEL_QUALITY_PROVIDER=openai`
+on its own resolve to LM Studio, which **answered**: it ignores the model name in a
+request and replies as whatever it has loaded. The quality tier was served by a 1.2b
+model while the settings page read `gpt-5.6-luna`, every call returned 200, and
+nothing in a log or a trace showed it. A wrong endpoint that succeeds is worse than
+one that refuses, so the shape that allowed it is gone.
+
+Three tiers — `quality`, `fast`, `embedding` — each choosing its provider
+independently. `codelith/llm/router.py` maps a task type onto a tier; this module
+turns a tier into something you can place a call against.
 
 Downstream takes a `ModelSpec` rather than a bare model name, because a name alone is
-not enough to place a call once the tiers can sit on different endpoints — that was
-the assumption baked into the old single-client design.
+not enough to place a call once the tiers can sit on different endpoints.
 """
 
 from __future__ import annotations
@@ -28,31 +40,30 @@ QUALITY = "quality"
 FAST = "fast"
 EMBEDDING = "embedding"
 
-#: Sent when a tier is `local`. Those endpoints authenticate nothing, but the OpenAI
-#: SDK refuses an empty string — and a real key has no business reaching localhost.
+#: Sent when a tier is `local`. Those endpoints mostly authenticate nothing, but the
+#: OpenAI SDK refuses an empty string — and a real key has no business being posted to
+#: whatever happens to be listening on localhost.
 _NO_KEY = "not-needed"
 
-#: Where a provider talks when nothing says otherwise.
+#: The `openai` provider's endpoint. Not a setting: a tier that says `openai` means
+#: OpenAI, and everything else — including a proxy in front of OpenAI — is what the
+#: `local` provider is for. Making this configurable is exactly how the key ended up
+#: being posted to LM Studio.
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+#: What the prompt budgeters assume a hosted model will take.
 #:
-#: This exists because "moving a tier is a one-word edit" has to be true. The base URL
-#: used to default to LM Studio whatever the provider said, so setting only
-#: `MODEL_QUALITY_PROVIDER=openai` sent the API key to `localhost:1234` — and LM Studio
-#: **answered**, ignoring the model name and replying as whatever it had loaded. Every
-#: quality call was served by the 1.2b fast model while the settings page said
-#: `gpt-5.6-luna`, and nothing failed. A wrong endpoint that returns 200 is worse than
-#: one that refuses, because there is nothing to notice.
-_DEFAULT_BASE_URL = {
-    LOCAL: "http://localhost:1234/v1",
-    OPENAI: "https://api.openai.com/v1",
-}
+#: `openai` deliberately has no context-window setting — it is not something a person
+#: should have to look up to use their own account. But the budgeters need a number:
+#: they decide how much retrieved evidence fits in a prompt, and zero would mean
+#: "send none". Set generously, because the failure modes are asymmetric. Too high is
+#: a context-length error the caller sees; too low silently drops evidence from every
+#: answer and reads as the model being vague.
+OPENAI_CONTEXT_WINDOW = 128_000
 
-#: Hosts that cannot be a hosted provider, whatever the settings claim.
-_LOOPBACK = ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal")
-
-
-def _resolve_base_url(provider: str, configured: str) -> str:
-    """An explicit setting always wins; otherwise the provider decides."""
-    return configured.strip() or _DEFAULT_BASE_URL.get(provider, _DEFAULT_BASE_URL[LOCAL])
+#: The default for a `local` tier that names no endpoint — LM Studio, which is what
+#: the README tells people to install.
+LOCAL_BASE_URL = "http://localhost:1234/v1"
 
 
 @dataclass(frozen=True)
@@ -92,8 +103,15 @@ class ModelSpec:
 
 
 def spec_for_tier(tier: str) -> ModelSpec:
-    """The endpoint a tier resolves to. Unknown tiers fall back to quality."""
+    """
+    The endpoint a tier resolves to. Unknown tiers fall back to quality.
+
+    The provider is read first and dispatched on, and only then are that provider's
+    settings looked at. A tier set to `openai` never reads a base URL or a window,
+    so no combination of the two can point it anywhere but OpenAI.
+    """
     s = get_settings()
+    tier = tier if tier in (FAST, EMBEDDING) else QUALITY
 
     if tier == FAST:
         provider, model = s.MODEL_FAST_PROVIDER, s.MODEL_FAST
@@ -103,16 +121,50 @@ def spec_for_tier(tier: str) -> ModelSpec:
         # Nothing trims an embedding request, so there is no window to resolve.
         base_url, window = s.MODEL_EMBEDDING_BASE_URL, 0
     else:
-        tier = QUALITY
         provider, model = s.MODEL_QUALITY_PROVIDER, s.MODEL_QUALITY
         base_url, window = s.MODEL_QUALITY_BASE_URL, s.MODEL_QUALITY_CONTEXT_WINDOW
 
+    if provider == OPENAI:
+        return _openai_spec(tier, model, s.OPENAI_API_KEY)
+    return _compatible_spec(tier, model, base_url, window)
+
+
+def _openai_spec(tier: str, model: str, api_key: str) -> ModelSpec:
+    """
+    OpenAI: a key and a model name.
+
+    No base URL and no window are read, because neither is a decision the operator
+    should be making. Point somewhere else and you are using an OpenAI-compatible
+    endpoint, which is `local` — that distinction is the whole reason these are two
+    functions rather than one with branches.
+    """
     return ModelSpec(
         tier=tier,
-        provider=provider,
+        provider=OPENAI,
         model=model,
-        base_url=_resolve_base_url(provider, base_url),
-        api_key=s.OPENAI_API_KEY if provider == OPENAI else _NO_KEY,
+        base_url=OPENAI_BASE_URL,
+        api_key=api_key,
+        # Embeddings are never trimmed, so the window is meaningless for that tier.
+        context_window=0 if tier == EMBEDDING else OPENAI_CONTEXT_WINDOW,
+    )
+
+
+def _compatible_spec(tier: str, model: str, base_url: str, window: int) -> ModelSpec:
+    """
+    Any OpenAI-compatible server — LM Studio, vLLM, Ollama, llama.cpp, a gateway.
+
+    All three values matter here and none can be assumed: the port differs per server,
+    the model name is whatever that server calls it, and the window is whatever it was
+    loaded with. An unset base URL falls back to LM Studio because that is what the
+    README tells people to install; an unset window is a caller's problem, and
+    `missing_configuration` says so rather than guessing one.
+    """
+    return ModelSpec(
+        tier=tier,
+        provider=LOCAL,
+        model=model,
+        base_url=base_url.strip() or LOCAL_BASE_URL,
+        api_key=_NO_KEY,
         context_window=window,
     )
 
@@ -132,30 +184,40 @@ def missing_configuration() -> list[str]:
     Settings the chosen providers need and do not have.
 
     Checked at startup so "you selected openai and gave no key" is a message rather
-    than a 401 forty minutes into an analysis run.
+    than a 401 forty minutes into an analysis run, after a repository has been cloned
+    and embedded.
 
-    The loopback check is here for a failure that never produced a 401 at all. A tier
-    set to `openai` while its base URL points at LM Studio does not fail — LM Studio
-    answers, ignores the model name, and replies as whatever it has loaded. The
-    settings page said `gpt-5.6-luna` and a 1.2b model wrote every page. Nothing in a
-    log or a trace showed it, because from the caller's side the call succeeded.
+    Each provider is checked against what *it* needs, which is the point of splitting
+    them. There is no longer a check for "openai pointed at localhost" because the
+    shape no longer permits it: a tier set to `openai` never reads a base URL. That
+    failure was silent — LM Studio answered as its own loaded model — and the fix for
+    a silent failure is to make it unrepresentable rather than to detect it.
     """
     problems: list[str] = []
     for tier, spec in configured_specs().items():
         upper = tier.upper()
-        if spec.provider == OPENAI and not spec.api_key.strip():
-            problems.append(f"MODEL_{upper}_PROVIDER is openai but OPENAI_API_KEY is empty")
-        if spec.provider == OPENAI and any(h in spec.base_url for h in _LOOPBACK):
-            problems.append(
-                f"MODEL_{upper}_PROVIDER is openai but MODEL_{upper}_BASE_URL points at "
-                f"this machine ({spec.base_url}). A local server will answer and reply "
-                f"as whatever model it has loaded, not as {spec.model}. Unset it to use "
-                f"{_DEFAULT_BASE_URL[OPENAI]}."
-            )
+
         if not spec.model.strip():
             problems.append(f"MODEL_{upper} is empty — no model name to call")
+
+        if spec.provider == OPENAI:
+            if not spec.api_key.strip():
+                problems.append(
+                    f"MODEL_{upper}_PROVIDER is openai but OPENAI_API_KEY is empty. "
+                    f"Set the key, or set MODEL_{upper}_PROVIDER=local and give it a "
+                    f"MODEL_{upper}_BASE_URL."
+                )
+            continue
+
+        # `local` — an OpenAI-compatible server, where nothing can be assumed.
         if not spec.base_url.strip():
             problems.append(f"MODEL_{upper}_BASE_URL is empty — nowhere to connect")
+        if tier != EMBEDDING and spec.context_window <= 0:
+            problems.append(
+                f"MODEL_{upper}_CONTEXT_WINDOW is {spec.context_window} — prompts are "
+                f"budgeted against it, and a non-positive window leaves no room for "
+                f"evidence."
+            )
     return problems
 
 
@@ -167,6 +229,9 @@ __all__ = [
     "missing_configuration",
     "LOCAL",
     "OPENAI",
+    "OPENAI_BASE_URL",
+    "OPENAI_CONTEXT_WINDOW",
+    "LOCAL_BASE_URL",
     "QUALITY",
     "FAST",
     "EMBEDDING",

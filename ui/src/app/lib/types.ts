@@ -349,6 +349,11 @@ export interface LLMSettings {
 
   openai_key_set: boolean
 
+  /** False while models come from `.env`. The page renders facts, not inputs. */
+  editable: boolean
+  /** Anything the startup check found — an openai tier with no key, say. */
+  problems: string[]
+
   temperature: number
   max_tokens: number
   max_react_iterations: number

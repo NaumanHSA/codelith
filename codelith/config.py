@@ -49,25 +49,27 @@ class Settings(BaseSettings):
     # Redis
 
     # ── Models ────────────────────────────────────────────────────────────────
-    # Three of them, and each is described by the same four settings:
+    # Two providers, and they are deliberately not the same shape. The provider is
+    # read first and only its own settings are read afterwards:
     #
-    #   MODEL_<TIER>_PROVIDER        local | openai
-    #   MODEL_<TIER>                 the model name
-    #   MODEL_<TIER>_BASE_URL        where to connect
-    #   MODEL_<TIER>_CONTEXT_WINDOW  how much it will accept
+    #   MODEL_<TIER>_PROVIDER=openai
+    #       needs OPENAI_API_KEY and MODEL_<TIER>. Nothing else — the endpoint is
+    #       fixed and the context window is not a number anybody should have to look
+    #       up to use their own account. A BASE_URL here is ignored, not honoured.
     #
-    # `openai` uses OPENAI_API_KEY; `local` needs no key and is sent a placeholder.
-    # That is the whole difference between the two providers — everything else is
-    # the same four values, so a tier moves between them by editing one word.
+    #   MODEL_<TIER>_PROVIDER=local
+    #       any OpenAI-*compatible* server — LM Studio, vLLM, Ollama, llama.cpp, a
+    #       gateway, another vendor's OpenAI-shaped API. Needs MODEL_<TIER>,
+    #       MODEL_<TIER>_BASE_URL and MODEL_<TIER>_CONTEXT_WINDOW, because not one of
+    #       the three can be assumed.
     #
-    # BASE_URL is blank by default and resolved from the provider (see
-    # `llm/providers.py`), because "edit one word" has to be true. It used to default
-    # to localhost whatever the provider said, so setting only PROVIDER=openai sent
-    # the API key to LM Studio — which answered, with whatever model it had loaded,
-    # under a different name. A wrong endpoint that returns 200 is worse than one
-    # that refuses. Set it explicitly to point a tier anywhere else.
+    # They used to share one shape, with the provider choosing only whether a real key
+    # travelled. So `PROVIDER=openai` alone resolved to LM Studio — which answered,
+    # ignoring the model name and replying as whatever it had loaded. The quality tier
+    # ran on a 1.2b model while this file said otherwise, and nothing failed. See
+    # `llm/providers.py`.
     #
-    # `app/llm/router.py` picks the tier by task type, never the caller:
+    # `codelith/llm/router.py` picks the tier by task type, never the caller:
     #   write/review/validate/architecture/plan/select/diagram → QUALITY
     #   classify/extract/summarize                             → FAST
     #
