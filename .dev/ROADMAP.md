@@ -103,25 +103,46 @@ Neo4j and without a repository: it is a pure function from files to a graph."*
 - The stage-coverage tests are far weaker than their docstrings claim — they assert one
   string is present, not that every graph node is narrated.
 
-## Phase 1 — The CLI
+## Phase 1 — The CLI ✅
 
-The entry point the landing page already advertises. Against the existing server stack —
-no new storage work yet, so this ships fast and is useful immediately.
+*Done 2 September 2026. The landing page's hero command runs.*
 
-- [ ] `[project.scripts] codelith = "codelith.cli:main"` and a `codelith/cli/` package.
-- [ ] `codelith analyse <path|url>` — start an analysis, stream stage progress, exit
-      non-zero on failure. The stage narration already exists in the studio; reuse the
-      vocabulary so the CLI and the UI describe a run identically.
-- [ ] `codelith ask "<question>"` — one grounded answer with citations, to stdout.
-- [ ] `codelith status` — what has been analysed, with commit and size.
-- [ ] `codelith studio` — open the UI, starting it if it is not running.
-- [ ] `codelith doctor` — check the config: can it reach the database, the model
-      endpoint, and is `VECTOR_DIMENSIONS` consistent with the embedding model. That last
-      one has already cost a debugging cycle; it fails deep inside ingestion and the fix
-      is destructive.
-- [ ] Human-readable by default, `--json` for scripting.
+- [x] `[project.scripts] codelith = "codelith.cli:run"` and a `codelith/cli/` package —
+      `argparse`, `rich` and `httpx`, all of which the project already depended on. A
+      command meant to be the recommended way in should not make the install heavier.
+- [x] `codelith analyse <path|url>` — resolves a path or a bare `github.com/acme/repo`,
+      creates the codebase, starts the analysis and narrates each stage as it lands.
+      Verified end to end against a real repository: 9m 19s, exit 0.
+- [x] `codelith ask "<question>"` — streams a grounded answer token by token, then the
+      sources, and says out loud when a citation was stripped.
+- [x] `codelith status` — a table of what has been analysed, with commit and page count.
+- [x] `codelith studio` — opens the UI, warning first if the API is not answering.
+- [x] `codelith doctor` — server, credentials, all three model tiers, and the
+      **embedding dimension measured against the endpoint** rather than trusted from
+      config. That mismatch does not fail at startup; it surfaces deep inside ingestion
+      and the fix truncates `code_chunks` and re-ingests everything.
+- [x] `codelith login`, storing a token under `~/.codelith` at `0600`, with
+      `CODELITH_TOKEN` and `CODELITH_API_URL` for CI and shared machines.
+- [x] Human-readable by default, `--json` for scripting — and a test that pins the
+      contract, because `codelith status --json | jq` breaks the moment one stray line
+      of prose lands on the same stream.
 
-**Done when** the landing page's hero command runs.
+21 tests, all of them on the decisions the CLI makes before it calls anything: what a
+target means, which codebase was meant when none was named, and the `--json` promise.
+
+**Found while working, and fixed:**
+
+- The CLI printed a replacement character in every truncated cell on Windows. The
+  output uses `▸`, `·` and rich truncates with `…`; the console is cp1252. Both streams
+  are reconfigured to UTF-8 before anything is written.
+- `JobStepOut` serialises `agent_name` under the alias `name`, so following a job
+  crashed with `KeyError` the first time it was run for real. It now accepts either,
+  which also means it works against an older server.
+
+**Deliberately not done:** the CLI still needs a server running. That is what it is —
+a client, so that there is exactly one place a project is created or a question is
+answered. Phase 2 removes the requirement for the single-machine case rather than
+duplicating the service layer here.
 
 ## Phase 2 — Solo mode
 
