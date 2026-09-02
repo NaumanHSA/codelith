@@ -552,3 +552,17 @@ export interface Preflight {
 /** How much detail a written page goes into. Mirrors `apps/documentation/depth.py`;
  *  `tests/unit/apps/test_depth.py` fails if the two lists stop agreeing. */
 export type Depth = 'concise' | 'standard' | 'detailed'
+
+/** Whether analysing again would read anything new. See `services/head_check.py`. */
+export interface AnalysisPreview {
+  /** False when the current commit could not be determined — never a reason to
+   *  refuse the run, only a caveat to show above the button. */
+  checked: boolean
+  never_analysed: boolean
+  changed: boolean
+  analysed_commit: string | null
+  current_commit: string | null
+  branch: string | null
+  reason: string | null
+  summary: string
+}

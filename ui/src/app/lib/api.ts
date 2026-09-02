@@ -11,7 +11,7 @@ import type {
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
-  JobReview, Drift, Preflight, Depth,
+  JobReview, Drift, Preflight, Depth, AnalysisPreview,
 } from './types'
 
 export const API_BASE =
@@ -242,6 +242,11 @@ export const api = {
   /* --- phase 1: analyse --- */
   analyze: (id: number, force = false) =>
     request<Job>(`/projects/${id}/analyze`, { method: 'POST', body: { force } }),
+
+  /** Whether analysing again would read anything new. One `git ls-remote`, no
+   *  clone — fast enough to sit behind a dialog with a spinner. */
+  analysisPreview: (id: number, signal?: AbortSignal) =>
+    request<AnalysisPreview>(`/projects/${id}/analyze/preview`, { signal }),
 
   /** Resolves to null when the project has never been analysed. */
   knowledgeBase: (id: number, signal?: AbortSignal) =>

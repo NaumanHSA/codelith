@@ -9,6 +9,7 @@ import type { Project } from '../../lib/types'
 import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Preflight from '../../components/projects/Preflight'
+import ReanalyseDialog from '../../components/projects/ReanalyseDialog'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import AppGrid from '../../components/projects/AppGrid'
@@ -144,6 +145,7 @@ export default function ProjectDetailPage() {
   const [doomed, setDoomed] = useState(false)
 
   const canRun = can('manager')
+  const [confirmingReanalyse, setConfirmingReanalyse] = useState(false)
 
   const startAnalysis = async (force: boolean) => {
     setAnalysing(true)
@@ -155,6 +157,7 @@ export default function ProjectDetailPage() {
     } catch (e) {
       setAnalyseError(e instanceof ApiError ? e.message : 'Could not start analysis.')
       setAnalysing(false)
+      setConfirmingReanalyse(false)
     }
   }
 
@@ -188,8 +191,15 @@ export default function ProjectDetailPage() {
         right={
           canRun ? (
             <div className="flex gap-2">
+              {/* Asks what it would achieve first. A re-analysis of a repository
+                  that has not moved costs the same as a real one and stores the same
+                  reading, so it is worth one dialog to find out. */}
               {!neverAnalysed && (
-                <Button variant="ghost" onClick={() => startAnalysis(true)} disabled={analysing}>
+                <Button
+                  variant="ghost"
+                  onClick={() => setConfirmingReanalyse(true)}
+                  disabled={analysing}
+                >
                   ↻ Re-analyse
                 </Button>
               )}
@@ -204,6 +214,14 @@ export default function ProjectDetailPage() {
             </div>
           ) : null
         }
+      />
+
+      <ReanalyseDialog
+        open={confirmingReanalyse}
+        projectId={id}
+        starting={analysing}
+        onClose={() => setConfirmingReanalyse(false)}
+        onConfirm={() => void startAnalysis(true)}
       />
 
       <ConfirmDelete

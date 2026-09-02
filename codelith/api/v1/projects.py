@@ -3,6 +3,7 @@ import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, Response, UploadFile
+from pydantic import BaseModel
 
 from codelith.apps import APPS, state_for
 from codelith.apps.documentation.services.documentation_service import DocumentationService
@@ -153,6 +154,85 @@ async def create_project_with_source(
 
 
 # ── Two-phase routes: analyse first, then choose what to write ────────────────
+
+class AnalysisPreviewOut(BaseModel):
+    """
+    What re-analysing would achieve, before it is started.
+
+    Analysis is the expensive thing here, and the button that starts it said nothing
+    about whether it would produce anything new. Re-analysing an unmoved repository
+    costs the same as re-analysing a moved one and stores the same knowledge base —
+    `uq_kb_project_commit` upserts — so it does not even give drift a second point.
+    """
+
+    #: False when the current commit could not be determined. Never a reason to
+    #: refuse the run: the operator asked, and a check that cannot answer must not
+    #: veto them.
+    checked: bool
+    never_analysed: bool
+    changed: bool
+    analysed_commit: str | None = None
+    current_commit: str | None = None
+    branch: str | None = None
+    reason: str | None = None
+    #: The sentence the dialog leads with.
+    summary: str
+
+
+@router.get("/{project_id}/analyze/preview", response_model=AnalysisPreviewOut)
+async def preview_analysis(project_id: int, db: DbSession, user: ManagerUser):
+    """
+    Has the code moved since the last reading?
+
+    One `git ls-remote` for a hosted repository, one `git rev-parse` for a local path.
+    No clone, no working tree — fast enough to sit behind a dialog with a spinner,
+    which is the point of asking at all.
+    """
+    from sqlalchemy import select
+
+    from codelith.models.knowledge import KnowledgeBase
+    from codelith.models.project import ProjectSource
+    from codelith.services.head_check import head_check
+
+    await ProjectService(db).get(project_id, user)
+
+    source = (
+        await db.execute(
+            select(ProjectSource)
+            .where(ProjectSource.project_id == project_id)
+            .order_by(ProjectSource.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=404, detail="This project has no source attached.")
+
+    kb = (
+        await db.execute(
+            select(KnowledgeBase)
+            .where(KnowledgeBase.project_id == project_id)
+            .order_by(KnowledgeBase.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    check = await head_check(
+        source_type=source.source_type,
+        url_or_path=source.url_or_path,
+        branch=source.branch,
+        analysed_commit=kb.commit_sha if kb else None,
+    )
+    return AnalysisPreviewOut(
+        checked=check.checked,
+        never_analysed=check.never_analysed,
+        changed=check.changed,
+        analysed_commit=check.analysed_commit,
+        current_commit=check.current_commit,
+        branch=check.branch,
+        reason=check.reason,
+        summary=check.summary(),
+    )
+
 
 @router.post("/{project_id}/analyze", response_model=JobOut, status_code=202)
 async def analyze_project(
