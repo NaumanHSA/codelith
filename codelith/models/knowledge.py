@@ -25,10 +25,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from codelith.db.base import Base, TimestampMixin
+from codelith.db.types import json_column
 from codelith.knowledge.constants import KBStatus
 
 if TYPE_CHECKING:
@@ -65,24 +65,24 @@ class KnowledgeBase(Base, TimestampMixin):
     schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     #: Aggregate counts and timings — module/entity/narrative totals, languages seen.
-    stats_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    stats_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
     #: The architecture map synthesised during analysis: services, layers, tech stack
     #: and the relations between components. Persisted because composition needs it —
     #: it used to live only in analysis workflow state, so every diagram drawn in phase
     #: two was drawn from an empty map and invented its own components.
-    architecture_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    architecture_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
     #: The site map *proposed* by this analysis: the sections and pages the evidence
     #: says the project's documentation site should contain. Rebuilt on every
     #: analysis and never the source of truth for what exists — `doc_pages` is that.
     #: Kept here so a proposal can be inspected, diffed and re-merged without
     #: re-running the planner.
-    site_map_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    site_map_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
     #: Repo-relative path → content digest, for every file this build read. The only
     #: thing that makes per-page staleness exact: on the next commit, a page is out
     #: of date exactly when one of the files it was written from has a different
     #: digest here. Deliberately not a git diff — uploads and local directories have
     #: no commits, and this works for all of them.
-    file_hashes_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    file_hashes_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
     #: doc-type key → the composition strategy chosen for it: audience, tone, whether
     #: diagrams are worth drawing.
     #:
@@ -91,7 +91,7 @@ class KnowledgeBase(Base, TimestampMixin):
     #: time, so a second job on the same KB re-derives an answer it already has. It
     #: lives on the KB rather than in a cache because that is exactly its lifetime: a
     #: new analysis makes a new KB, and the strategy is reconsidered with it.
-    strategy_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    strategy_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
     #: Why a build ended up DEGRADED or FAILED.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -150,9 +150,9 @@ class KBModule(Base, TimestampMixin):
     is_test: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     #: Serialised `Symbol.to_dict()` list.
-    symbols_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    symbols_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
     #: Repo-relative file paths making up this module.
-    files_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    files_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
 
     #: LLM-generated prose. The expensive, reusable part — written once per commit.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -184,7 +184,7 @@ class KBEntity(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     #: Kind-specific payload — an HTTP route stores method/path/handler, a dependency
     #: stores version/ecosystem. Kept schemaless so new entity kinds need no migration.
-    data_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    data_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
 
     source_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -213,7 +213,7 @@ class KBNarrative(Base, TimestampMixin):
     #: `NarrativeTopic` value.
     topic: Mapped[str] = mapped_column(String(48), nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
-    source_refs_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    source_refs_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
 
     knowledge_base: Mapped[KnowledgeBase] = relationship(back_populates="narratives")
 

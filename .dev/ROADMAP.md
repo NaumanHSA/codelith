@@ -191,14 +191,28 @@ nowhere near it.
 - [ ] **Inline execution** instead of Celery: the six `.delay()` sites run the coroutine
       directly with a progress callback. The studio's job rows still get written, so the
       UI works unchanged if somebody opens it.
-- [ ] **`aiosqlite`** as a dependency — SQLAlchemy's async engine needs a driver, and
-      that is the one package solo mode genuinely adds.
-- [ ] **Alembic against SQLite.** Measured: the schema is ~95% portable. 48
-      `postgresql.TIMESTAMP` and 20 `postgresql.JSONB` map cleanly to their generic
-      types; the Postgres-only surface is four places — `CREATE EXTENSION vector`, the
-      `Vector(dims)` column, the HNSW index, and a `TRUNCATE` in the resize migration.
-      **Open question 1 is answered: share the schema and branch at those four points**,
-      rather than keeping two schemas in step forever.
+- [x] **`aiosqlite`** — the one package solo mode genuinely adds. The vector search it
+      also needs is numpy, which was already here.
+- [x] **The schema builds on SQLite.** All 23 tables. Two column types were the whole
+      problem and both are now in `codelith/db/types.py`: `embedding_column` gives
+      `vector(768)` on Postgres and packed float32 bytes elsewhere, and `json_column`
+      gives `JSONB` on Postgres and `JSON` elsewhere. Twenty model columns named
+      `postgresql.JSONB` directly — not only the migrations — and SQLite could not
+      compile any of them.
+
+      **The Postgres DDL is byte-identical**: `details JSONB`, `embedding VECTOR(768)`,
+      exactly as before. So this needs no migration, existing databases are untouched,
+      and the 166 integration tests still pass against real Postgres.
+
+      Proven end to end: 300 chunks written to a SQLite file, embeddings round-tripping
+      as `list[float]` of 768 dimensions, and a search returning the planted nearest
+      vector first. Semantic search on one machine with no Postgres, no pgvector and no
+      compiled extension.
+- [ ] **Alembic against SQLite.** The models now build the schema; the *migration chain*
+      still does not run there. Four places are Postgres-only — `CREATE EXTENSION
+      vector`, the `Vector(dims)` column, the HNSW index, and a `TRUNCATE` in the resize
+      migration. **Open question 1 is answered: share the schema and branch at those
+      four points**, rather than keeping two schemas in step forever.
 - [x] **A test that keeps the seam honest.** `tests/unit/test_storage_seams.py`.
       Each external service has exactly one door — Neo4j, boto3, redis and Celery are
       each imported by a single module — and Cypher may not appear outside the graph

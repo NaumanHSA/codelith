@@ -15,6 +15,10 @@ dependencies = [
     # Database
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30.0",
+    # Solo mode runs the same schema on SQLite, and SQLAlchemy's async engine needs a
+    # driver for it. The one package that profile genuinely adds — the vector search
+    # it also needs is numpy, which is already here.
+    "aiosqlite>=0.20.0",
     "alembic>=1.14.0",
 
     # Auth & Security

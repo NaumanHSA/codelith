@@ -43,10 +43,10 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from codelith.db.base import Base, TimestampMixin
+from codelith.db.types import json_column
 from codelith.knowledge.constants import PageStatus
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ class DocSite(Base, TimestampMixin):
 
     #: The ordered nav: `[{"slug", "title", "order_index", "pinned"}]`, sections only.
     #: Pages live in `doc_pages` so their status can change without rewriting the tree.
-    nav_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    nav_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
 
     #: Knowledge base whose proposal was last merged in — provenance for the map
     #: itself, distinct from the `kb_id` each page records for its prose.
@@ -115,7 +115,7 @@ class DocSiteVersion(Base, TimestampMixin):
     #: snapshot spans several.
     commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
     #: The nav as it stood, so a snapshot keeps its own section order and titles.
-    nav_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    nav_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     created_by: Mapped[int | None] = mapped_column(
@@ -209,16 +209,16 @@ class DocPage(Base, TimestampMixin):
     commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
     #: Source files the page was written from. Diffed against a new commit in S5 to
     #: mark exactly the pages a change made stale.
-    source_files_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    source_files_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
     #: Anchor files the planner proposed, before anything was written. Kept separate
     #: from `source_files_json`, which records what retrieval actually used.
-    key_files_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    key_files_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
 
     #: How much of this page's prose names things the codebase actually contains,
     #: and which paragraphs did not. Stored rather than recomputed on read: it is a
     #: property of *this* generation, and the same markdown checked against a later
     #: knowledge base would score differently.
-    grounding_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    grounding_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
 
     #: Why analysis proposed this page, and how sure it was — the same evidence
     #: `suggest_doc_types` attaches to a doc type, one level deeper.
@@ -230,7 +230,7 @@ class DocPage(Base, TimestampMixin):
     #: it names which page to look at, and `qa_json` holds the claim checks that
     #: justify it.
     qa_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    qa_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    qa_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
 
     site: Mapped[DocSite] = relationship(back_populates="pages")
 

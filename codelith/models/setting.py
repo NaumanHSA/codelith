@@ -1,10 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from codelith.db.base import Base
+from codelith.db.types import json_column
 
 
 class SystemSetting(Base):
@@ -12,7 +12,7 @@ class SystemSetting(Base):
     __tablename__ = "system_settings"
 
     key: Mapped[str] = mapped_column(String(200), primary_key=True)
-    value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    value: Mapped[dict | None] = mapped_column(json_column(), nullable=True)
     updated_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

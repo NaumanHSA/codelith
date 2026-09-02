@@ -1,9 +1,9 @@
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from codelith.config import get_settings
 from codelith.db.base import Base, TimestampMixin
+from codelith.db.types import embedding_column
 
 
 class CodeChunk(Base, TimestampMixin):
@@ -37,6 +37,8 @@ class CodeChunk(Base, TimestampMixin):
     end_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # The embedding vector — dimension set from config
+    #: `vector(n)` on Postgres, packed float32 on anything else — see
+    #: `codelith/db/types.py`. Callers get a `list[float]` either way.
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(get_settings().VECTOR_DIMENSIONS), nullable=True
+        embedding_column(get_settings().VECTOR_DIMENSIONS), nullable=True
     )

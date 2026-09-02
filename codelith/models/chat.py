@@ -16,10 +16,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from codelith.db.base import Base, TimestampMixin
+from codelith.db.types import json_column
 
 
 class ChatThread(Base, TimestampMixin):
@@ -68,12 +68,12 @@ class ChatMessage(Base, TimestampMixin):
     #: What the answer was built from: `{counts, intents, routed_by, sources}`. Empty
     #: on a user turn. A snapshot, not a live view — re-analysing the project changes
     #: what the same question would retrieve, and this records what it *did*.
-    evidence_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    evidence_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
 
     #: Citations that resolved against that evidence, and the ones that did not and
     #: were demoted. Stored so a reader can see the check happened, not only its result.
-    citations_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
-    stripped_json: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    citations_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
+    stripped_json: Mapped[list] = mapped_column(json_column(), default=list, nullable=False)
 
     thread: Mapped[ChatThread] = relationship(back_populates="messages")
 
