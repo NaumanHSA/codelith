@@ -44,8 +44,16 @@ export default function Toc({
       <div className={`sticky ${top}`}>
         <span className="tag mb-2 block text-ink-dim">On this page</span>
         <ul className="border-l border-rule">
-          {headings.map(h => (
-            <li key={h.id + h.text}>
+          {/* Keyed by position, not by id. Two headings with the same text produce the
+              same anchor id — `## Entry Points` twice in one page is ordinary prose,
+              not a mistake — and `id + text` collides for exactly that case, which
+              React reports as duplicate keys. Position is unique by construction.
+              (The anchors themselves still collide: both link to the first. That is a
+              real bug, and fixing it means agreeing a de-duplication rule between
+              `anchorId` here and `anchor_id` in `codelith/knowledge/sites.py`, which
+              the linker also validates against.) */}
+          {headings.map((h, i) => (
+            <li key={`${i}-${h.id}`}>
               <a
                 href={`#${h.id}`}
                 onClick={e => {

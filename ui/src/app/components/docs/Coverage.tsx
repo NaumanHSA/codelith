@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Site, SitePage } from '../../lib/types'
 import { coverage, isPending } from '../../lib/site'
 import { Button, Meter } from '../ui'
@@ -49,6 +49,30 @@ export default function Coverage({
 }) {
   const c = coverage(site)
 
+  // Collapsed by default. Every page of every section expanded meant the map opened
+  // two screens tall — you scrolled past twenty-three cards you were not choosing to
+  // reach the controls, which is how nobody found them. The header carries the counts,
+  // so the whole site is scannable without opening anything.
+  //
+  // A section still being written opens itself: that is the one you came to watch.
+  const [open, setOpen] = useState<Set<string>>(
+    () =>
+      new Set(
+        site.sections
+          .filter(sec => sec.pages.some(p => p.status === 'generating'))
+          .map(sec => sec.slug),
+      ),
+  )
+
+  const toggleOpen = (slug: string) =>
+    setOpen(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug)
+      else next.add(slug)
+      return next
+    })
+
+
   return (
     <div className="space-y-5">
       {home}
@@ -76,23 +100,47 @@ export default function Coverage({
 
       {site.sections.map(section => {
         const pending = section.pages.filter(p => isPending(p.status)).length
+        const written = section.pages.filter(p => !isPending(p.status)).length
+        const picked = section.pages.filter(p =>
+          selected.has(`${section.slug}/${p.slug}`),
+        ).length
         const busy = generatingSection === section.slug
+        const isOpen = open.has(section.slug)
         return (
           <section key={section.slug} className="plate">
-            <header className="flex items-center gap-2.5 border-b border-rule bg-sunk/60 px-3 py-2">
-              <h3 className="text-[11.5px] font-semibold tracking-tight text-ink">
-                {section.title}
-              </h3>
-              <span className="tag text-ink-dim">{section.slug}</span>
-              <div className="ml-auto">
-                {pending > 0 && canGenerate && (
-                  <Button variant="ghost" onClick={() => onGenerateSection(section.slug)} disabled={busy}>
-                    {busy ? 'writing…' : `write ${pending} remaining`}
-                  </Button>
+            <header className="flex items-center gap-2.5 border-b border-rule bg-sunk/60 pr-3">
+              {/* The whole label is the toggle. A chevron alone is a small target and
+                  gives no clue that the row does anything. */}
+              <button
+                onClick={() => toggleOpen(section.slug)}
+                aria-expanded={isOpen}
+                className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-hot-wash"
+              >
+                <span
+                  className={`tag shrink-0 text-ink-dim transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                  aria-hidden
+                >
+                  ▸
+                </span>
+                <h3 className="truncate text-[11.5px] font-semibold tracking-tight text-ink">
+                  {section.title}
+                </h3>
+                <span className="tag shrink-0 text-ink-dim">{written}/{section.pages.length}</span>
+                {/* Enough to decide without opening it: that is the point of collapsing. */}
+                <span className="tag shrink-0 text-ink-dim">
+                  {pending > 0 ? `${pending} to write` : 'complete'}
+                </span>
+                {picked > 0 && (
+                  <span className="tag shrink-0 text-hot-ink">{picked} selected</span>
                 )}
-              </div>
+              </button>
+              {pending > 0 && canGenerate && (
+                <Button variant="ghost" onClick={() => onGenerateSection(section.slug)} disabled={busy}>
+                  {busy ? 'writing…' : `write ${pending} remaining`}
+                </Button>
+              )}
             </header>
-            <ul>
+            <ul hidden={!isOpen}>
               {section.pages.map(page => (
                 <li key={page.id} className="flex items-stretch border-b border-rule last:border-b-0">
                   {canGenerate && (
