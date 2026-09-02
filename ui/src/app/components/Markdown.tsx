@@ -1,4 +1,4 @@
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
@@ -61,6 +61,23 @@ const SCHEMA = {
 export const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, SCHEMA], rehypeHighlight] as never
 export const REMARK_PLUGINS = [remarkGfm]
 
+/** Embedded diagrams, past react-markdown's *own* URL guard.
+ *
+ *  This is a second, separate gate from the sanitize schema above, and missing it is
+ *  why the first attempt at this fixed the `<details>` block and left the image just
+ *  as broken. `rehypePlugins` run over the tree; then react-markdown applies
+ *  `urlTransform` to every `src` and `href` on its way out, and its default strips
+ *  everything outside `http`/`https`/`mailto`/`tel`. The picture had already survived
+ *  sanitisation and was blanked afterwards.
+ *
+ *  Narrow on purpose: base64 image payloads only, everything else deferred to the
+ *  default. `data:text/html` is a script tag by another name. */
+const DATA_IMAGE = /^data:image\/(svg\+xml|png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/
+
+export function urlTransform(url: string): string {
+  return DATA_IMAGE.test(url) ? url : defaultUrlTransform(url)
+}
+
 function Copy({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -83,6 +100,7 @@ export function Markdown({ children }: { children: string }) {
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
+      urlTransform={urlTransform}
       components={{
         pre({ children, ...props }) {
           // The copy button needs a positioned ancestor, and a code block a

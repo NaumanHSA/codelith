@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { REHYPE_PLUGINS, REMARK_PLUGINS } from '../Markdown'
+import { REHYPE_PLUGINS, REMARK_PLUGINS, urlTransform } from '../Markdown'
 import { anchorId } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
@@ -150,6 +150,7 @@ export default function DocMarkdown({
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
+      urlTransform={urlTransform}
       components={{
         h1: heading(1),
         h2: heading(2, onRevise, selectedAnchor, busyAnchor),
