@@ -3,6 +3,12 @@
 *Written 2 September 2026, against `feat/review-gate`. One phase at a time; tick as
 they land. When a phase is done, say what it cost and what it taught, then move on.*
 
+**All six phases are done, on `main`.** What that bought, in one line each: a CLI, a
+product that installs with no infrastructure at all, an MCP server as the headline, an
+app that says what changed between two readings, and a pre-flight an agent calls before
+it edits. What is still open is at the foot of this file, and it is shorter than it
+was.
+
 ---
 
 ## The problem this plan exists to solve
@@ -353,47 +359,122 @@ closing your own laptop.
       and the SDK depends on `httpx2` — a second HTTP stack beside the `httpx`
       everything else here uses. This is a rewrite of the server module, not a rename.
 
-## Phase 4 — Drift
+## Phase 4 — Drift ✅
 
 The first app that exploits something no competitor has: a *structured snapshot of the
 code, keyed by commit*. `uq_kb_project_commit` has been in the schema since the
 beginning and nothing has ever used it for this.
 
-- [ ] Analyse at two commits, diff the two knowledge bases: modules added, removed,
-      re-shaped; entities whose signature moved.
-- [ ] Map the diff onto written pages — which pages cite code that has changed.
-- [ ] Report it as prose a person can act on: *"`auth.py` gained two routes and lost one.
-      These four pages describe the old shape; here is the sentence in each that is now
-      wrong."*
-- [ ] One entry in `apps/registry.py`, one page. **If this needs a change to an analysis
-      agent, stop** — it is asking for something the knowledge base should hold for
-      everyone.
+- [x] **Two readings diffed.** `codelith/apps/drift/service.py` compares two knowledge
+      bases of one project: modules added, removed, grown, shrunk or rewritten, and the
+      routes and entrypoints that came and went. The middle judgement is the part worth
+      reading — *symbols first, size second*. A module whose every function was replaced
+      and which happens to be the same length is the case a size comparison misses
+      entirely, and a four-line move is a reflowed comment (`_SIGNIFICANT_LOC = 10`).
+      A module that did not change does not appear at all: a report listing everything
+      is a report nobody reads.
+- [x] **The diff mapped onto written pages.** A page records the files it was written
+      from, so this is a set intersection — no re-reading, no model call, and no "this
+      looks old". Prefix matching on segment boundaries, so `app/authz` is not caught by
+      a change to `app/auth`.
+- [x] **Prose a person can act on.** `_reason_sentence` says *"the symbols it describes
+      were replaced"*, not *"change: rewritten"*. Pages at risk lead the report and the
+      summary; modules and entities are the context under them.
+- [x] **One registry entry, one page.** `route="/app/projects/{id}/drift"`, the
+      `DriftPage` studio route, and **no change to any analysis agent** —
+      `test_module_isolation.py` and the apps tests confirm it.
+- [x] **Tested.** 15 unit tests on the judgement, 5 integration tests against a real
+      database.
 
-This is also the answer to *"why keep old knowledge bases around"*, which is currently an
-open question in the schema with no feature behind it.
+Worth recording because it surprised us: **re-analysing the same commit does not create
+a second reading.** `uq_kb_project_commit` means one knowledge base per commit, so a
+re-run upserts — drift needs the code to have actually moved. That is the right
+behaviour and it is not obvious from the outside, so the API answers `comparable: false`
+with a sentence rather than an empty diff.
 
-## Phase 5 — Agent pre-flight
+This is also the answer to *"why keep old knowledge bases around"*, which was an open
+question in the schema with no feature behind it.
+
+## Phase 5 — Agent pre-flight ✅
 
 The repositioning, made concrete. `find_callers`, `find_dependents` and `blast_radius`
-already exist and are already exposed over MCP. What is missing is the framing.
+already existed and were already exposed over MCP. What was missing was the framing.
 
-- [ ] One MCP tool an agent calls **before** editing: given a symbol or file, return what
-      it touches — callers, dependents, whether they are tested, and which written pages
-      cite it.
-- [ ] Make Quality's blast-radius ranking usable outside its own page. That work is on
-      `feat/qa` and this is the reason to bring it back.
+- [x] **`before_edit`, one MCP tool called before an edit rather than after.**
+      `codelith/knowledge/preflight.py`. Give it a path or a symbol and it returns what
+      depends on it: direct importers, everything that reaches it within three hops with
+      the distance, its call sites, whether any test file reaches it, the routes and env
+      vars the file declares, and which written pages describe it. Four indexed queries,
+      no model call — cheap enough to run before every edit, because a check an agent
+      skips under time pressure is a check that does not exist.
+- [x] **Ranking lifted out of Quality.** `reach_weight` — reach capped at 40, a written
+      page worth five importers — was `ImpactResolver.rank` on `feat/qa`, where it could
+      only ever rank findings. It is in the base now, so the pre-flight sorts on it and
+      Quality imports it rather than redefining it when it comes back. Bringing the
+      ranking back did not require bringing the app back.
+- [x] **The risk verdict, and the reason it is only four words long.** `low` /
+      `moderate` / `high` / `unknown`. Untested is an *amplifier*, not a level: a leaf
+      nothing imports is safe to change whether or not a test covers it, and a file eight
+      others reach with no test is the case worth stopping for. `unknown` is deliberately
+      not `low` — "nothing depends on this" and "I have never seen this file" are
+      different facts and only one is permission to edit freely.
+- [x] **The same answer over HTTP, and a place to try it.**
+      `GET /projects/{id}/preflight?target=…` and a *Before you edit* panel on the
+      codebase page, with an **agent view** toggle that shows the exact prose a connected
+      agent receives. Somebody wiring an agent to Codelith needs to see what it will
+      actually get, not a prettier arrangement of the same fields.
+- [x] **Tested.** 25 unit tests on the weighting, the verdict and the brief; 13
+      integration tests against a real graph — transitive distance, a file not being its
+      own dependent through an import cycle, an ambiguous filename resolving to nothing
+      rather than to a guess.
+
+Two decisions in here are worth keeping:
+
+**Resolution tries a file first and a symbol second, rather than inspecting the string.**
+`main` is a plausible file and a plausible function. Looking for a dot and guessing gives
+a confident answer about the wrong thing; trying both in a fixed order is a decision.
+
+**An ambiguous name resolves to nothing.** Two `models.py` and no way to tell which was
+meant — answering about the wrong one is worse than saying nothing, because the caller
+acts on it either way.
 
 Codelith stops being "a thing that reads your code" and becomes **the memory and safety
 layer for coding agents.** Same substrate. Much larger claim, and one the architecture
-already supports.
+already supported.
 
 ---
+
+## Found while finishing, and fixed
+
+Three of these were only visible because the work went end to end. None was in the plan.
+
+- **The inline worker died on a logger that threw.** `except Exception` wrapped the task,
+  but the `logger.exception` reporting it sat *inside* that handler — so a logger that
+  raised took the thread with it, and every job queued afterwards waited for ever. The
+  test suite found it by hanging at 90% and never finishing, which is exactly how it
+  would have presented in production: not an error, silence. `submit` had the same hole
+  on the caller's thread. Both log through a `_quietly` helper now, and the loop body is
+  wrapped besides.
+- **`codelith mcp` never exited.** `aiosqlite` runs each connection on its own
+  **non-daemon** thread, so an engine that had served one request kept the interpreter
+  alive after the stdio loop returned. Measured: a process that opens a session and does
+  not dispose the engine was still running twenty seconds after its work finished — one
+  orphan per editor session. `main()` disposes in a `finally`.
+- **`wait_idle(timeout)` took the argument and ignored it.** `queue.join()` has no
+  timeout. It waits on the same condition by hand now and returns whether the queue
+  actually drained.
+
+And the leftovers from Phase 2b that documentation still promised: `make dev` had no
+target while three files told you to run it, `dev.sh` still started a Celery worker
+against a module that no longer exists, `.env.example` still configured PostgreSQL,
+Redis, Neo4j and MinIO, and both `docker-compose` files described a stack that had been
+deleted — one of them still calling the package `app`. All gone.
 
 ## Deliberately not in this plan
 
 | | Why |
 |---|---|
-| **Quality's return from `feat/qa`** | Built and parked. Un-parking adds a third app to a product nobody can install yet. Phase 5 is the reason to bring it back, not before. |
+| **Quality's return from `feat/qa`** | Built and parked. Phase 5 took the half that was general — `reach_weight`, the ranking — into the base without un-parking the app, which was the cheap part of bringing it back. The rest is a third app, and it waits until somebody wants it rather than until the plan says so. |
 | **More document types** | Documentation is the least differentiated thing here. Every tool ships an AI docs generator; none of them ship the knowledge base. |
 | **Jobs stuck `running` after a hard kill** | Their pages stay claimed. Telling "abandoned" from "running on another worker" needs a lease or heartbeat, and guessing wrong kills live work. Real, and larger than it looks. |
 | **Dark theme** | Tokens are structured for it; components have never been checked against it. Cheap to do, and it changes nothing about whether anybody can run the thing. |
@@ -401,13 +482,32 @@ already supports.
 
 ## Open questions
 
-1. **Does solo mode share the schema with server mode, or diverge?** Sharing means
-   Alembic has to speak both dialects. Diverging means two schemas to keep in step.
-   Leaning towards sharing, with the model layer branching on profile — but this is the
-   decision Phase 2 turns on, and it should be made before any code is written.
-2. **Does `codelith analyse .` need a git repository?** Ingestion takes a branch, not a
-   revision, and the KB is keyed by commit SHA. A plain directory has no SHA, and the
-   commit key is what Phase 4 depends on.
-3. **Does the studio ship inside the wheel?** A built `ui/dist` served by FastAPI makes
-   `codelith studio` work with no Node at all — at the cost of a much larger package and
-   a build step in the release.
+Two of the three are answered. They are kept, with their answers, because the reasoning
+is the useful part and a question deleted the moment it is settled teaches nobody.
+
+1. ~~**Does solo mode share the schema with server mode, or diverge?**~~ **Moot.**
+   Phase 2b deleted server mode, so there is one schema, one dialect, and one baseline
+   migration. The question was the right one to ask before Phase 2 and the answer turned
+   out to be "stop having two modes", which is not an option the question offered.
+2. ~~**Does `codelith analyse .` need a git repository?**~~ **Yes, and that is fine.**
+   The knowledge base is keyed by commit SHA and Phase 4 is built on exactly that key —
+   a plain directory has no SHA, so it would have no drift and no second reading to
+   compare against. Requiring a repository buys the feature.
+3. **Does the studio ship inside the wheel?** Still open. A built `ui/dist` served by
+   FastAPI makes `codelith studio` work with no Node at all — at the cost of a much
+   larger package and a build step in the release.
+
+## What is genuinely next
+
+Not a phase, because nothing here is a prerequisite for anything else. In rough order of
+how much each changes for somebody who is not us:
+
+- **Publish it.** Every phase above was aimed at `pipx install codelith`, and that
+  command still does not resolve. The distribution itself is the last unbuilt piece of
+  the bet this plan opened with.
+- **`mcp>=2.0`.** Blocked on `langchain-mcp-adapters` pinning `mcp<2.0.0`, not on us.
+  Phase 3 records what the port actually involves so nobody rediscovers it.
+- **Jobs stuck `running` after a hard kill.** Their pages stay claimed. Still the oldest
+  real bug on the list, and still larger than it looks.
+- **Dark theme.** The tokens are structured for it; no component has been checked
+  against it.

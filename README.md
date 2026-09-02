@@ -41,6 +41,8 @@ them re-read the repository.
 |---|---|---|
 | **Documentation** | Structured documents in Markdown, DOCX, MkDocs or Docusaurus. Document types are offered from an evidence-backed menu, so a project with no HTTP routes is never offered an API Reference | retrieval, narratives |
 | **Ask the code** | Grounded question answering. Every citation is checked against the evidence actually retrieved, and one that does not resolve is stripped | retrieval, code graph |
+| **What changed** | The difference between two readings of the same repository — modules added or rewritten, routes that came and went, and which written pages now describe code that is no longer there | modules, entities, written pages |
+| **Before you edit** | What a change to a file or a symbol would touch: importers, transitive reach, call sites, whether a test covers it, and the pages that describe it. Also the `before_edit` MCP tool | code graph, entities, written pages |
 
 Analysing once is what makes the second and third thing you ask for cheap — and it is
 why adding an app never means touching analysis.
@@ -89,9 +91,10 @@ why adding an app never means touching analysis.
 ### 1. Prerequisites
 
 - Python 3.11 or newer
-- Node.js 20.19+ (for the studio)
-- Docker + Docker Compose
+- Node.js 20.19+ — only for the studio; the CLI and the MCP server need none
 - [LM Studio](https://lmstudio.ai/) running locally with a model loaded and server started on `http://localhost:1234`
+
+No database, no broker, no containers. That is the whole list.
 
 ### 2. Clone & configure
 
@@ -119,7 +122,7 @@ MODEL_FAST_BASE_URL=http://localhost:1234/v1
 MODEL_FAST_CONTEXT_WINDOW=21000
 
 MODEL_EMBEDDING_PROVIDER=local
-MODEL_EMBEDDING=text-embedding-nomic-embed-text-v1.5
+MODEL_EMBEDDING=text-embedding-nomic-embed-text-v1.5-embedding
 MODEL_EMBEDDING_BASE_URL=http://localhost:1234/v1
 
 VECTOR_DIMENSIONS=768                   # must match the embedding model's output size
@@ -136,8 +139,9 @@ MODEL_QUALITY_CONTEXT_WINDOW=128000
 
 The tiers are independent, which is the point: a 1.2b model can summarise 45 modules
 locally while a hosted model writes the prose. **Embeddings never follow the quality
-tier** — `VECTOR_DIMENSIONS` is written into `code_chunks.embedding` at migration time,
-so moving the embedder means a migration that truncates that table and a full re-ingest.
+tier** — every stored vector has the width of the model that produced it, so changing
+the embedder means re-ingesting every project. No migration (the column is a blob), but
+no way to mix old vectors with new ones either.
 
 The quality/fast split is a real speed lever, not decoration: module summarisation is
 thousands of short calls and runs fine on a small model, while planning and writing
@@ -215,18 +219,44 @@ The server speaks JSON-RPC on stdin and stdout, which is what an editor launches
 writes nothing to stdout but the protocol — a stray line of prose there is a parse
 error on the client, which is why `codelith mcp` prints no banner.
 
-Seven tools. `list_codebases` first — every other one takes a `codebase_id`, and the
+Eight tools. `list_codebases` first — every other one takes a `codebase_id`, and the
 ids are not guessable:
 
 | Tool | Answers |
 |---|---|
 | `list_codebases` | What has been analysed, with commit and size |
+| **`before_edit`** | **What an edit would touch — call this first** |
 | `search_code` | Semantic search over the source |
 | `read_file` | A file as the knowledge base holds it |
 | `find_callers` | Who calls a symbol — **no embedding encodes this** |
 | `find_dependents` | Which files import a file |
 | `blast_radius` | Everything that transitively reaches a file, with distance |
 | `list_facts` | Routes, datastores, env vars, entrypoints and the rest |
+
+`before_edit` is the one that changes what this is for. The others answer questions
+about a codebase; that one is called *before* changing it. Give it a path or a symbol
+and it comes back with what depends on it, whether anything tests it, and what has
+already been written about it:
+
+```
+codelith/llm/client.py — high risk to edit — 3 file(s) import it directly,
+11 reach it within 3 hops, nothing tests it, 2 written page(s) describe it.
+
+Breaks first (nearest first):
+  1 hop(s)  codelith/agents/base.py
+  2 hops(s) codelith/workflows/analysis_workflow.py
+  ...
+
+No test file reaches this. A change here is unverified by the suite.
+
+Written pages that describe it (they will need re-writing):
+  reference/llm-client — The LLM client
+```
+
+No model call and four indexed queries, which is the point: a check an agent skips
+under time pressure is a check that does not exist. The failure it prevents is not a
+wrong edit but a confidently narrow one — correct in the file, and broken for four
+callers nobody looked for.
 
 Read-only, and local: nothing writes, and nothing is sent anywhere Codelith does not
 already talk to.
@@ -439,14 +469,17 @@ make test         # full pytest suite
 
 ---
 
-## Docker Services
+## What is running
 
-| Service | URL |
+| | |
 |---|---|
 | API | http://localhost:8000 |
 | Swagger UI | http://localhost:8000/docs |
-| Grafana | http://localhost:3000 (admin / admin) |
-| Prometheus | http://localhost:9090 |
+| Studio | http://localhost:5173 |
+
+One process for the first two, one for the studio, and one SQLite file under
+`~/.codelith` holding all of it — the vectors, the code graph and the documents.
+Backing Codelith up is copying that file.
 
 ---
 
@@ -463,10 +496,10 @@ See `.env.example` for the full list. Key variables:
 | `MODEL_FAST_*` | — | The same four, for classify / extract / summarize |
 | `MODEL_EMBEDDING_*` | — | Provider, model and base URL. Independent of the other tiers — see `VECTOR_DIMENSIONS` |
 | `OPENAI_API_KEY` | — | Required only for tiers set to `openai` |
-| `LLM_MAX_TOKENS` | `8192` | **Local only.** Hosted models are sent no ceiling |
+| `LLM_MAX_TOKENS` | `12288` | **Local only.** Hosted models are sent no ceiling |
 | `LLM_STREAMING` | `true` | Stream completions — required for cancellation to interrupt generation |
 | `DATABASE_URL` | `sqlite+aiosqlite:///~/.codelith/codelith.db` | Rarely set. The default is a file under `CODELITH_HOME` |
-| `VECTOR_DIMENSIONS` | `1536` | Must match your embedding model's output dimensions |
+| `VECTOR_DIMENSIONS` | `768` | Must match your embedding model's output dimensions |
 | `ANALYSIS_MAX_SUMMARISED_MODULES` | `40` | Cap on modules sent for summarisation |
 | `ANALYSIS_SUMMARY_CONCURRENCY` | `6` | Parallel summary calls against the LLM |
 

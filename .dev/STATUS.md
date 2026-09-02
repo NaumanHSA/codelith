@@ -1,6 +1,7 @@
 # Codelith — where the work stands
 
-*Snapshot: 2 September 2026, `9f7b6a1`. Update the numbers when they stop being true.*
+*Snapshot: 2 September 2026, on `main` after Roadmap phases 0–5. Update the numbers
+when they stop being true.*
 
 **This is the planning document.** The phase plans that built the product (analyse/compose,
 the site, the UX overhaul, the substrate, Ask, the Codelith rename) all completed and were
@@ -30,15 +31,16 @@ features (see *Deliberately not built*).
 | | |
 |---|---|
 | First commit | 8 June 2026 |
-| Commits | 120 |
-| Python | 224 files |
+| Commits | 134 |
+| Python | 235 files |
 | Studio (TS/TSX) | 65 files |
-| Tests | 52 files — **818 unit passing, 1 skipped**; **166 integration passing** (needs Docker) |
-| Migrations | 13 |
-| HTTP routes | 53 |
-| Apps on `main` | 2 — Quality is built but parked on `feat/qa` |
-| Lint | **ruff clean** across `codelith/` and `tests/`, enforced in CI |
-| Languages analysed | Python, TypeScript, Go, Java |
+| Tests | 57 files — **933 unit passing, 1 skipped**; **184 integration passing**. The whole suite runs in **32 seconds against a temporary SQLite file** and starts nothing |
+| Migrations | **1** — fourteen squashed to one baseline when the second database went |
+| HTTP routes | 67 |
+| Apps on `main` | 3 — Quality is built but parked on `feat/qa` |
+| Services to run | **none.** One SQLite file under `~/.codelith` |
+| Lint | **ruff clean** across `codelith/`, `tests/` and `alembic/`, enforced in CI |
+| Languages analysed | Python, JavaScript, TypeScript, Go, Java |
 | Languages checked by Quality | Python only (on `feat/qa`) |
 
 ## The shape
@@ -72,10 +74,19 @@ app, stop: the app is asking for something the KB should hold for everyone.
   language means adding one provider, not touching agents or schema.
 - **Retrieval + grounding** — every citation is checked against the evidence actually
   retrieved. One that does not resolve is stripped rather than shown.
-- **Cancellation** — Redis-backed tokens. Long work stays killable; `JobCancelled` is never
-  swallowed by a broad `except` and never retried.
+- **Cancellation** — an in-process flag store behind `core/cancellation.py`. Long work stays
+  killable; `JobCancelled` is never swallowed by a broad `except` and never retried.
 - **Six KB tools** — `search_code`, `read_file`, `find_callers`, `find_dependents`,
   `blast_radius`, `list_facts`. Used by Ask, and exposed over MCP.
+- **Pre-flight** — `codelith/knowledge/preflight.py`. Given a path or a symbol it assembles
+  what an edit would touch: importers, transitive reach with distance, call sites, whether a
+  test reaches it, the routes and env vars the file declares, and the written pages that
+  cite it. Four indexed queries, no model call. Exposed as the `before_edit` MCP tool and at
+  `GET /projects/{id}/preflight`. `reach_weight` lives here and is the ranking every caller
+  should sort on — reach capped at 40, a written page worth five importers. It was Quality's
+  and it is in the base so that ranking by reach does not require that app.
+- **The code graph in SQL** — six tables and one recursive CTE, in the same database as
+  everything else. It answers the three questions the graph exists for; nothing to run.
 
 ### The apps
 
@@ -83,6 +94,7 @@ app, stop: the app is asking for something the KB should hold for everyone.
 |---|---|---|
 | **Documentation** | retrieval · narratives · entities | Built, on `main`. Markdown / DOCX / MkDocs / Docusaurus. Document types are offered from what the code contains, so a repo with no HTTP routes is never offered an API reference. |
 | **Ask the code** | retrieval · code graph · entities | Built, on `main`. Threaded conversations, persisted, exportable. Citations checked. |
+| **What changed** | modules · entities · written pages | Built, on `main`. Compares two readings of one repository — modules added, removed or rewritten, routes that came and went, and **which written pages now describe code that moved**. Needs the codebase analysed at two commits; `uq_kb_project_commit` means a re-run on the same commit upserts rather than creating a second reading, so the API says `comparable: false` rather than showing an empty diff. |
 | **Quality** | code graph · entities · modules | Built (Q0–Q8, Aug 2026), then **parked on `feat/qa`**. Findings from ruff and mypy **ranked by what each one touches**; surface with no test; offline dependency audit; layering rules derived from the codebase itself. |
 
 **Why Quality is parked.** It is the youngest of the three and it matured against two
@@ -98,9 +110,16 @@ the KB holds.
 
 ### Not an app
 
-`codelith/mcp/` adds nothing of its own. It is a **second transport** over
-`codelith/knowledge/tools.py`, so Claude Code and Cursor can query the knowledge base
-directly. Same tools, plus `list_codebases` to pick one.
+`codelith/mcp/` adds nothing of its own. It is a **second transport** over the base, so
+Claude Code and Cursor can query the knowledge base directly. Eight tools: the six from
+`knowledge/tools.py`, `list_codebases` to pick one, and `before_edit` from
+`knowledge/preflight.py`.
+
+`before_edit` is the one that changes what this is for. The others answer questions about
+a codebase; that one is called *before* changing it, and it is the reason an agent connects
+at all. It is deliberately **not** in `TOOL_SCHEMAS` — those six are what an answering model
+reaches for mid-question, and handing a pre-flight to a model with no edit to make is a
+tool it picks at random.
 
 ### The studio
 
@@ -154,10 +173,10 @@ Honest list. Nothing here is a crisis; all of it is worth knowing before trustin
   files. `enigma` has since been analysed end to end, which is a second data point and
   not yet a second opinion — every false positive fixed so far was found by running
   against real code, so a third codebase will find more.
-- **Nobody can install this.** Six containers, a `.env`, migrations, a seed, pnpm, a Vite
-  server and three models loaded in LM Studio. The landing page advertises a `codelith`
-  CLI that does not exist. This is the single largest thing standing between the project
-  and anybody else using it, and it is what `ROADMAP.md` phases 1 and 2 are for.
+- **Nobody can install this — still, but for a much smaller reason.** The six containers
+  are gone, the `.env` is optional, and the CLI the landing page advertised now exists.
+  What is left is that the package has never been published, so `pipx install codelith`
+  does not resolve. Everything the roadmap built was aimed at that one command.
 - **Line length is the one lint rule still off.** 143 violations across forty files —
   mostly long call signatures and prose in docstrings. Everything else in `E`, `F`, `I`,
   `UP` and `B` is clean and enforced on every push and pull request. `E501` comes off the
@@ -170,9 +189,9 @@ Honest list. Nothing here is a crisis; all of it is worth knowing before trustin
   exit-2 read as success, and a dict-ordering bug that hid a 33:1 layering violation. That
   is precisely the failure the app exists to prevent in others' code, which is the argument
   for running it against something new before trusting it.
-- **Integration tests need Docker infra up.** They are not part of a quick loop — but
-  they do pass: 166 of them, needing only postgres and redis, with every model call
-  faked.
+- **Integration tests are no longer a separate loop.** 184 of them, against a temporary
+  SQLite file with every model call faked, and the whole suite finishes in 32 seconds.
+  Nothing to provision, in CI or locally.
 - **The stage-coverage tests are weaker than they read.** `test_the_ui_knows_every_*_stage`
   claims to catch a stage missing from the studio's progress table; it actually asserts
   that one string appears in `narrate.ts`. A node added to either graph would not be
@@ -181,22 +200,40 @@ Honest list. Nothing here is a crisis; all of it is worth knowing before trustin
 - **Local model dependence.** Grounding and citation behaviour was tuned against
   `qwen/qwen3.5-9b` through LM Studio. Behaviour on a different quality-tier model is
   untested.
+- **Drift and the pre-flight have not been measured on a large repository.** Both are
+  indexed lookups and both are bounded — the blast radius is capped at 200 rows and three
+  hops, and the drift report only lists what moved — but "fast on a 42-file SDK" is not a
+  number worth quoting.
+- **`scripts/` is outside the linted surface.** `make lint` and CI cover `codelith/`,
+  `tests/` and `alembic/`; `scripts/test_workflow.py` currently has nine ruff findings that
+  nothing fails on. Either bring it in or say why it is exempt.
+- **`jobs.celery_task_id` holds `inline-<uuid>`.** The column outlived the thing it was
+  named for. Renaming it is a migration plus four call sites — small, but a schema change
+  for a naming problem, so it waits for a change that touches the table anyway.
 
 ## Running it
 
+Nothing to start. The database is a file under `~/.codelith`, created on first use.
+
 ```bash
-cp .env.example .env       # fill in values
-make dev                   # Docker infra + hot-reload API on :8000
+make dev                   # hot-reload API on :8000
 make migrate               # apply migrations
-make worker                # Celery worker, another terminal
 
 cd ui && pnpm install && pnpm dev      # studio on :5173 — needs Node >= 20.19
 ```
 
+Or without the studio at all:
+
 ```bash
-make test                  # everything
+codelith analyse .         # read this repository
+codelith ask "how does authentication work?"
+codelith mcp               # serve the knowledge base to a coding agent
+```
+
+```bash
+make test                  # everything, 32 seconds, starts nothing
 pytest tests/unit/         # fast loop
-pytest tests/integration/  # needs Docker
+pytest tests/integration/  # a temporary SQLite file, no Docker
 ```
 
 ## Where the plans live
@@ -220,20 +257,26 @@ the GitHub rename), `HANDOFF.md`, `HOME_DESIGN_BRIEF.md`, and `handover/`.
 
 ## What is open right now
 
-Phase 0 of `ROADMAP.md` is done: the site map collapses, ruff is clean and enforced,
-`include_diagrams` is honoured, and these numbers are current. What remains:
+**All six phases of `ROADMAP.md` are done** — the CLI, solo mode, the collapse to one
+mode, MCP as the headline, drift, and the agent pre-flight. What remains:
 
-1. **The MCP server is pinned below 2.0, not ported.** See *Where it is weak*. Roadmap
-   Phase 3 does this, once Phase 1 gives us a client to verify against.
-2. **Quality returns from `feat/qa`** once Documentation and Ask settle.
-3. **Run Quality against a repository that is not `neurosurfer`.** Blocked on 2 —
+1. **`pipx install codelith` still does not resolve.** Every phase above was aimed at that
+   command and the package has not been published. It is now the single largest gap between
+   what this is and what anybody can try.
+2. **The MCP server is pinned below 2.0, not ported.** Blocked on `langchain-mcp-adapters`
+   pinning `mcp<2.0.0`, which is not our code. Roadmap Phase 3 records what the port
+   actually involves — new packages, schemas derived from signatures rather than data, and
+   a second HTTP stack — so nobody rediscovers it.
+3. **Quality returns from `feat/qa`** once Documentation and Ask settle. Phase 5 took the
+   half that was general — `reach_weight` — into the base without un-parking the app.
+4. **Run Quality against a repository that is not `neurosurfer`.** Blocked on 3 —
    though `enigma` has now been analysed end to end, so the *analysis* pipeline is no
    longer measured on a single repository.
-4. **Jobs stuck `running` after a hard kill keep their pages claimed.** A worker killed
-   outright runs no handler. Pages whose job is *terminal* are now released at worker
-   start, but telling "abandoned" from "running on another worker" needs a lease, and
-   guessing wrong kills live work.
-5. **Duplicate headings collide on their anchor.** Two `## Entry Points` in one page
+5. **Jobs stuck `running` after a hard kill keep their pages claimed.** A process killed
+   outright runs no handler. Pages whose job is *terminal* are now released at start, but
+   telling "abandoned" from "still running" needs a lease, and guessing wrong kills live
+   work.
+6. **Duplicate headings collide on their anchor.** Two `## Entry Points` in one page
    produce one id, so both table-of-contents entries jump to the first. Fixing it means
    agreeing a de-duplication rule between `anchorId` in `ui/src/app/lib/site.ts` and
    `anchor_id` in `codelith/knowledge/sites.py`, which the linker also validates against
@@ -243,11 +286,22 @@ Everything else lives in `ROADMAP.md`, which is where the work goes next.
 
 Settled since the last snapshot, recorded so it is not re-opened:
 
-- **Neo4j is queried now.** The old E3 asked whether to fold the graph into `kb_entities`
-  and drop the service, on the grounds that it was built every run and queried never. Ask
-  resolved it the other way: `knowledge/questions.py::_add_graph`, `knowledge/grounding.py`
-  and the documentation `diagram` agent all query it, and it backs `find_callers`,
-  `find_dependents` and `blast_radius`.
+- **There is one mode, and it needs no services.** PostgreSQL, Redis, Neo4j, MinIO and
+  Celery are gone — not made optional, deleted, along with the setting that chose between
+  them. `tests/unit/test_storage_seams.py` was inverted to enforce it: it no longer checks
+  that each service has one door, it checks that those libraries do not come back.
+  Everything runs against one SQLite file under `~/.codelith`.
+- **The graph was worth keeping, and did not need a graph database.** The old E3 asked
+  whether to fold it into `kb_entities` and drop the service, on the grounds that it was
+  built every run and queried never. Ask resolved the first half the other way — it backs
+  `find_callers`, `find_dependents`, `blast_radius`, `grounding`, the `diagram` agent, and
+  now the pre-flight. Phase 2 resolved the second: two of its three questions are a join
+  and the third is a recursive CTE, so it lives in six ordinary tables.
+- **The inline worker survives a logger that throws.** `except Exception` wrapped the task
+  but the `logger.exception` reporting it sat inside that handler, so a logger that raised
+  took the thread with it and every job queued afterwards waited for ever. Found by the
+  suite hanging — which is precisely how it would have presented in production, and why the
+  guard now covers the logging too.
 - **`react_mixin` is out of the writer path.** Composition uses `CompositionWriterAgent`.
   `ReActMixin` survives only in `agents/writer.py`, reachable solely from the legacy
   single-shot pipeline, which is kept alive on purpose.

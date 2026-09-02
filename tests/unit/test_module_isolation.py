@@ -52,7 +52,6 @@ BASE_PACKAGES = (
 #: root — a place whose job is assembling the application out of its parts.
 WIRING_POINTS = {
     "api/v1/router.py",       # mounts each feature's routes
-    "workers/celery_app.py",  # lists each feature's task modules
     "apps/registry.py",   # declares what exists
     "api/v1/apps.py",     # serves the registry
     "api/v1/projects.py",     # per-project feature availability

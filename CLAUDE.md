@@ -11,10 +11,13 @@ changing anything structural — the repository was originally built documentati
 and named for it, and code written under the old premise couples the two. It should
 not.
 
-Two apps exist on `main` today:
+Three apps exist on `main` today:
 
 - **Documentation** — structured documents in Markdown/DOCX/MkDocs/Docusaurus
 - **Ask the code** — grounded question answering with checked citations
+- **What changed** (`apps/drift/`) — the difference between two readings of the same
+  repository, and which written pages now describe code that moved. It needs the
+  codebase analysed at two commits; one reading is a photograph, two are a difference
 
 **Quality is parked on `feat/qa`, not on `main`.** It was built (Q1–Q8: ruff/mypy
 findings ranked by what each one touches, surface with no test, an offline dependency
@@ -26,8 +29,17 @@ mount, `tests/unit/apps/test_qa_*.py`, and the studio's Quality page and rail se
 `.dev/QA_AGENT_PLAN.md` stays as the record of what was deliberately not built.
 
 `codelith/mcp/` is **not** an app. It adds nothing of its own — it is a second
-transport over `codelith/knowledge/tools.py`, so other agents (Claude Code, Cursor)
-can query the knowledge base directly.
+transport over the base, so other agents (Claude Code, Cursor) can query the knowledge
+base directly. Six of its tools come from `codelith/knowledge/tools.py`; `before_edit`
+comes from `codelith/knowledge/preflight.py`.
+
+`codelith/knowledge/preflight.py` is also base rather than an app, for the same reason:
+it derives nothing of its own. Given a path or a symbol it assembles what analysis
+already stored — importers, transitive reach with distance, call sites, whether a test
+reaches it, declared routes and env vars, and the written pages that cite it — into the
+answer an agent wants *before* it edits. `reach_weight` lives there and is the ranking
+every caller should sort on; it was Quality's, and it is in the base so that ranking by
+reach does not require that app.
 
 **Three phases, and the split drives most of the design:**
 
@@ -75,11 +87,18 @@ if the base imports an app, or if one app imports another. Known exceptions live
 ## Running Locally
 
 ```bash
-cp .env.example .env       # fill in values
-uvicorn codelith.main:app --reload   # API on :8000. Nothing to start first
-
-cd ui && pnpm install && pnpm dev      # studio on :5173 — needs Node >= 20.19
+make dev                             # API on :8000. Nothing to start first
+cd ui && pnpm install && pnpm dev    # studio on :5173 — needs Node >= 20.19
 ```
+
+`.env` is optional — every setting has a working default and `.env.example` documents
+them. The database is a file under `~/.codelith` (or `CODELITH_HOME`), created on first
+run, so there is no migrate step for a fresh install.
+
+**Reload is off by default on Windows**, and `dev.sh` says why: WatchFiles prints
+"Reloading…", the replacement worker never starts, and the previous one keeps serving
+while staying bound to the port. Set `RELOAD=1` to opt in — or restart by hand, which
+is what the note recommends.
 
 ## Key Conventions
 
@@ -119,7 +138,7 @@ codelith/                 the importable package (distribution name: codelith)
   services/        Shared business logic only (auth, audit, job, project, source,
                    knowledge). An app's services live with the app
   knowledge/       THE BASE — KB vocabulary, builder, retrieval, questions,
-                   artefacts, tools, doc-type roles
+                   artefacts, tools, preflight, doc-type roles
   languages/       Language abstraction — taxonomy, LanguageProvider, registry
     providers/       python, typescript, go, java
   agents/
@@ -130,6 +149,7 @@ codelith/                 the importable package (distribution name: codelith)
     registry.py      App, AppState, APPS — what exists and what unlocks it
     ask/             service (answers), threads (persistence), api
     documentation/   agents, workflows, services, tasks, formatters, api
+    drift/           service (two readings compared), api
     qa/              tools + runner, impact, coverage, dependencies, drift,
                      testgen, deep (its own analysis pass), api
   mcp/             The KB over MCP — a second transport, not an app
@@ -171,7 +191,7 @@ character.
 ## Testing
 
 ```bash
-make test          # full suite
+make test          # full suite — ~30 seconds, starts nothing
 pytest tests/unit/ # unit only
-pytest tests/integration/ # needs Docker infra running
+pytest tests/integration/ # a temporary SQLite file; no services to bring up
 ```

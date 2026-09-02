@@ -44,7 +44,6 @@ def setup_logging() -> None:
         "git", "git.cmd", "git.repo",
         "pydot",
         "langgraph",
-        "neo4j", "neo4j.io", "neo4j.pool", "neo4j.notifications",
     )
     for name in _error_level:
         logging.getLogger(name).setLevel(logging.ERROR)

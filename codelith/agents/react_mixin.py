@@ -345,7 +345,7 @@ class ReActMixin:
             return (prior_summary + "\n" + transcript).strip()[:4000]
 
     def _make_graph_tool(self, project_id: int):
-        """Return a Neo4j code-graph query tool as a LangChain tool."""
+        """Return a code-graph query tool as a LangChain tool."""
         from codelith.memory import get_graph_store
 
         @lc_tool

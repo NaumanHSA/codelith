@@ -154,10 +154,6 @@ class Settings(BaseSettings):
     # Concurrent section-writing LLM calls.
     COMPOSITION_SECTION_CONCURRENCY: int = 4
 
-    # Neo4j
-
-    # MinIO / S3
-
     # OAuth2 (Phase 4)
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

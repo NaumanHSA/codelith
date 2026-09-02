@@ -76,7 +76,7 @@ class CodeUnderstandingAgent(BaseAgent):
             await self.db.commit()
             await self._emit_log("info", "Chunks indexed", chunks=chunks_stored, embed_failures=embed_failures)
 
-            # ── Build Neo4j code graph ─────────────────────────────────────────
+            # ── Build the code graph ───────────────────────────────────────────
             graph_stats: dict = {}
             try:
                 # Same builder the analysis pipeline uses, so the legacy workflow and
@@ -90,7 +90,7 @@ class CodeUnderstandingAgent(BaseAgent):
                     graph_stats = await graph.write(GraphScope(project.id), code_graph)
                 await self._emit_log("info", "Graph built", **graph_stats)
             except Exception as exc:
-                await self._emit_log("warning", f"Neo4j graph build failed (non-fatal): {exc}")
+                await self._emit_log("warning", f"Code graph build failed (non-fatal): {exc}")
 
             # ── Record commit SHA for future cache hits ────────────────────────
             if commit_sha:

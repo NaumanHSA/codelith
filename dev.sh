@@ -42,19 +42,6 @@ else
     run() { conda run --no-capture-output -n "$CONDA_ENV" "$@"; }
 fi
 
-# ── Cleanup: kill the Celery worker when this script exits ────────────────────
-WORKER_PID=""
-cleanup() {
-    echo ""
-    echo "[dev] Shutting down..."
-    if [ -n "$WORKER_PID" ] && kill -0 "$WORKER_PID" 2>/dev/null; then
-        kill "$WORKER_PID"
-        wait "$WORKER_PID" 2>/dev/null || true
-        echo "[dev] Celery worker stopped."
-    fi
-}
-trap cleanup EXIT INT TERM
-
 # ── Refuse to start on top of a stale server ──────────────────────────────────
 # See the note above: an orphaned listener does not stop a new one binding, it just
 # answers first. Better to say so than to serve yesterday's code.
@@ -65,19 +52,10 @@ if command -v curl >/dev/null 2>&1 && curl -s -o /dev/null --max-time 2 "http://
     exit 1
 fi
 
-# ── Start Celery worker in background ─────────────────────────────────────────
-echo "[dev] Starting Celery worker ($ENV_LABEL)..."
-run celery -A codelith.workers.celery_app worker \
-    --loglevel=info \
-    --concurrency=4 \
-    -Q ingestion,generation,export &
-WORKER_PID=$!
-echo "[dev] Celery worker PID: $WORKER_PID"
-
-# Brief pause so worker logs print before uvicorn banner
-sleep 1
-
-# ── Start API (foreground) ────────────────────────────────────────────────────
+# ── Start the API ─────────────────────────────────────────────────────────────
+# One process, and that is the whole stack. Long work runs on a background thread
+# inside it — there is no worker to start and no broker for it to talk to. See
+# codelith/workers/inline.py.
 echo "[dev] Starting API on http://$API_HOST:$API_PORT ($ENV_LABEL)..."
 run uvicorn codelith.main:app \
     --host "$API_HOST" \

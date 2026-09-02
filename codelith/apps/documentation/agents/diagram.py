@@ -497,7 +497,7 @@ class DiagramAgent(BaseAgent):
         return drawn
 
     async def _graph_edges(self, project_id: int, kb_id: int) -> tuple[list[dict], list[dict]]:
-        """Files and import edges from Neo4j. Empty when it is unreachable."""
+        """Files and import edges from the code graph. Empty when it has none."""
         from codelith.memory import get_graph_store
 
         try:

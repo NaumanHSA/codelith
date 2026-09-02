@@ -5,7 +5,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 from fastapi import FastAPI, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 # ── Job metrics ───────────────────────────────────────────────────────────────
 job_total = Counter(
@@ -53,13 +53,6 @@ llm_call_duration = Histogram(
     "LLM API call duration in seconds",
     ["model", "task_type"],
     buckets=[0.5, 1, 2, 5, 10, 20, 30, 60],
-)
-
-# ── Queue metrics ─────────────────────────────────────────────────────────────
-celery_queue_depth = Gauge(
-    "docany_celery_queue_depth",
-    "Celery queue depth",
-    ["queue"],
 )
 
 

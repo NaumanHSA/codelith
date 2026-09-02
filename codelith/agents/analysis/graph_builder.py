@@ -6,11 +6,15 @@ needed — file content and the module roles it just assigned — and nothing th
 later. Placing it here also means a failure is visible early, before twenty minutes
 of summarisation has been spent.
 
-**Non-fatal by design.** Neo4j being unreachable must not fail an analysis. The graph
-is an accelerant for questions the documentation pipeline never asks: every consumer
-of it today degrades to "no edges" rather than breaking. A knowledge base without a
-graph is worth strictly more than no knowledge base, so this agent reports the
+**Non-fatal by design.** A failure to write the graph must not fail an analysis. The
+graph is an accelerant for questions the documentation pipeline never asks: every
+consumer of it degrades to "no edges" rather than breaking. A knowledge base without
+a graph is worth strictly more than no knowledge base, so this agent reports the
 failure and lets the run continue.
+
+The rule predates the graph living in the ordinary database — it was written when a
+Neo4j container could simply be down — and it is kept because the property it buys is
+the same: the run survives one part of it going wrong.
 """
 
 from __future__ import annotations
