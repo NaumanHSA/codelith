@@ -20,7 +20,7 @@ async def _export(document_id: int, format: str) -> dict:
                 DocumentExportRepository,
                 DocumentRepository,
             )
-            from codelith.storage.s3 import StorageClient
+            from codelith.storage import get_storage
 
             doc = await DocumentRepository(db).get_by_id(document_id)
             if not doc:
@@ -33,7 +33,7 @@ async def _export(document_id: int, format: str) -> dict:
             else:
                 raise NotImplementedError(f"Format '{format}' not yet implemented (Phase 4)")
 
-            storage = StorageClient()
+            storage = get_storage()
             await storage.upload_bytes(content_bytes, storage_key)
 
             export = await DocumentExportRepository(db).create(

@@ -5,17 +5,18 @@ Revises: 83eba0dd44dc
 Create Date: 2026-08-04 10:52:40.680558
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+
+import sqlalchemy as sa
 
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from codelith.db.types import json_column
 
 # revision identifiers, used by Alembic.
 revision: str = '32dafb55b4af'
-down_revision: Union[str, None] = '83eba0dd44dc'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '83eba0dd44dc'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -27,7 +28,7 @@ def upgrade() -> None:
     sa.Column('commit_sha', sa.String(length=64), nullable=True),
     sa.Column('status', sa.String(length=32), nullable=False),
     sa.Column('schema_version', sa.Integer(), nullable=False),
-    sa.Column('stats_json', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('stats_json', json_column(), nullable=False),
     sa.Column('error_message', sa.Text(), nullable=True),
     sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -46,7 +47,7 @@ def upgrade() -> None:
     sa.Column('kb_id', sa.Integer(), nullable=False),
     sa.Column('kind', sa.String(length=32), nullable=False),
     sa.Column('name', sa.Text(), nullable=False),
-    sa.Column('data_json', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('data_json', json_column(), nullable=False),
     sa.Column('source_path', sa.Text(), nullable=True),
     sa.Column('source_line', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -68,8 +69,8 @@ def upgrade() -> None:
     sa.Column('file_count', sa.Integer(), nullable=False),
     sa.Column('loc', sa.Integer(), nullable=False),
     sa.Column('is_test', sa.Boolean(), nullable=False),
-    sa.Column('symbols_json', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('files_json', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('symbols_json', json_column(), nullable=False),
+    sa.Column('files_json', json_column(), nullable=False),
     sa.Column('summary', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -86,7 +87,7 @@ def upgrade() -> None:
     sa.Column('kb_id', sa.Integer(), nullable=False),
     sa.Column('topic', sa.String(length=48), nullable=False),
     sa.Column('content_md', sa.Text(), nullable=False),
-    sa.Column('source_refs_json', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('source_refs_json', json_column(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['kb_id'], ['knowledge_bases.id'], ondelete='CASCADE'),

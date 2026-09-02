@@ -15,16 +15,17 @@ Revision ID: c3f6a2d84b17
 Revises: b2e5f7a91c04
 Create Date: 2026-08-08
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
-from sqlalchemy.dialects import postgresql
+from codelith.db.types import json_column
 
 revision: str = "c3f6a2d84b17"
-down_revision: Union[str, None] = "b2e5f7a91c04"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "b2e5f7a91c04"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -32,7 +33,7 @@ def upgrade() -> None:
         "doc_pages",
         sa.Column(
             "grounding_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),

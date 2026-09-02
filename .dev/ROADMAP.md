@@ -185,9 +185,16 @@ nowhere near it.
       `get_packages` now, and a test fails if Cypher appears outside the store again.
       What remains is the SQL implementation itself and choosing between the two by
       profile.
-- [ ] **In-process cancellation** behind `core/cancellation.py`, replacing the Redis
-      flag. Same `CancellationToken` contract; the long-running work must not notice.
-- [ ] **Filesystem storage** behind `storage/s3.py`, under a per-project directory.
+- [x] **In-process cancellation.** A flag store behind `core/cancellation.py`: Redis
+      when the API and a worker are different processes, a set in memory when they are
+      the same one. `CancellationToken` and `check_cancelled` are unchanged, so no
+      long-running work knows which it is using. Verified with Redis untouched: request
+      → `is_cancelled` true → `JobCancelled` raised → cleared.
+- [x] **Filesystem storage.** `get_storage()` returns a bucket or a directory by
+      profile, and both answer the same five methods. Keys are treated as relative
+      paths, so the store is browsable — on one machine the exports somebody generated
+      should be findable in a file manager rather than only through the application
+      that wrote them. Keys that escape the root are refused.
 - [ ] **Inline execution** instead of Celery: the six `.delay()` sites run the coroutine
       directly with a progress callback. The studio's job rows still get written, so the
       UI works unchanged if somebody opens it.
@@ -208,11 +215,25 @@ nowhere near it.
       as `list[float]` of 768 dimensions, and a search returning the planted nearest
       vector first. Semantic search on one machine with no Postgres, no pgvector and no
       compiled extension.
-- [ ] **Alembic against SQLite.** The models now build the schema; the *migration chain*
-      still does not run there. Four places are Postgres-only — `CREATE EXTENSION
-      vector`, the `Vector(dims)` column, the HNSW index, and a `TRUNCATE` in the resize
-      migration. **Open question 1 is answered: share the schema and branch at those
-      four points**, rather than keeping two schemas in step forever.
+- [x] **Alembic.** The four Postgres-only spots now ask `is_postgres()` first, and the
+      twenty `postgresql.JSONB` columns in migrations are portable — so the chain is no
+      longer Postgres-only by construction.
+
+      It still is not *replayable* on SQLite, and that is a deliberate stop. SQLite
+      cannot `SET NOT NULL`, change a column type, or drop a constraint, which is what
+      a year of migrations is mostly made of; rewriting thirteen of them in
+      `batch_alter_table` would be churn on files that work, for a path with no history
+      to replay. `db/bootstrap.py` builds a solo database from the models and stamps it
+      at head, so the *next* migration applies normally. `render_as_batch=True` in
+      `alembic/env.py` keeps it that way.
+
+      **Found on the way:** `env.py` overrode the URL unconditionally, so setting one
+      programmatically was silently ignored — a stamp aimed at a solo file landed on the
+      configured Postgres instead. It respects an explicit URL now.
+
+      Verified from scratch on both: a fresh Postgres database gets 24 tables, a
+      `vector` column, `jsonb` and the HNSW index; a fresh SQLite file gets 23 tables
+      stamped at `f2b9c41d77ae`.
 - [x] **A test that keeps the seam honest.** `tests/unit/test_storage_seams.py`.
       Each external service has exactly one door — Neo4j, boto3, redis and Celery are
       each imported by a single module — and Cypher may not appear outside the graph

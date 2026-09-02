@@ -25,7 +25,7 @@ jobs:
         # `codelith/`, not `app/` — the package was renamed and this step had been
         # pointing at a path that no longer exists since. It never failed, because the
         # workflow was never triggered.
-        run: ruff check codelith/ tests/
+        run: ruff check codelith/ tests/ alembic/
 
   test:
     name: Unit Tests

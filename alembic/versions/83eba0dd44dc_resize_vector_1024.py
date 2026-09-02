@@ -7,18 +7,26 @@ Revision ID: 83eba0dd44dc
 Revises: d8ae677c6a7d
 Create Date: 2026-06-10
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
 revision: str = '83eba0dd44dc'
-down_revision: Union[str, None] = 'd8ae677c6a7d'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = 'd8ae677c6a7d'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     from codelith.config import get_settings
+    from codelith.db.migrations import is_postgres
+
+    # Nothing to resize where the column is a blob: solo mode stores packed float32
+    # of whatever length the model emits, so changing embedding model needs no DDL —
+    # only a re-ingest, which is true on both.
+    if not is_postgres():
+        return
+
     dims = get_settings().VECTOR_DIMENSIONS  # reads VECTOR_DIMENSIONS from .env
 
     op.execute("DROP INDEX IF EXISTS ix_code_chunks_embedding")
@@ -31,6 +39,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    from codelith.db.migrations import is_postgres
+
+    if not is_postgres():
+        return
+
     op.execute("DROP INDEX IF EXISTS ix_code_chunks_embedding")
     op.execute("TRUNCATE TABLE code_chunks")
     op.execute("ALTER TABLE code_chunks ALTER COLUMN embedding TYPE vector(1536)")

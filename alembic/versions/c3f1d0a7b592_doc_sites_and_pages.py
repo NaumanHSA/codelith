@@ -25,9 +25,9 @@ Create Date: 2026-08-06
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from codelith.db.types import json_column
 
 revision: str = "c3f1d0a7b592"
 down_revision: str | None = "b7c41a9f2e10"
@@ -40,7 +40,7 @@ def upgrade() -> None:
         "knowledge_bases",
         sa.Column(
             "site_map_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             nullable=False,
             server_default="{}",
         ),
@@ -53,7 +53,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column(
             "nav_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             nullable=False,
             server_default="[]",
         ),
@@ -97,13 +97,13 @@ def upgrade() -> None:
         sa.Column("commit_sha", sa.String(length=64), nullable=True),
         sa.Column(
             "source_files_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             nullable=False,
             server_default="[]",
         ),
         sa.Column(
             "key_files_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             nullable=False,
             server_default="[]",
         ),

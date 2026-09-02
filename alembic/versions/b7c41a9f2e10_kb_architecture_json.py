@@ -20,9 +20,9 @@ Create Date: 2026-08-06
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from codelith.db.types import json_column
 
 revision: str = "b7c41a9f2e10"
 down_revision: str | None = "32dafb55b4af"
@@ -35,7 +35,7 @@ def upgrade() -> None:
         "knowledge_bases",
         sa.Column(
             "architecture_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             nullable=False,
             server_default="{}",
         ),

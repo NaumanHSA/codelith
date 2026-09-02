@@ -85,11 +85,11 @@ test-int:
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 lint:
-	ruff check codelith/ tests/
+	ruff check codelith/ tests/ alembic/
 
 format:
-	ruff format codelith/ tests/
-	ruff check --fix codelith/ tests/
+	ruff format codelith/ tests/ alembic/
+	ruff check --fix codelith/ tests/ alembic/
 
 typecheck:
 	mypy codelith/

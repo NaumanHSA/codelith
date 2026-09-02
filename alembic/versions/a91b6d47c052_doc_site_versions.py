@@ -24,9 +24,9 @@ Create Date: 2026-08-06
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from codelith.db.types import json_column
 
 revision: str = "a91b6d47c052"
 down_revision: str | None = "f5c93a1e0b28"
@@ -44,7 +44,7 @@ def upgrade() -> None:
         sa.Column("commit_sha", sa.String(length=64), nullable=True),
         sa.Column(
             "nav_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             nullable=False,
             server_default="[]",
         ),

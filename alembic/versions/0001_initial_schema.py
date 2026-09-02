@@ -5,21 +5,28 @@ Revises:
 Create Date: 2026-06-09
 
 """
-from typing import Sequence, Union
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
-from pgvector.sqlalchemy import Vector
+
+from alembic import op
 from codelith.config import get_settings
+from codelith.db.types import embedding_column
 
 revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Enable pgvector extension — must come before any table using Vector columns
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    from codelith.db.migrations import is_postgres
+
+    # Enable pgvector extension — must come before any table using Vector columns.
+    # Solo mode stores the same embeddings as packed float32 bytes and ranks them in
+    # the process, so there is no extension to enable and nothing to skip afterwards.
+    if is_postgres():
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     op.create_table(
         "organizations",
@@ -179,16 +186,19 @@ def upgrade() -> None:
         sa.Column("content", sa.Text, nullable=False),
         sa.Column("start_line", sa.Integer, nullable=True),
         sa.Column("end_line", sa.Integer, nullable=True),
-        sa.Column("embedding", Vector(dims), nullable=True),
+        sa.Column("embedding", embedding_column(dims), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
     op.create_index("ix_code_chunks_project_id", "code_chunks", ["project_id"])
-    # HNSW index for fast approximate nearest-neighbour search on cosine distance
-    op.execute(
-        "CREATE INDEX ix_code_chunks_embedding ON code_chunks "
-        "USING hnsw (embedding vector_cosine_ops)"
-    )
+    # HNSW index for fast approximate nearest-neighbour search on cosine distance.
+    # Only Postgres ranks in the database; elsewhere the filtered rows are ranked
+    # exactly in the process, which needs no index.
+    if is_postgres():
+        op.execute(
+            "CREATE INDEX ix_code_chunks_embedding ON code_chunks "
+            "USING hnsw (embedding vector_cosine_ops)"
+        )
 
 
 def downgrade() -> None:
@@ -204,4 +214,7 @@ def downgrade() -> None:
     op.drop_table("oauth_accounts")
     op.drop_table("users")
     op.drop_table("organizations")
-    op.execute("DROP EXTENSION IF EXISTS vector")
+    from codelith.db.migrations import is_postgres
+
+    if is_postgres():
+        op.execute("DROP EXTENSION IF EXISTS vector")

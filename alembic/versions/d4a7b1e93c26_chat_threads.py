@@ -15,16 +15,17 @@ Revision ID: d4a7b1e93c26
 Revises: c3f6a2d84b17
 Create Date: 2026-08-09
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
-from sqlalchemy.dialects import postgresql
+from codelith.db.types import json_column
 
 revision: str = "d4a7b1e93c26"
-down_revision: Union[str, None] = "c3f6a2d84b17"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "c3f6a2d84b17"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -52,19 +53,19 @@ def upgrade() -> None:
         sa.Column("token_count", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
             "evidence_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),
         sa.Column(
             "citations_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             server_default=sa.text("'[]'::jsonb"),
             nullable=False,
         ),
         sa.Column(
             "stripped_json",
-            postgresql.JSONB(astext_type=sa.Text()),
+            json_column(),
             server_default=sa.text("'[]'::jsonb"),
             nullable=False,
         ),

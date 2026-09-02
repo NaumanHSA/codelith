@@ -94,8 +94,8 @@ class FormatterAgent(BaseAgent):
             return {"formatted_docs": formatted_docs, "export_keys": export_keys}
 
     async def _generate_export(self, fmt: str, docs: list[dict], project) -> list[str]:
-        from codelith.storage.s3 import StorageClient
-        storage = StorageClient()
+        from codelith.storage import get_storage
+        storage = get_storage()
         keys: list[str] = []
         pid = project.id
         pname = project.name

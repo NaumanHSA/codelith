@@ -5,17 +5,19 @@ Revises: 0001
 Create Date: 2026-06-09 11:49:28.321250
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+from codelith.db.types import json_column
+
 # revision identifiers, used by Alembic.
 revision: str = 'd8ae677c6a7d'
-down_revision: Union[str, None] = '0001'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '0001'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -26,7 +28,7 @@ def upgrade() -> None:
     sa.Column('action', sa.String(length=100), nullable=False),
     sa.Column('resource_type', sa.String(length=50), nullable=False),
     sa.Column('resource_id', sa.Integer(), nullable=True),
-    sa.Column('details', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('details', json_column(), nullable=True),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
@@ -38,7 +40,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_audit_logs_user_id'), 'audit_logs', ['user_id'], unique=False)
     op.create_table('system_settings',
     sa.Column('key', sa.String(length=200), nullable=False),
-    sa.Column('value', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('value', json_column(), nullable=True),
     sa.Column('updated_by_id', sa.Integer(), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['updated_by_id'], ['users.id'], ondelete='SET NULL'),

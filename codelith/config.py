@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     #: distance whatever this setting says.
     CODELITH_PROFILE: Literal["server", "solo"] = "server"
 
+    #: Where solo mode keeps artefacts — exports and generated files. A directory
+    #: rather than a bucket, and browsable on purpose: on one machine the exports
+    #: somebody generated should be findable in a file manager.
+    LOCAL_STORAGE_DIR: str = "./.codelith/storage"
+
     # Application
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "insecure-dev-secret"
