@@ -9,7 +9,8 @@ import {
   addressOf, coverage, findPage, headingsOf, isPending, neighbours, searchPages,
   type FlatPage,
 } from '../../lib/site'
-import type { SitePage, SitePageDetail } from '../../lib/types'
+import type { SitePage, SitePageDetail, Depth } from '../../lib/types'
+import WriteOptions from '../../components/docs/WriteOptions'
 import { Button, Chip, Meter } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import ConfirmDelete from '../../components/ConfirmDelete'
@@ -99,6 +100,10 @@ export default function DocsSitePage() {
   /** Hold pages the fact check doubts instead of publishing them. Off by
    *  default: most writing is read internally. */
   const [review, setReview] = useState(false)
+  /** How much the pages should say. Lives here rather than in the bar, because
+   *  the button on a single unwritten page starts the same kind of run and has
+   *  to offer the same choice. */
+  const [depth, setDepth] = useState<Depth>('standard')
 
   const togglePick = (address: string) =>
     setPicked(prev => {
@@ -197,6 +202,7 @@ export default function DocsSitePage() {
         // answer got baked into the page.
         output_formats: ['markdown'],
         human_review: review,
+        depth,
       })
       track(job, project?.name)
       // The run owns these pages now; leaving them ticked invites a second job
@@ -468,6 +474,8 @@ ${body}
             count={picked.size}
             review={review}
             onReview={setReview}
+            depth={depth}
+            onDepth={setDepth}
             busy={generating === SELECTION_RUN}
             onClear={() => setPicked(new Set())}
             onWrite={() =>
@@ -543,6 +551,10 @@ ${body}
                   }
                   onGenerateSection={() => generateSection(current.section.slug)}
                   generatingSection={generatingSection === current.section.slug}
+                  depth={depth}
+                  onDepth={setDepth}
+                  review={review}
+                  onReview={setReview}
                   // ONLY the run we just started. `page.job_id` is provenance — every
                   // written page has one, naming the job that wrote it — so treating a
                   // non-null value as "in flight" made every finished page mount the
@@ -668,6 +680,7 @@ function SectionTab({
 function PageBody({
   flat, page: detail, projectId, startedJobId, onGenerate, generating, canGenerate,
   onFinished, sectionRemaining, onGenerateSection, generatingSection,
+  depth, onDepth, review, onReview,
   onRevise, revisingAnchor, busyAnchor,
 }: {
   flat: FlatPage
@@ -683,6 +696,10 @@ function PageBody({
   sectionRemaining: number
   onGenerateSection: () => void
   generatingSection: boolean
+  depth: Depth
+  onDepth: (v: Depth) => void
+  review: boolean
+  onReview: (v: boolean) => void
   /** Undefined on a frozen version or without write access — no button is drawn. */
   onRevise?: (anchor: string, title: string) => void
   revisingAnchor: string | null
@@ -802,7 +819,21 @@ function PageBody({
             // how many pages it covers, so writing them one at a time buys the same
             // two calls over and over — measured at ~29s of pure overhead per page.
             // Writing a single page stays available, just not as the default.
-            <div className="mt-5 flex flex-wrap items-center gap-2">
+            <div className="mt-5 flex flex-col gap-3">
+              {/* The same two choices the selection bar offers. Without them here,
+                  writing one page silently inherited whatever the bar had been left
+                  on — and the bar is not on screen, so there was nothing to inherit
+                  it from as far as the reader could tell. */}
+              <div className="border border-rule bg-sunk/40 px-3 py-2.5">
+                <WriteOptions
+                  depth={depth}
+                  onDepth={onDepth}
+                  review={review}
+                  onReview={onReview}
+                  disabled={generating || generatingSection}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
               {sectionRemaining > 1 ? (
                 <>
                   <Button
@@ -827,6 +858,7 @@ function PageBody({
                   {generating ? 'writing…' : 'Write this page'}
                 </Button>
               )}
+              </div>
             </div>
           )}
         </section>

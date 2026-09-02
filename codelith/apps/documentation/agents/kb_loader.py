@@ -125,6 +125,7 @@ class KBLoaderAgent(BaseAgent):
                 "site_map": site_map,
                 "output_formats": output_formats,
                 "requires_human_review": job_config.get("human_review", False),
+                "depth": job_config.get("depth") or "standard",
                 "generated_docs": [],
             }
 

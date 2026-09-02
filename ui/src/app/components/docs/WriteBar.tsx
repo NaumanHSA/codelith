@@ -1,4 +1,6 @@
 import { Button } from '../ui'
+import { DepthPicker, ReviewToggle } from './WriteOptions'
+import type { Depth } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
  * What happens to the pages you ticked.
@@ -10,12 +12,18 @@ import { Button } from '../ui'
  * It carries no format picker. Format is a property of leaving — it is
  * chosen on export, from the same stored markdown, so nothing about
  * writing has to know where the text is eventually going.
+ *
+ * The controls themselves live in `WriteOptions`, because the button on a
+ * single unwritten page starts the same kind of run and has to offer the
+ * same choices.
  * ------------------------------------------------------------------ */
 
 export default function WriteBar({
   count,
   review,
   onReview,
+  depth,
+  onDepth,
   onWrite,
   onClear,
   busy,
@@ -23,6 +31,8 @@ export default function WriteBar({
   count: number
   review: boolean
   onReview: (v: boolean) => void
+  depth: Depth
+  onDepth: (v: Depth) => void
   onWrite: () => void
   onClear: () => void
   busy: boolean
@@ -42,18 +52,7 @@ export default function WriteBar({
           clear
         </button>
 
-        <label
-          className="flex cursor-pointer items-center gap-1.5 select-none"
-          title="Pages that fail the fact check are held for you to read before anything is published."
-        >
-          <input
-            type="checkbox"
-            checked={review}
-            onChange={e => onReview(e.target.checked)}
-            className="accent-[var(--hot)]"
-          />
-          <span className="tag text-ink-dim">hold flagged pages for review</span>
-        </label>
+        <ReviewToggle value={review} onChange={onReview} disabled={busy} />
 
         <span className="tag text-ink-dim">
           roughly {Math.max(2, count * 3)} min on a local model
@@ -62,6 +61,10 @@ export default function WriteBar({
         <Button variant="hot" className="ml-auto" disabled={busy} onClick={onWrite}>
           {busy ? 'starting…' : review ? `Write ${count} for review →` : `Write ${count} →`}
         </Button>
+      </div>
+
+      <div className="border-t border-rule px-3 py-2">
+        <DepthPicker value={depth} onChange={onDepth} disabled={busy} />
       </div>
     </div>
   )

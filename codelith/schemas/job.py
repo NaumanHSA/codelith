@@ -11,6 +11,10 @@ class JobConfig(BaseModel):
     output_formats: list[str] = ["markdown"]
     include_diagrams: bool = True
     human_review: bool = False
+    #: `concise` | `standard` | `detailed`. A plain string, resolved by
+    #: `apps/documentation/depth.py`, which tolerates anything it does not recognise —
+    #: a job row written by an older version must still compose.
+    depth: str = "standard"
     llm_model: str | None = None
 
 

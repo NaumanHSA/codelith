@@ -108,6 +108,7 @@ class RevisionService:
 
         kb = await self._usable_kb(project_id)
         address = f"{section_slug}/{slug}"
+        depth = await self._depth_of(page)
 
         # The same scope shape a composition records, so the studio's job views —
         # "writing into", the target list, "Read the document" — work on a revision
@@ -122,6 +123,10 @@ class RevisionService:
                     page_slugs=[address],
                     output_formats=["markdown"],
                     human_review=False,
+                    # A rewrite of one section must not silently resize it. The page
+                    # was written at some depth and the rest of it still is, so the
+                    # revision inherits that rather than falling back to standard.
+                    depth=depth,
                 )
             ),
             user,
@@ -377,6 +382,29 @@ class RevisionService:
             and row.status == "completed"
         ]
         return list(reversed(turns))[-MAX_HISTORY_TURNS:]
+
+    async def _depth_of(self, page) -> str:
+        """
+        The depth the page was written at.
+
+        Read from the job that wrote it rather than stored on the page: `DocPage`
+        already records `job_id`, and one lookup is cheaper than a migration for a
+        value only this path needs. A rewritten heading must not silently come back
+        half the length of the ones around it, which is what falling back to standard
+        on a page written as `detailed` would do.
+
+        Falls back to standard for a page written before depth existed, or by a path
+        that recorded no job.
+        """
+        from codelith.apps.documentation import depth as depth_profile
+        from codelith.models.job import Job
+
+        if not page.job_id:
+            return depth_profile.DEFAULT.value
+        job = await self.db.get(Job, page.job_id)
+        return ((job.config_json or {}).get("depth") if job else None) or (
+            depth_profile.DEFAULT.value
+        )
 
     async def _usable_kb(self, project_id: int):
         bases = KnowledgeRepositories.for_session(self.db).bases

@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from codelith.agents.base import BaseAgent
+from codelith.apps.documentation import depth as depth_profile
 from codelith.config import get_settings
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
@@ -50,6 +51,14 @@ _DEFAULT_SECTIONS: dict[str, list[str]] = {
 class CompositionPlannerAgent(BaseAgent):
     name = "composition_planner_agent"
 
+    #: Set by `run`. Defaulted here so the agent is still usable if a caller
+    #: reaches a planning method without going through it.
+    _depth: str = depth_profile.DEFAULT.value
+
+    def _heading_cap(self, settings) -> int:
+        """The operator's cap, shifted by the depth this job asked for."""
+        return depth_profile.max_headings(self._depth, settings.SITE_MAX_HEADINGS_PER_PAGE)
+
     async def run(self, state: dict[str, Any]) -> dict[str, Any]:
         tracer = self._tracer()
         with tracer(
@@ -59,6 +68,11 @@ class CompositionPlannerAgent(BaseAgent):
             end_message="Planner: complete",
         ) as t:
             await self._update_step(self.name, "running")
+
+            # Resolved once and held on the instance rather than threaded through
+            # six signatures that otherwise have no interest in it. The planner reads
+            # depth for one thing only — how many headings a page may have.
+            self._depth = state.get("depth") or depth_profile.DEFAULT.value
 
             project = state["project"]
             kb_id = state["kb_id"]
@@ -167,7 +181,7 @@ class CompositionPlannerAgent(BaseAgent):
                 project_name=project.name,
                 section_title=self._section_title(site_map, section_slug),
                 audience=audience,
-                max_headings=str(settings.SITE_MAX_HEADINGS_PER_PAGE),
+                max_headings=str(self._heading_cap(settings)),
                 pages=self._render_pages(group, known_files),
                 site_map=self._render_site_map(site_map, exclude_section=section_slug),
                 overview=overview or "(none available)",
@@ -239,7 +253,7 @@ class CompositionPlannerAgent(BaseAgent):
             if address not in wanted:
                 continue
             sections = self._validate(
-                entry, known, limit=settings.SITE_MAX_HEADINGS_PER_PAGE
+                entry, known, limit=self._heading_cap(settings)
             )
             if sections:
                 out[address] = sections
@@ -277,7 +291,7 @@ class CompositionPlannerAgent(BaseAgent):
             doc_type=doc_type,
             intent=page.get("intent") or page["title"],
             audience=audience,
-            max_headings=str(settings.SITE_MAX_HEADINGS_PER_PAGE),
+            max_headings=str(self._heading_cap(settings)),
             key_files="\n".join(f"  {f}" for f in anchors) or "  (none recorded)",
             site_map=self._render_site_map(site_map, exclude=page["address"]),
             overview=overview or "(none available)",
@@ -291,7 +305,7 @@ class CompositionPlannerAgent(BaseAgent):
         save_artifact(f"planner.page.{page['slug']}.raw_response", plan)
 
         sections = self._validate(
-            plan, known_files, limit=settings.SITE_MAX_HEADINGS_PER_PAGE
+            plan, known_files, limit=self._heading_cap(settings)
         ) if plan else []
         if not sections:
             await self._emit_log(

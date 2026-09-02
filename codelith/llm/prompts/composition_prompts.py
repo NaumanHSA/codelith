@@ -155,7 +155,12 @@ SECTION_WRITE = PromptTemplate(
         "where the material really splits. Breaking a section into more pieces is not "
         "a way to fit more words into it.\n"
         "  - Prefer being short and correct over long and padded. A heading that says "
-        "its one thing well and stops is finished.\n\n"
+        "its one thing well and stops is finished.\n"
+        # Braced for the same reason as `$overview_steer` further down: a bare
+        # name abutting the next word parses as one identifier and renders as
+        # nothing. Empty at standard depth, and the blank line lives inside it so
+        # the section does not gain a stray gap when there is no guidance.
+        "${depth_guidance}\n"
         "Rules:\n"
         "  - Start with '## $section_name'. Write only this heading's content.\n"
         "  - Ground every statement in the supplied context. Never invent a function, "

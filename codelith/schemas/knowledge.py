@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -191,6 +192,13 @@ class ComposeRequest(BaseModel):
     page_slugs: list[str] = Field(default_factory=list)
     output_formats: list[str] = Field(default_factory=lambda: ["markdown"])
     human_review: bool = False
+    #: How much detail the pages should go into.
+    #:
+    #: A `Literal` rather than the app's `Depth` enum: this schema is base, and the
+    #: base importing a feature is the coupling `test_module_isolation.py` exists to
+    #: stop. The two lists are pinned equal by `tests/unit/apps/test_depth.py`, so the
+    #: duplication cannot drift silently.
+    depth: Literal["concise", "standard", "detailed"] = "standard"
     kb_id: int | None = Field(
         default=None,
         description="Compose from a specific knowledge base. Defaults to the latest usable one.",

@@ -40,6 +40,10 @@ class CompositionState(TypedDict, total=False):
     site_map: dict
     output_formats: list[str]
     requires_human_review: bool
+    #: `concise` | `standard` | `detailed` — how much the pages should say. Resolved
+    #: by `apps/documentation/depth.py`; the planner reads it for heading count and
+    #: the writer for words and for the instruction that actually shapes the prose.
+    depth: str
 
     # ── Planning ──────────────────────────────────────────────────────────────
     strategy: dict

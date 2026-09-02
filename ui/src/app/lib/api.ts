@@ -11,7 +11,7 @@ import type {
   Project, ProjectSource, Site, SitePageDetail, SiteVersion, Tokens, User,
   DocType, OutputFormat, SourceType,
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
-  JobReview, Drift, Preflight,
+  JobReview, Drift, Preflight, Depth,
 } from './types'
 
 export const API_BASE =
@@ -264,6 +264,9 @@ export const api = {
       page_slugs?: string[]
       output_formats: OutputFormat[]
       human_review: boolean
+      /** How much each page should say. Omitted means `standard`, which is what
+       *  every page written before this option existed used. */
+      depth?: Depth
       kb_id?: number | null
     },
   ) =>

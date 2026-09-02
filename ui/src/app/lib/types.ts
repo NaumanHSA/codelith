@@ -548,3 +548,7 @@ export interface Preflight {
   documented_in: PreflightCitedBy[]
   facts: string[]
 }
+
+/** How much detail a written page goes into. Mirrors `apps/documentation/depth.py`;
+ *  `tests/unit/apps/test_depth.py` fails if the two lists stop agreeing. */
+export type Depth = 'concise' | 'standard' | 'detailed'

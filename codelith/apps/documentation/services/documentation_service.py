@@ -84,6 +84,7 @@ class DocumentationService:
                     page_slugs=page_slugs,
                     output_formats=req.output_formats,
                     human_review=req.human_review,
+                    depth=req.depth,
                 )
             ),
             user,

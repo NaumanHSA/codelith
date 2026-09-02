@@ -33,6 +33,7 @@ import re
 from typing import Any
 
 from codelith.agents.base import BaseAgent
+from codelith.apps.documentation import depth as depth_profile
 from codelith.config import get_settings
 from codelith.core.cancellation import JobCancelled, check_cancelled
 from codelith.knowledge.retrieval import SectionContext, SectionContextBuilder
@@ -50,7 +51,14 @@ _NEED_CONTEXT = re.compile(r"^\s*NEED_CONTEXT:\s*(.+)$", re.IGNORECASE)
 class CompositionWriterAgent(BaseAgent):
     name = "composition_writer_agent"
 
+    #: Set by `run`. Defaulted so a writer reached outside it still composes.
+    _depth: str = depth_profile.DEFAULT.value
+
     async def run(self, state: dict[str, Any]) -> dict[str, Any]:
+        # Held on the instance rather than passed down: `_ask` is six arguments deep
+        # and depth is a property of the job, not of the section being written.
+        self._depth = state.get("depth") or depth_profile.DEFAULT.value
+
         # Fan-out sets exactly one of these. `current_page` means page mode; without
         # either, write everything requested (the path the tests and legacy graph use).
         page = state.get("current_page")
@@ -334,7 +342,13 @@ class CompositionWriterAgent(BaseAgent):
             section_name=name,
             focus=section.get("focus") or name,
             heading_count=str(len(outline) or 1),
-            word_budget=str(settings.SITE_WORDS_PER_HEADING),
+            # Both halves of the lever. The number bounds the section; the
+            # instruction is what actually changes how it is written — a budget
+            # alone is something the model is inclined to overshoot.
+            word_budget=str(
+                depth_profile.words_per_heading(self._depth, settings.SITE_WORDS_PER_HEADING)
+            ),
+            depth_guidance=depth_profile.profile(self._depth).guidance,
             max_subheadings=str(settings.SITE_MAX_SUBHEADINGS_PER_SECTION),
             overview_steer=self._overview_steer(page),
             audience=audience,
