@@ -64,23 +64,44 @@ Neo4j and without a repository: it is a pure function from files to a graph."*
 
 ---
 
-## Phase 0 — Clear the desk
+## Phase 0 — Clear the desk ✅
 
-Small, known, and carried for weeks. Doing them first means the interesting work does
-not start on top of a backlog.
+*Done 2 September 2026. Two of the four items were not what the plan said they were.*
 
-- [ ] **Collapse site sections by default.** The sticky write bar fixed "nobody can find
-      the controls"; it did not fix twenty-three expanded page rows. Sections collapsed,
-      expand to see pages — the Option A layout already agreed.
-- [ ] **Ruff into CI, and fix the workflow while there.** `.github/workflows/ci.yml` is
-      `workflow_dispatch`-only *and* lints `app/`, a path that has not existed since the
-      rename to `codelith/`. 375 findings, 201 auto-fixable; only 10 are the SQLAlchemy
-      `Mapped["Project"]` F821 false positives, all under `codelith/models/`, so one
-      per-directory ignore clears the blocker that was thought to be the whole problem.
-- [ ] **`diagram` opt-in per doc type.** `graph.add_edge("linker", "diagram")` is
-      unconditional. ~64s, ~15% of a run, on every composition.
-- [ ] **Refresh `STATUS.md`.** It does not know about the compose merge, the review gate
-      fixes, or `enigma`. Its own first line asks to be corrected.
+- [x] **Collapse site sections by default.** Section headers now carry the counts
+      (`3/4 · 1 to write`) so the whole map is scannable without opening anything; a
+      section still being written opens itself. The map went from ~2,000px to 1,067px.
+- [x] **Ruff into CI, and the workflow fixed.** 373 findings → **zero**. The workflow was
+      broken in three ways, not one: `workflow_dispatch`-only so it never ran, linting
+      `app/` which has not existed since the rename, and pinned to Python 3.12 while the
+      project declares `>=3.11`. All three fixed; it now runs on push and pull request.
+      `E501` (143 long lines) is on the ignore list with a note — everything else is
+      enforced. Six violations needed judgement rather than `--fix`, including a bare
+      `except` in tracing that also swallowed `KeyboardInterrupt`.
+- [x] **`include_diagrams` honoured.** Recorded as "`diagram` opt-in per doc type, 64s,
+      ~15% of a run" — and that measurement predates `DIAGRAMS_ENABLED` defaulting to
+      false. Model-written diagrams have been off for some time; the stage costs seconds.
+      The real defect was different and worse: `include_diagrams` had been in `JobConfig`
+      since the beginning and **nothing ever read it**. The API accepted the flag, the
+      studio sent it, every run drew diagrams anyway.
+- [x] **`STATUS.md` refreshed** — 120 commits, 818 unit and 166 integration passing, 13
+      migrations, 53 routes, ruff clean.
+
+**Found while working, and fixed:**
+
+- Both `test_the_ui_knows_every_*_stage` integration tests read `narrate.ts` with the
+  platform encoding, so they crashed on Windows before asserting anything. They have
+  never run on this machine.
+- `Toc.tsx` keyed its list on `id + text`, which collides when a page has two headings
+  with the same words — ordinary prose, reported by React as duplicate keys.
+
+**Found while working, and recorded rather than fixed** (both now in `STATUS.md`):
+
+- The anchor those duplicate headings share is a real bug, not just a key: both
+  table-of-contents entries jump to the first heading. Fixing it means agreeing a
+  de-duplication rule across three places that must produce identical strings.
+- The stage-coverage tests are far weaker than their docstrings claim — they assert one
+  string is present, not that every graph node is narrated.
 
 ## Phase 1 — The CLI
 

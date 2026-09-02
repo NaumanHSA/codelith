@@ -18,11 +18,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.knowledge.constants import PageStatus
 from codelith.models.organization import Organization
 from codelith.models.project import Project
 from codelith.models.user import User
-from codelith.apps.documentation.services.site_service import SiteService
 
 
 @pytest_asyncio.fixture

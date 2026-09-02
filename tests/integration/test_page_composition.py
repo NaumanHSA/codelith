@@ -26,6 +26,7 @@ from codelith.apps.documentation.agents import (
     KBLoaderAgent,
 )
 from codelith.apps.documentation.agents.publisher import PublisherAgent
+from codelith.apps.documentation.services.site_service import SiteService
 from codelith.core.exceptions import ValidationError
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.ingestion.parsers.code_parser import ParsedCodebase, ParsedFile
@@ -35,7 +36,6 @@ from codelith.models.job import Job
 from codelith.models.organization import Organization
 from codelith.models.project import Project
 from codelith.models.user import User
-from codelith.apps.documentation.services.site_service import SiteService
 
 ROUTES = textwrap.dedent(
     '''

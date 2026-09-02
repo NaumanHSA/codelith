@@ -1,6 +1,6 @@
 # Codelith — where the work stands
 
-*Snapshot: 31 August 2026, `e8bd29f`. Update the numbers when they stop being true.*
+*Snapshot: 2 September 2026, `9f7b6a1`. Update the numbers when they stop being true.*
 
 **This is the planning document.** The phase plans that built the product (analyse/compose,
 the site, the UX overhaul, the substrate, Ask, the Codelith rename) all completed and were
@@ -30,13 +30,14 @@ features (see *Deliberately not built*).
 | | |
 |---|---|
 | First commit | 8 June 2026 |
-| Commits | 107 |
-| Python | 245 files, ~31,900 lines |
-| Studio (TS/TSX) | 66 files, ~12,400 lines |
-| Tests | 51 files — **804 unit passing, 1 skipped**; 166 integration collected (needs Docker) |
-| Migrations | 12 |
-| HTTP routes | 48 |
+| Commits | 120 |
+| Python | 224 files |
+| Studio (TS/TSX) | 65 files |
+| Tests | 52 files — **818 unit passing, 1 skipped**; **166 integration passing** (needs Docker) |
+| Migrations | 13 |
+| HTTP routes | 53 |
 | Apps on `main` | 2 — Quality is built but parked on `feat/qa` |
+| Lint | **ruff clean** across `codelith/` and `tests/`, enforced in CI |
 | Languages analysed | Python, TypeScript, Go, Java |
 | Languages checked by Quality | Python only (on `feat/qa`) |
 
@@ -149,12 +150,19 @@ Honest list. Nothing here is a crisis; all of it is worth knowing before trustin
   written against; its `Server` is handler-registration only. `>=1.0.0` let a resolver
   take that upgrade on our behalf and broke four tests. Pinned for now — the port is real
   work and should be chosen, not stumbled into.
-- **Almost every measurement came from one repository.** `neurosurfer`, 257 Python files.
-  Every false positive fixed so far was found by running against real code, which is
-  reason to believe a second codebase will find more.
-- **Ruff is not wired into Codelith's own CI.** The app runs it on other people's code
-  while ours is unchecked. Blocked on SQLAlchemy `Mapped["Project"]` forward references
-  producing F821 false positives — needs a per-rule exclusion, not a skip.
+- **Nearly every measurement came from one repository.** `neurosurfer`, 257 Python
+  files. `enigma` has since been analysed end to end, which is a second data point and
+  not yet a second opinion — every false positive fixed so far was found by running
+  against real code, so a third codebase will find more.
+- **Nobody can install this.** Six containers, a `.env`, migrations, a seed, pnpm, a Vite
+  server and three models loaded in LM Studio. The landing page advertises a `codelith`
+  CLI that does not exist. This is the single largest thing standing between the project
+  and anybody else using it, and it is what `ROADMAP.md` phases 1 and 2 are for.
+- **Line length is the one lint rule still off.** 143 violations across forty files —
+  mostly long call signatures and prose in docstrings. Everything else in `E`, `F`, `I`,
+  `UP` and `B` is clean and enforced on every push and pull request. `E501` comes off the
+  ignore list once the backlog is burned down; it is excluded so that turning CI on did
+  not require a mechanical reformat of the whole tree in the same change.
 - **The legacy single-shot pipeline is still alive.** `documentation_workflow.py` (now
   under the documentation app) backs `POST /projects/{id}/jobs`. New work goes in the
   two-phase graphs; this exists so an old endpoint keeps working.
@@ -162,7 +170,14 @@ Honest list. Nothing here is a crisis; all of it is worth knowing before trustin
   exit-2 read as success, and a dict-ordering bug that hid a 33:1 layering violation. That
   is precisely the failure the app exists to prevent in others' code, which is the argument
   for running it against something new before trusting it.
-- **Integration tests need Docker infra up.** They are not part of a quick loop.
+- **Integration tests need Docker infra up.** They are not part of a quick loop — but
+  they do pass: 166 of them, needing only postgres and redis, with every model call
+  faked.
+- **The stage-coverage tests are weaker than they read.** `test_the_ui_knows_every_*_stage`
+  claims to catch a stage missing from the studio's progress table; it actually asserts
+  that one string appears in `narrate.ts`. A node added to either graph would not be
+  caught. Both also read that file with the platform encoding, which meant they could not
+  run on Windows at all until 2 September.
 - **Local model dependence.** Grounding and citation behaviour was tuned against
   `qwen/qwen3.5-9b` through LM Studio. Behaviour on a different quality-tier model is
   untested.
@@ -205,19 +220,26 @@ the GitHub rename), `HANDOFF.md`, `HOME_DESIGN_BRIEF.md`, and `handover/`.
 
 ## What is open right now
 
-Verified against the code on 31 August 2026, not carried over from a checkbox.
+Phase 0 of `ROADMAP.md` is done: the site map collapses, ruff is clean and enforced,
+`include_diagrams` is honoured, and these numbers are current. What remains:
 
-1. **`diagram` runs on every composition.** `graph.add_edge("linker", "diagram")` is
-   unconditional in `composition_workflow.py`. Measured at 64s, ~15% of a run. Should be
-   opt-in per doc type. Was E2.
-2. **Ruff is not in CI, and CI would fail if enabled.** `.github/workflows/ci.yml` is
-   `workflow_dispatch`-only and still lints `app/`, a path that has not existed since the
-   rename to `codelith/`. The tree has 375 findings, 201 auto-fixable; only 10 are the
-   SQLAlchemy `Mapped["Project"]` F821 false positives, all under `codelith/models/`, so
-   one per-directory ignore clears the blocker that was thought to be the whole problem.
-3. **The MCP server is pinned below 2.0, not ported.** See *Where it is weak*.
-4. **Quality returns from `feat/qa`** once Documentation and Ask settle.
-5. **Run Quality against a repository that is not `neurosurfer`.** Blocked on 4.
+1. **The MCP server is pinned below 2.0, not ported.** See *Where it is weak*. Roadmap
+   Phase 3 does this, once Phase 1 gives us a client to verify against.
+2. **Quality returns from `feat/qa`** once Documentation and Ask settle.
+3. **Run Quality against a repository that is not `neurosurfer`.** Blocked on 2 —
+   though `enigma` has now been analysed end to end, so the *analysis* pipeline is no
+   longer measured on a single repository.
+4. **Jobs stuck `running` after a hard kill keep their pages claimed.** A worker killed
+   outright runs no handler. Pages whose job is *terminal* are now released at worker
+   start, but telling "abandoned" from "running on another worker" needs a lease, and
+   guessing wrong kills live work.
+5. **Duplicate headings collide on their anchor.** Two `## Entry Points` in one page
+   produce one id, so both table-of-contents entries jump to the first. Fixing it means
+   agreeing a de-duplication rule between `anchorId` in `ui/src/app/lib/site.ts` and
+   `anchor_id` in `codelith/knowledge/sites.py`, which the linker also validates against
+   — three places that must produce identical strings.
+
+Everything else lives in `ROADMAP.md`, which is where the work goes next.
 
 Settled since the last snapshot, recorded so it is not re-opened:
 
@@ -230,8 +252,16 @@ Settled since the last snapshot, recorded so it is not re-opened:
   `ReActMixin` survives only in `agents/writer.py`, reachable solely from the legacy
   single-shot pipeline, which is kept alive on purpose.
 - **The Home page redesign shipped** on 10 August in `0971302`.
-- **The review gate works** as of 31 August. See *The review gate* below.
 - **The GitHub repository was renamed** to `codelith`.
+- **The review gate works.** See below.
+- **Compose was merged into the documentation site.** One inventory, not two; format is
+  chosen on export rather than before writing.
+- **`diagram` was never the 64-second problem it was recorded as.** That measurement
+  predates `DIAGRAMS_ENABLED` defaulting to false. Model-written diagrams have been off
+  by default for some time; what the stage costs now is a few seconds of graph-derived
+  work. The real defect was `include_diagrams`, which sat in `JobConfig` from the
+  beginning and was never read by anything — an API that accepted a flag and ignored it.
+  It is honoured now.
 
 ## The review gate
 
