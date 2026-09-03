@@ -566,3 +566,54 @@ export interface AnalysisPreview {
   reason: string | null
   summary: string
 }
+
+/* ── Model registry: what this installation can talk to ──────────────────── */
+
+export type Provider = 'openai' | 'anthropic' | 'local'
+export type Tier = 'quality' | 'fast' | 'embedding'
+
+export interface ConfiguredModel {
+  id: number
+  label: string
+  provider: Provider
+  model: string
+  /** `local` only. The hosted providers have a fixed endpoint. */
+  base_url: string | null
+  context_window: number | null
+  /** Whether a key is stored. Never the key itself. */
+  api_key_set: boolean
+  last_test: {
+    ok?: boolean
+    detail?: string
+    dimensions?: number | null
+    served_model?: string | null
+    at?: string
+  }
+  /** Tiers currently pointed at this one. */
+  serving: Tier[]
+}
+
+export interface ModelRegistry {
+  models: ConfiguredModel[]
+  /** A tier missing from this still resolves from `.env`. */
+  tiers: Partial<Record<Tier, number>>
+  unassigned: Tier[]
+}
+
+export interface ModelTest {
+  ok: boolean
+  detail: string
+  dimensions: number | null
+  served_model: string | null
+}
+
+/** What a form sends. `api_key` blank on an update means "leave the stored one". */
+export interface ModelDraft {
+  label: string
+  provider: Provider
+  model: string
+  base_url?: string | null
+  context_window?: number | null
+  api_key?: string | null
+  tier_hint?: Tier | null
+}

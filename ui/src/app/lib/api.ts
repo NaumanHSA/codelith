@@ -12,6 +12,7 @@ import type {
   DocType, OutputFormat, SourceType,
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
+  ModelRegistry, ModelDraft, ModelTest, Tier,
 } from './types'
 
 export const API_BASE =
@@ -550,4 +551,32 @@ export const api = {
   /** Read-only: models are configured in `.env` and resolved at call time. The
    *  PUT that used to sit beside this wrote a row nothing read back. */
   llmSettings: () => request<LLMSettings>('/settings/llm'),
+
+  /* --- the model registry: what this installation can talk to --- */
+  models: (signal?: AbortSignal) =>
+    request<ModelRegistry>('/settings/models', { signal }),
+
+  addModel: (body: ModelDraft) =>
+    request<ModelRegistry>('/settings/models', { method: 'POST', body }),
+
+  updateModel: (id: number, body: ModelDraft) =>
+    request<ModelRegistry>(`/settings/models/${id}`, { method: 'PUT', body }),
+
+  deleteModel: (id: number) =>
+    request<ModelRegistry>(`/settings/models/${id}`, { method: 'DELETE' }),
+
+  assignTier: (tier: Tier, model_id: number) =>
+    request<ModelRegistry>('/settings/models/tiers', {
+      method: 'PUT',
+      body: { tier, model_id },
+    }),
+
+  /** Places a real call against a stored endpoint. */
+  testModel: (id: number, tier: Tier) =>
+    request<ModelTest>(`/settings/models/${id}/test?tier=${tier}`, { method: 'POST' }),
+
+  /** Places a real call against fields that have not been saved yet — the useful
+   *  moment to learn an endpoint is unreachable is while the form is still open. */
+  testDraft: (body: ModelDraft) =>
+    request<ModelTest>('/settings/models/test', { method: 'POST', body }),
 }
