@@ -119,6 +119,7 @@ class KnowledgeService:
             roles=roles,
             entity_kinds=entity_kinds,
             suggested_doc_types=[DocTypeSuggestion(**s) for s in raw],
+            suggested_questions=list(kb.suggested_questions_json or []),
             top_modules=[
                 ModuleHighlight(
                     path=m.path, name=m.name, role=m.role, loc=m.loc, summary=m.summary

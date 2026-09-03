@@ -110,6 +110,10 @@ class KnowledgeBaseSummary(BaseModel):
     roles: dict[str, int] = Field(default_factory=dict)
     entity_kinds: dict[str, int] = Field(default_factory=dict)
     suggested_doc_types: list[DocTypeSuggestion] = Field(default_factory=list)
+    #: Questions worth asking about this codebase, written during analysis. Empty for
+    #: a reading taken before this existed, which the chat page treats as "offer
+    #: nothing" rather than falling back to generic ones.
+    suggested_questions: list[str] = Field(default_factory=list)
 
     # Evidence. Counts alone say "we did something"; these say *what we found*, which
     # is what makes the knowledge base feel real rather than a progress bar that ended.

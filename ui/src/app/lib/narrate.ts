@@ -22,6 +22,7 @@ export const EXPECTED_STAGES: Record<string, string[]> = {
     'architecture_synthesizer_agent',
     'narrative_writer_agent',
     'site_planner_agent',
+    'question_seeder_agent',
     'kb_persister_agent',
   ],
   // A revision is three nodes: it neither plans nor chooses what to write, because
@@ -76,6 +77,7 @@ const PURPOSE: Record<string, string> = {
   architecture_synthesizer: 'Assembling components into an architecture',
   narrative_writer: 'Drafting narrative topics from the evidence',
   site_planner: 'Planning the documentation site — sections and pages',
+  question_seeder: 'Writing the questions worth asking about this codebase',
   kb_persister: 'Committing the knowledge base',
   kb_loader: 'Loading the knowledge base for this commit',
   composition_strategy: 'Deciding what each document should cover',
@@ -163,6 +165,8 @@ const NARRATORS: Record<string, Narrator> = {
     return added ? `${base} · ${added} new` : base
   },
 
+  question_seeder: o =>
+    o.questions ? `${o.questions} questions written` : 'no questions written',
   kb_persister: o =>
     typeof o.status === 'string' ? `Knowledge base ${o.status}` : 'Knowledge base saved',
 

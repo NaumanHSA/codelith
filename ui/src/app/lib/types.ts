@@ -199,6 +199,10 @@ export interface KnowledgeBase {
   roles: Record<string, number> | null
   entity_kinds: Record<string, number> | null
   suggested_doc_types: { doc_type: DocType; confidence: number; reason: string }[] | null
+  /** Questions worth asking about this codebase, written during analysis. Empty for a
+   *  reading taken before this existed — the chat page then offers nothing rather than
+   *  falling back to generic ones that say nothing has been read. */
+  suggested_questions: string[] | null
   top_modules:
     | { path: string; name: string; role: ModuleRole; loc: number | null; summary: string | null }[]
     | null

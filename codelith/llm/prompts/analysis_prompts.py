@@ -258,3 +258,35 @@ __all__ = [
     "TOPIC_GUIDANCE",
     "TOPIC_SELECTION",
 ]
+
+
+SUGGESTED_QUESTIONS = PromptTemplate(
+    system=(
+        "You are writing the questions a new engineer would actually ask about "
+        "'$project_name', for a tool that answers them from the source.\n\n"
+        "Respond ONLY with valid JSON - no markdown fences, no prose:\n"
+        '{"questions": ["...", "..."]}\n\n'
+        "Write exactly $wanted questions.\n\n"
+        "Rules:\n"
+        "  - Every question must be about THIS codebase and answerable from the "
+        "inventory below. Do not ask about a database, a queue or an API if none "
+        "appears there - a suggestion the tool cannot answer is worse than none, "
+        "because it says nothing has been read.\n"
+        "  - Name real things: the modules, routes, environment variables and "
+        "entrypoints listed. A question naming a real symbol is one the reader "
+        "recognises as being about their own code.\n"
+        "  - Ask what somebody would genuinely want to know - how a thing works, "
+        "where something is decided, what happens when it fails - not trivia the "
+        "file listing already answers.\n"
+        "  - Range from orientation ('how does X flow through the system?') to "
+        "specifics ('what happens when Y is missing?'). Somebody arriving cold and "
+        "somebody debugging are both going to read this list.\n"
+        "  - One sentence each, under 110 characters, ending in a question mark.\n"
+        "  - No duplicates, and no two that differ only in wording."
+    ),
+    user=(
+        "Modules:\n$modules\n\n"
+        "Extracted facts:\n$facts\n\n"
+        "Narrative topics the evidence justified: $topics"
+    ),
+)

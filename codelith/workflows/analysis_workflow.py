@@ -28,6 +28,7 @@ from codelith.agents.analysis import (
     SitePlannerAgent,
     StructuredExtractorAgent,
 )
+from codelith.agents.analysis.question_seeder import QuestionSeederAgent
 from codelith.agents.repo_analyzer import RepoAnalyzerAgent
 from codelith.workflows.analysis_states import AnalysisState
 
@@ -90,6 +91,7 @@ class AnalysisWorkflow:
         graph.add_node("architecture_synthesizer", make_node(ArchitectureSynthesizerAgent))
         graph.add_node("narrative_writer", make_node(NarrativeWriterAgent))
         graph.add_node("site_planner", make_node(SitePlannerAgent))
+        graph.add_node("question_seeder", make_node(QuestionSeederAgent))
         graph.add_node("kb_persister", make_node(KBPersisterAgent))
 
         graph.set_entry_point("repo_analyzer")
@@ -105,7 +107,9 @@ class AnalysisWorkflow:
         # everything the others produced — summaries, architecture and narratives —
         # and it is the only stage whose output outlives this knowledge base.
         graph.add_edge("narrative_writer", "site_planner")
-        graph.add_edge("site_planner", "kb_persister")
+        # Last before persisting, so it sees the whole inventory the run built.
+        graph.add_edge("site_planner", "question_seeder")
+        graph.add_edge("question_seeder", "kb_persister")
         graph.add_edge("kb_persister", END)
 
         return graph.compile()

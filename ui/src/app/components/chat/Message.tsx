@@ -35,6 +35,8 @@ export function AssistantMessage({
   onOpenSources,
   sourcesOpen = false,
   onCitation,
+  followUps = [],
+  onAsk,
 }: {
   message: Pick<ChatMessage, 'content' | 'citations' | 'stripped' | 'evidence'>
   streaming?: boolean
@@ -45,6 +47,10 @@ export function AssistantMessage({
   sourcesOpen?: boolean
   /** A citation in the answer was clicked — open the panel at that source. */
   onCitation?: (ref: string) => void
+  /** Questions to offer under this answer. Empty for every answer but the newest —
+   *  three suggestions after each message in a long thread is a page of them. */
+  followUps?: string[]
+  onAsk?: (question: string) => void
 }) {
   const sources = message.evidence?.sources ?? []
   const counts = message.evidence?.counts ?? {}
@@ -88,6 +94,25 @@ export function AssistantMessage({
         </div>
       )}
 
+      {!streaming && !!followUps.length && onAsk && (
+        <div className="mt-3">
+          <span className="tag text-ink-dim">next</span>
+          <ul className="mt-1">
+            {followUps.map(q => (
+              <li key={q}>
+                <button
+                  type="button"
+                  onClick={() => onAsk(q)}
+                  className="group flex w-full items-baseline gap-2 py-[3px] text-left text-[11.5px] text-ink-mid transition-colors hover:text-hot-ink"
+                >
+                  <span className="text-hot opacity-50 group-hover:opacity-100">→</span>
+                  <span className="underline-offset-4 group-hover:underline">{q}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

@@ -77,6 +77,14 @@ class KnowledgeBase(Base, TimestampMixin):
     #: Kept here so a proposal can be inspected, diffed and re-merged without
     #: re-running the planner.
     site_map_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
+    #: Questions worth asking about *this* codebase, written while the analysis still
+    #: has the whole inventory in front of it. The chat page used to open with four
+    #: hardcoded ones — "How is the database initialised?" asked of a browser SDK with
+    #: no database — which is a worse first impression than no suggestions at all,
+    #: because it advertises that nothing has been read.
+    suggested_questions_json: Mapped[list] = mapped_column(
+        json_column(), default=list, nullable=False
+    )
     #: Repo-relative path → content digest, for every file this build read. The only
     #: thing that makes per-page staleness exact: on the next commit, a page is out
     #: of date exactly when one of the files it was written from has a different

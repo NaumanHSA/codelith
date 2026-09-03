@@ -24,12 +24,11 @@ import { useAsync } from '../../lib/hooks'
  * ------------------------------------------------------------------ */
 
 /** Real questions, taken from the set this substrate was measured against. */
-const SUGGESTIONS = [
-  'How is the database initialised?',
-  'Where is data stored?',
-  'How does a request flow through the system?',
-  'What external services does it talk to?',
-]
+/** How many of the stored questions to offer on an empty conversation, and how many
+ *  to offer as follow-ups after an answer. Fourteen are written during analysis; a
+ *  list that long is a menu nobody reads. */
+const OPENING = 5
+const FOLLOW_UPS = 3
 
 interface Live {
   question: string
@@ -70,6 +69,11 @@ export default function ChatPage() {
     [projectId],
   )
 
+  /** Written during analysis, about this repository. Empty for a reading taken
+   *  before that existed — in which case nothing is offered, because a generic
+   *  suggestion on this page advertises that the code has not been read. */
+  const suggestions = kb.data?.suggested_questions ?? []
+
   // `new` is a real state, not the absence of one. Without it, pressing New chat
   // and reloading would silently resume the conversation it was meant to leave.
   const threadParam = params.get('thread')
@@ -109,6 +113,23 @@ export default function ChatPage() {
   }, [projectId, wantedId, wantsNew])
 
   const messages = thread?.messages ?? []
+
+  /** Questions this conversation has not covered. Drawn from the same stored set
+   *  rather than generated per answer: it costs nothing, adds no latency, and every
+   *  one of them is still about this repository. A genuinely contextual follow-up
+   *  would need another model call after every reply, which is a lot to pay for a
+   *  suggestion somebody may not click. */
+  const unasked = useMemo(() => {
+    const asked = new Set(
+      messages.filter(m => m.role === 'user').map(m => m.content.trim().toLowerCase()),
+    )
+    return suggestions.filter(q => !asked.has(q.trim().toLowerCase()))
+  }, [suggestions, messages])
+
+  const lastAnswerId = useMemo(() => {
+    const answers = messages.filter(m => m.role === 'assistant')
+    return answers.length ? answers[answers.length - 1].id : null
+  }, [messages])
   const empty = messages.length === 0 && !live
 
   useEffect(() => {
@@ -280,7 +301,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 text-center">
             <h1 className="truncate text-[13.5px] leading-snug text-ink">
               {thread && messages.length ? thread.title : 'New conversation'}
             </h1>
@@ -363,18 +384,24 @@ export default function ChatPage() {
               autoFocus
             />
 
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map(s => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => send(s)}
-                  className="rounded-full border border-rule px-3 py-1.5 text-[11px] text-ink-mid transition-colors hover:border-hot hover:text-hot-ink"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            {/* One per line. As pills they wrapped into a paragraph of fragments —
+                readable only as shapes, and a question is a sentence you read. */}
+            {!!suggestions.length && (
+              <ul className="mt-5 border-t border-rule pt-3">
+                {suggestions.slice(0, OPENING).map(q => (
+                  <li key={q}>
+                    <button
+                      type="button"
+                      onClick={() => send(q)}
+                      className="group flex w-full items-baseline gap-2 py-[5px] text-left text-[12px] text-ink-mid transition-colors hover:text-hot-ink"
+                    >
+                      <span className="text-hot opacity-60 group-hover:opacity-100">→</span>
+                      <span className="underline-offset-4 group-hover:underline">{q}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       ) : (
@@ -389,6 +416,12 @@ export default function ChatPage() {
                   <AssistantMessage
                     key={m.id}
                     message={m}
+                    followUps={
+                      // Only under the newest answer: three suggestions after every
+                      // message in a long thread is a page of them.
+                      m.id === lastAnswerId ? unasked.slice(0, FOLLOW_UPS) : []
+                    }
+                    onAsk={send}
                     sourcesOpen={openSources === m.id}
                     onOpenSources={() => {
                       setFocusRef(null)

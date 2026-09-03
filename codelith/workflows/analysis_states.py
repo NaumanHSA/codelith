@@ -41,6 +41,9 @@ class AnalysisState(TypedDict, total=False):
     graph_stats: dict
 
     indexed_chunks: int
+    #: Questions worth asking about this codebase, written from the inventory once it
+    #: exists. Empty when the seeding call failed — a convenience, never a blocker.
+    suggested_questions: list[str]
     #: `{"model": str, "dimensions": int}` — which embedding model produced this
     #: reading's vectors. Recorded rather than configured, because a vector is only
     #: comparable to others from the same model. See `knowledge/embedding_guard.py`.
