@@ -51,8 +51,9 @@ class ModelIn(BaseModel):
     #: Write-only. Blank on an update means "leave the stored key alone", because the
     #: API never returns it and every form round-trip would otherwise wipe it.
     api_key: str | None = None
-    #: `embedding` relaxes the context-window requirement — nothing budgets against a
-    #: window for a request that is never trimmed.
+    #: Which tier this is being added for. Decides the endpoint's kind, and relaxes
+    #: the context-window requirement for an embedding one — nothing budgets against
+    #: a window for a request that is never trimmed.
     tier_hint: Tier | None = None
 
 
@@ -61,6 +62,8 @@ class ModelOut(BaseModel):
     label: str
     provider: str
     model: str
+    #: `chat` | `embedding` — which tiers may be pointed at it.
+    kind: str
     base_url: str | None
     context_window: int | None
     #: Whether a key is stored — never the key.
@@ -91,6 +94,7 @@ def _out(row, serving: list[str]) -> ModelOut:
         label=row.label,
         provider=row.provider,
         model=row.model,
+        kind=row.kind,
         base_url=row.base_url,
         context_window=row.context_window,
         api_key_set=bool(row.api_key_encrypted),

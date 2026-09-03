@@ -13,9 +13,12 @@ front page is that there is nothing to migrate; that has to hold on the second r
 well as the first. `create_all` is additive — it creates what is absent and touches
 nothing that exists — so this is safe to run every time.
 
-What it does **not** do is alter a table that has changed shape. A column added to an
-existing model still needs a migration, and `alembic upgrade head` is still how that
-travels. This closes the common case, not every case.
+`create_all` cannot alter a table that has changed shape, though, so the migrations are
+then applied as well. That is what makes "there is no migrate step" true rather than
+nearly true: adding a table and adding a column are the same event to somebody
+installing a new version, and only one of them used to work. The database is a file
+this process owns, so running its own migrations is not a liberty — it is the only
+thing that could.
 
 It also repairs an unresolvable stamp. Fourteen migrations were squashed into one
 baseline, which left every database created before that pointing at a revision no
@@ -88,6 +91,18 @@ async def ensure_schema(engine: AsyncEngine) -> bool:
             "schema_version_repaired",
             now=repaired,
             hint="the recorded revision was squashed away; the marker was corrected",
+        )
+
+    # Columns, which `create_all` cannot add. Logged rather than raised: a schema one
+    # migration behind still serves most of the application, and refusing to start
+    # leaves somebody with no interface and no way to read why.
+    try:
+        await asyncio.to_thread(command.upgrade, _alembic_config(url), "head")
+    except Exception as exc:
+        logger.error(
+            "schema_upgrade_failed",
+            error=str(exc),
+            hint="run `alembic upgrade head` by hand; some features will misbehave",
         )
     return False
 

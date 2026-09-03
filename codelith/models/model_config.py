@@ -56,6 +56,12 @@ class ModelConfig(Base):
     #: The model id as its endpoint names it.
     model: Mapped[str] = mapped_column(String(200), nullable=False)
 
+    #: `chat` | `embedding`. Stored, because nothing else can tell them apart: the
+    #: fields are identical and only the call differs. Without it the quality tier's
+    #: dropdown offers an embedding endpoint, which will simply refuse every request
+    #: it is ever sent — and the settings page has no way to know that in advance.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="chat")
+
     #: `local` only. The two hosted providers have a fixed endpoint, and making it
     #: settable is how an API key once ended up being posted to LM Studio.
     base_url: Mapped[str | None] = mapped_column(Text, nullable=True)

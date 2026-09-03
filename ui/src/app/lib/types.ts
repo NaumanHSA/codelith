@@ -577,6 +577,9 @@ export interface ConfiguredModel {
   label: string
   provider: Provider
   model: string
+  /** `chat` | `embedding` — which tiers may be pointed at it. Stored, because the
+   *  fields are identical and only the call differs. */
+  kind: 'chat' | 'embedding'
   /** `local` only. The hosted providers have a fixed endpoint. */
   base_url: string | null
   context_window: number | null

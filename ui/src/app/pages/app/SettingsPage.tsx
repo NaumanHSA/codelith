@@ -9,17 +9,21 @@ import ModelForm from '../../components/settings/ModelForm'
 /* ------------------------------------------------------------------ *
  * The models this installation talks to.
  *
- * This page was a form that saved to a database row nothing read back:
- * model configuration lived in `.env` and was resolved at call time, so
- * the page could show one thing while jobs ran on another. It reports
- * and edits the real configuration now, and a change takes effect on
- * the next call without a restart.
+ * One section per tier, and each owns the endpoints that could serve
+ * it. There is no separate library list and no separate "in effect"
+ * summary: both said again, further down, what the sections already
+ * showed, and a page that reports the same fact twice invites the
+ * reader to check whether the two agree.
  *
- * Two lists, because they answer two questions. What is *available* is
- * a library you add to and keep; what is *in use* is one choice per
- * tier. Keeping them apart is what makes switching cheap — three
- * configured quality models and a dropdown, rather than editing one set
- * of fields and losing what was there.
+ * Rows rather than a dropdown, because selecting is not the only thing
+ * you do to a model. With a dropdown, editing one you had not selected
+ * meant selecting it first — which would have changed what the tier
+ * runs on, as a side effect of wanting to read it.
+ *
+ * Chat and embedding endpoints are filtered apart. They take identical
+ * fields and answer different calls, so nothing but a stored `kind`
+ * can tell them apart, and offering the wrong one produces a tier that
+ * refuses every request it is ever sent.
  * ------------------------------------------------------------------ */
 
 const TIERS: { id: Tier; index: string; label: string; blurb: string }[] = [
@@ -33,7 +37,7 @@ const TIERS: { id: Tier; index: string; label: string; blurb: string }[] = [
     id: 'fast',
     index: '02',
     label: 'Fast',
-    blurb: 'Classifies, extracts, summarises. Thousands of short calls.',
+    blurb: 'Classifies, extracts, summarises. Thousands of short calls where a small model is the right tool.',
   },
   {
     id: 'embedding',
@@ -50,44 +54,60 @@ const PROVIDER_LABEL: Record<string, string> = {
   local: 'openai-compatible',
 }
 
-function TestBadge({ model }: { model: ConfiguredModel }) {
-  const t = model.last_test
-  if (t?.ok === undefined) return <span className="tag text-ink-dim">untested</span>
-  return (
-    <span className={`tag ${t.ok ? 'text-ok' : 'text-bad'}`} title={t.detail}>
-      {t.ok ? '✓ connected' : '✕ failed'}
-    </span>
-  )
-}
+const kindFor = (tier: Tier) => (tier === 'embedding' ? 'embedding' : 'chat')
 
 function ModelRow({
   model,
+  selected,
+  onSelect,
   onEdit,
   onTest,
   onDelete,
   testing,
 }: {
   model: ConfiguredModel
+  selected: boolean
+  onSelect: () => void
   onEdit: () => void
   onTest: () => void
   onDelete: () => void
   testing: boolean
 }) {
+  const t = model.last_test
   return (
-    <li className="border-b border-rule px-3 py-2.5 last:border-b-0">
-      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-[12.5px] font-semibold text-ink">{model.label}</span>
+    <li
+      className={`border-b border-rule last:border-b-0 ${selected ? 'bg-hot-wash/50' : ''}`}
+    >
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2.5">
+        <button
+          onClick={onSelect}
+          title={selected ? 'Serving this tier' : 'Use this one for this tier'}
+          className="flex items-center gap-2"
+        >
+          <span
+            className={`block size-[11px] shrink-0 rounded-full border ${
+              selected ? 'border-hot bg-hot' : 'border-rule bg-panel hover:border-ink'
+            }`}
+          />
+          <span
+            className={`text-[12.5px] ${selected ? 'font-semibold text-hot-ink' : 'text-ink'}`}
+          >
+            {model.label}
+          </span>
+        </button>
         <span className="tag border border-rule bg-sunk px-1.5 text-ink-dim">
           {PROVIDER_LABEL[model.provider] ?? model.provider}
         </span>
-        <span className="tag text-ink-mid">{model.model}</span>
-        {!!model.serving.length && (
-          <span className="tag border border-hot-edge bg-hot-wash px-1.5 text-hot-ink">
-            serving {model.serving.join(' · ')}
+        <span className="tag truncate text-ink-mid">{model.model}</span>
+        {t?.ok === true && <span className="tag text-ok">✓ connected</span>}
+        {t?.ok === false && (
+          <span className="tag text-bad" title={t.detail}>
+            ✕ failed
           </span>
         )}
-        <TestBadge model={model} />
-        <span className="ml-auto flex gap-1.5">
+        {t?.ok === undefined && <span className="tag text-ink-dim">untested</span>}
+
+        <span className="ml-auto flex shrink-0 gap-2">
           <button
             onClick={onTest}
             disabled={testing}
@@ -103,13 +123,14 @@ function ModelRow({
           </button>
           <button
             onClick={onDelete}
+            title={selected ? 'Point this tier elsewhere first' : 'Remove this endpoint'}
             className="tag text-ink-dim underline-offset-2 hover:text-bad hover:underline"
           >
             remove
           </button>
         </span>
       </div>
-      <div className="mt-1 flex flex-wrap items-baseline gap-x-3 text-[11px] text-ink-dim">
+      <div className="flex flex-wrap items-baseline gap-x-3 px-3 pb-2 text-[11px] text-ink-dim">
         {model.base_url && <span>{model.base_url}</span>}
         {model.context_window ? <span>context {model.context_window.toLocaleString()}</span> : null}
         {model.provider !== 'local' && (
@@ -117,10 +138,8 @@ function ModelRow({
             {model.api_key_set ? 'key stored' : 'no key — this will not work'}
           </span>
         )}
-        {model.last_test?.dimensions ? <span>{model.last_test.dimensions} dims</span> : null}
-        {model.last_test?.detail && !model.last_test.ok && (
-          <span className="text-bad">{model.last_test.detail}</span>
-        )}
+        {t?.dimensions ? <span>{t.dimensions} dims</span> : null}
+        {t?.ok === false && t.detail && <span className="text-bad">{t.detail}</span>}
       </div>
     </li>
   )
@@ -128,12 +147,12 @@ function ModelRow({
 
 export default function SettingsPage() {
   const reg = useAsync<ModelRegistry>(s => api.models(s), [])
-  // What the next call will actually use — assignments and `.env` fallback already
-  // combined. The page is about configuration; this is the one panel that reports
-  // consequence, and without it "using .env" is a claim the reader cannot check.
+  // Only read for the `.env` fallback line, which is the one thing a tier section
+  // cannot say for itself: with nothing assigned, what runs is whatever the file
+  // says, and the section has no way to know what that is.
   const live = useAsync<LLMSettings>(() => api.llmSettings(), [])
   const [adding, setAdding] = useState<Tier | null>(null)
-  const [editing, setEditing] = useState<ConfiguredModel | null>(null)
+  const [editing, setEditing] = useState<{ model: ConfiguredModel; tier: Tier } | null>(null)
   const [testing, setTesting] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -150,13 +169,8 @@ export default function SettingsPage() {
     }
   }
 
-  const assign = (tier: Tier, id: number) => void act(() => api.assignTier(tier, id))
-
-  async function test(model: ConfiguredModel) {
+  async function test(model: ConfiguredModel, tier: Tier) {
     setTesting(model.id)
-    // Test against the tier it serves, so an embedding endpoint gets an embedding
-    // call rather than a chat completion it would refuse.
-    const tier = model.serving[0] ?? 'quality'
     await act(() => api.testModel(model.id, tier))
     setTesting(null)
   }
@@ -169,9 +183,9 @@ export default function SettingsPage() {
         <div className="flex items-start gap-2.5">
           <span className="mt-1 block size-[7px] shrink-0 rotate-45 bg-hot" />
           <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
-            Add the endpoints you have, then point each tier at one. Changes apply to the
-            next call — nothing needs restarting. A tier with nothing assigned falls back
-            to whatever <code className="text-hot-ink">.env</code> says, so an existing
+            Add the endpoints you have and pick one per tier. Changes apply to the next
+            call — nothing needs restarting. A tier with nothing selected falls back to
+            whatever <code className="text-hot-ink">.env</code> says, so an existing
             install keeps working until you choose otherwise.
           </p>
         </div>
@@ -185,103 +199,69 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-4">
           {TIERS.map(tier => {
             const selected = data.tiers[tier.id]
-            // An embedding tier cannot be served by a chat endpoint and the reverse is
-            // just as wrong, but nothing here can tell them apart from the fields
-            // alone — so every model is offered and the test is what finds it out.
+            // Only endpoints that can answer this tier's calls.
+            const candidates = data.models.filter(m => m.kind === kindFor(tier.id))
+            const fallbackModel = live.data?.[`${tier.id}_model` as keyof LLMSettings]
+            const fallbackProvider = live.data?.[`${tier.id}_provider` as keyof LLMSettings]
+
             return (
               <Panel
                 key={tier.id}
                 title={`${tier.label} model`}
                 index={tier.index}
                 action={
-                  selected ? null : (
-                    <span className="tag text-warn">using .env</span>
-                  )
+                  <button
+                    onClick={() => setAdding(tier.id)}
+                    className="tag border border-rule px-2 py-1 text-ink-mid transition-colors hover:border-ink hover:text-ink"
+                  >
+                    + Add a model
+                  </button>
                 }
               >
-                <p className="px-3 pt-2.5 font-sans text-[11.5px] leading-relaxed text-ink-mid">
+                <p className="px-3 pt-2.5 pb-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
                   {tier.blurb}
                 </p>
-                <div className="flex flex-wrap items-center gap-2 px-3 pt-2 pb-3">
-                  <select
-                    value={selected ?? ''}
-                    onChange={e =>
-                      e.target.value && assign(tier.id, Number(e.target.value))
-                    }
-                    className="border border-rule bg-panel px-2 py-1.5 font-mono text-[12px] text-ink focus:border-hot focus:outline-none"
-                  >
-                    <option value="">— nothing selected —</option>
-                    {data.models.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.label} ({m.model})
-                      </option>
-                    ))}
-                  </select>
-                  <Button variant="ghost" onClick={() => setAdding(tier.id)}>
-                    + Add a model
-                  </Button>
-                </div>
+
+                {candidates.length === 0 ? (
+                  <div className="border-t border-rule px-3 py-3">
+                    <p className="font-sans text-[12px] text-ink-mid">
+                      Nothing configured for this tier yet.
+                    </p>
+                    {fallbackModel && (
+                      <p className="mt-1 font-sans text-[11.5px] text-warn">
+                        Falling back to <code>.env</code>: {String(fallbackModel)} (
+                        {String(fallbackProvider)}).
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <ul className="border-t border-rule">
+                      {candidates.map(m => (
+                        <ModelRow
+                          key={m.id}
+                          model={m}
+                          selected={selected === m.id}
+                          testing={testing === m.id}
+                          onSelect={() => void act(() => api.assignTier(tier.id, m.id))}
+                          onEdit={() => setEditing({ model: m, tier: tier.id })}
+                          onTest={() => void test(m, tier.id)}
+                          onDelete={() => void act(() => api.deleteModel(m.id))}
+                        />
+                      ))}
+                    </ul>
+                    {!selected && fallbackModel && (
+                      <p className="border-t border-rule bg-warn-wash px-3 py-2 font-sans text-[11.5px] text-warn">
+                        None of these is selected, so this tier is still using{' '}
+                        <code>.env</code>: {String(fallbackModel)} (
+                        {String(fallbackProvider)}).
+                      </p>
+                    )}
+                  </>
+                )}
               </Panel>
             )
           })}
-
-          <Panel
-            title="In effect right now"
-            index="00"
-            action={<span className="tag text-ink-dim">what the next call uses</span>}
-          >
-            {live.data ? (
-              <ul>
-                {TIERS.map(t => {
-                  const provider = live.data![`${t.id}_provider` as keyof LLMSettings]
-                  const model = live.data![`${t.id}_model` as keyof LLMSettings]
-                  const url = live.data![`${t.id}_base_url` as keyof LLMSettings]
-                  return (
-                    <li
-                      key={t.id}
-                      className="flex flex-wrap items-baseline gap-x-2.5 border-b border-rule px-3 py-1.5 last:border-b-0"
-                    >
-                      <span className="tag w-[74px] shrink-0 text-ink-dim">{t.id}</span>
-                      <span className="text-[12px] text-ink">{String(model)}</span>
-                      <span className="tag text-ink-dim">{String(provider)}</span>
-                      <span className="tag ml-auto truncate text-ink-dim">{String(url)}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : (
-              <p className="px-3 py-2.5 font-sans text-[11.5px] text-ink-dim">
-                Reading the resolved configuration…
-              </p>
-            )}
-          </Panel>
-
-          <Panel
-            title="Configured endpoints"
-            index="04"
-            action={<span className="tag text-ink-dim">{data.models.length}</span>}
-          >
-            {data.models.length === 0 ? (
-              <p className="px-3 py-4 font-sans text-[12px] text-ink-mid">
-                Nothing configured yet, so every tier is reading{' '}
-                <code className="text-hot-ink">.env</code>. Add one above and it becomes
-                selectable for any tier.
-              </p>
-            ) : (
-              <ul>
-                {data.models.map(m => (
-                  <ModelRow
-                    key={m.id}
-                    model={m}
-                    testing={testing === m.id}
-                    onEdit={() => setEditing(m)}
-                    onTest={() => void test(m)}
-                    onDelete={() => void act(() => api.deleteModel(m.id))}
-                  />
-                ))}
-              </ul>
-            )}
-          </Panel>
         </div>
       )}
 
@@ -291,16 +271,17 @@ export default function SettingsPage() {
           setAdding(null)
           setEditing(null)
         }}
-        title={editing ? `Edit ${editing.label}` : 'Add a model'}
+        title={editing ? `Edit ${editing.model.label}` : 'Add a model'}
         width={560}
       >
         <ModelForm
-          editing={editing}
-          tierHint={editing?.serving[0] ?? adding ?? 'quality'}
+          editing={editing?.model ?? null}
+          tierHint={editing?.tier ?? adding ?? 'quality'}
           onDone={() => {
             setAdding(null)
             setEditing(null)
             reg.reload()
+            live.reload()
           }}
           onCancel={() => {
             setAdding(null)

@@ -50,6 +50,17 @@ logger = structlog.get_logger(__name__)
 PROVIDERS = (OPENAI, "anthropic", LOCAL)
 TIERS = ("quality", "fast", "embedding")
 
+#: What a configured endpoint is for. An embedding model cannot serve a chat tier and
+#: a chat model cannot serve the embedding one — they answer different calls — and
+#: nothing in the stored fields distinguishes them, so it is recorded.
+CHAT, EMBEDDING_KIND = "chat", "embedding"
+
+
+def kind_for_tier(tier: str | None) -> str:
+    """Which kind of endpoint a tier needs."""
+    return EMBEDDING_KIND if tier == EMBEDDING else CHAT
+
+
 #: Where each hosted provider talks. Not settable — see the module docstring.
 _FIXED_ENDPOINT = {OPENAI: OPENAI_BASE_URL, "anthropic": ANTHROPIC_BASE_URL}
 
@@ -165,7 +176,18 @@ class ModelRegistry:
     async def assign(self, tier: str, config_id: int) -> None:
         if tier not in TIERS:
             raise ValidationError(f"Unknown tier '{tier}'. Expected one of {', '.join(TIERS)}.")
-        await self.get(config_id)  # 404s rather than storing a dangling id
+        row = await self.get(config_id)  # 404s rather than storing a dangling id
+
+        # The settings page only offers endpoints of the right kind, but a filtered
+        # dropdown is a convenience and not a rule. An embedding model pointed at the
+        # quality tier refuses every request it is ever sent, and it would do so from
+        # inside a job rather than here.
+        wanted = kind_for_tier(tier)
+        if row.kind != wanted:
+            raise ValidationError(
+                f"'{row.label}' is an {row.kind} endpoint and the {tier} tier needs "
+                f"a {wanted} one. They answer different calls."
+            )
 
         existing = await self.db.get(TierAssignment, tier)
         if existing is None:
@@ -200,7 +222,12 @@ class ModelRegistry:
         if not model:
             raise ValidationError("A model name is required.")
 
-        out: dict = {"label": label, "provider": provider, "model": model}
+        kind = str(
+            fields.get("kind")
+            or (existing.kind if existing else "")
+            or kind_for_tier(fields.get("tier_hint"))
+        )
+        out: dict = {"label": label, "provider": provider, "model": model, "kind": kind}
         if "api_key" in fields:
             out["api_key"] = str(fields.get("api_key") or "").strip()
 
@@ -217,7 +244,7 @@ class ModelRegistry:
                     f"gateway are all different addresses. Default: {LOCAL_BASE_URL}"
                 )
             # Embeddings are never trimmed, so nothing budgets against a window.
-            if fields.get("tier_hint") != EMBEDDING and not window:
+            if kind != EMBEDDING_KIND and not window:
                 raise ValidationError(
                     "A local endpoint needs a context window. Prompts are budgeted "
                     "against it, and without one there is no room to reserve for "
