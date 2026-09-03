@@ -14,9 +14,7 @@ dependencies = [
 
     # Database
     "sqlalchemy[asyncio]>=2.0.36",
-    # Solo mode runs the same schema on SQLite, and SQLAlchemy's async engine needs a
-    # driver for it. The one package that profile genuinely adds — the vector search
-    # it also needs is numpy, which is already here.
+    # The same schema on SQLite, and SQLAlchemy's async engine needs a driver for it.
     "aiosqlite>=0.20.0",
     "alembic>=1.14.0",
 
@@ -83,8 +81,15 @@ dependencies = [
     "markdown-it-py>=3.0.0",
     "openapi-spec-validator>=0.7.1",
 
-    # Vector search runs in this process over the embeddings stored in SQLite —
-    # numpy is what does the arithmetic.
+    # Vector search runs in this process over the embeddings stored in SQLite, and
+    # numpy is what does the arithmetic — `memory/vector_store.py` imports it directly.
+    #
+    # Declared rather than assumed. Two comments in this file used to say it was
+    # "already here", which was true only of a development machine that happened to
+    # have torch and transformers installed for other work. Nothing Codelith actually
+    # depends on pulls numpy in, so a clean `pip install -e .` would have installed a
+    # product whose retrieval fails on the first search.
+    "numpy>=1.26",
 
     # Graph DB
 
