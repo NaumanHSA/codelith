@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
-import type { ChatMessage, ChatSource, ChatThread, Project } from '../../lib/types'
+import type { ChatMessage, ChatSource, ChatThread, KnowledgeBase, Project } from '../../lib/types'
 import { AssistantMessage, UserMessage } from '../../components/chat/Message'
 import SourcesPanel from '../../components/chat/SourcesPanel'
 import { Composer } from '../../components/chat/Composer'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import { SkeletonPanel } from '../../components/States'
 import { useChatThreads } from '../../chat-threads'
+import { useAsync } from '../../lib/hooks'
 
 /* ------------------------------------------------------------------ *
  * Ask the codebase.
@@ -60,6 +61,14 @@ export default function ChatPage() {
 
   const projectId = Number(params.get('project')) || projects?.[0]?.id || null
   const project = projects?.find(p => p.id === projectId) ?? null
+
+  /** What the selected reading actually contains. The name alone does not say what
+   *  you are asking about, and most projects carry no description — this is the
+   *  substance that is always there. */
+  const kb = useAsync<KnowledgeBase | null>(
+    sig => (projectId ? api.knowledgeBase(projectId, sig) : Promise.resolve(null)),
+    [projectId],
+  )
 
   // `new` is a real state, not the absence of one. Without it, pressing New chat
   // and reloading would silently resume the conversation it was meant to leave.
@@ -220,18 +229,21 @@ export default function ChatPage() {
       {/* The bar had no ground of its own and its one control read as body text.
           A panel background, a rule under it and real padding give it a shelf to
           sit on; the actions are bordered so they look like things you press. */}
-      <header className="shrink-0 border-b border-rule bg-panel px-4 py-3">
-        <div className="mx-auto flex max-w-[980px] items-center gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <header className="shrink-0 border-b border-rule bg-panel px-4 py-2.5">
+        {/* Full width, not centred on 980px. The picker was the first thing on the
+            line and still landed in the middle of the screen, floating away from the
+            edge everything else in the studio is anchored to. */}
+        <div className="flex items-center gap-4">
+          <div className="flex min-w-0 shrink-0 flex-col gap-1">
             <div className="flex items-center gap-2">
-              <span className="tag shrink-0 text-ink-dim">Repository</span>
+              <span className="tag shrink-0 text-ink-dim">asking</span>
               <select
                 value={projectId ?? ''}
                 onChange={e => {
                   setParams({ project: e.target.value, thread: 'new' })
                   setThread(null)
                 }}
-                className="max-w-[240px] truncate border border-rule bg-paper px-2 py-[3px] text-[11.5px] text-ink outline-none focus:border-hot"
+                className="max-w-[260px] truncate border border-rule bg-paper px-2 py-[3px] text-[12px] font-semibold text-ink outline-none focus:border-hot"
               >
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>
@@ -240,9 +252,55 @@ export default function ChatPage() {
                 ))}
               </select>
             </div>
-            <h1 className="truncate text-[14px] leading-snug text-ink">
+            {/* What you are actually asking about. A name alone is not enough to tell
+                two analysed repositories apart, and the state matters more here than
+                anywhere: a question against a stale reading gets a stale answer. */}
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 pl-[52px] text-[10.5px] text-ink-dim">
+              {project?.kb_status && (
+                <span className={project.kb_status === 'stale' ? 'text-warn' : 'text-ok'}>
+                  {project.kb_status === 'stale' ? 'reading is stale' : 'analysed'}
+                </span>
+              )}
+              {kb.data?.knowledge_base && (
+                <>
+                  <span>{kb.data.module_count} modules</span>
+                  <span>{kb.data.entity_count} entities</span>
+                  {!!kb.data.knowledge_base.stats?.indexed_chunks && (
+                    <span>
+                      {kb.data.knowledge_base.stats.indexed_chunks.toLocaleString()} indexed
+                    </span>
+                  )}
+                  {kb.data.knowledge_base.commit_sha && (
+                    <span className="font-mono">
+                      @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[13.5px] leading-snug text-ink">
               {thread && messages.length ? thread.title : 'New conversation'}
             </h1>
+            {project?.description ? (
+              <p
+                className="truncate font-sans text-[11px] text-ink-mid"
+                title={project.description}
+              >
+                {project.description}
+              </p>
+            ) : (
+              project?.sources?.[0]?.url_or_path && (
+                <p
+                  className="truncate font-mono text-[10.5px] text-ink-dim"
+                  title={project.sources[0].url_or_path}
+                >
+                  {project.sources[0].url_or_path}
+                </p>
+              )
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
