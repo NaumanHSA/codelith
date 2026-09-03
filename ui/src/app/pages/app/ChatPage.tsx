@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import type { ChatMessage, ChatSource, ChatThread, Project } from '../../lib/types'
 import { AssistantMessage, UserMessage } from '../../components/chat/Message'
+import SourcesPanel from '../../components/chat/SourcesPanel'
 import { Composer } from '../../components/chat/Composer'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import { SkeletonPanel } from '../../components/States'
@@ -44,6 +45,9 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [draft, setDraft] = useState('')
+  /** Which answer's sources are open in the side panel, by message id. `-1` is the
+   *  one still streaming, which has no id yet. Null closes the panel. */
+  const [openSources, setOpenSources] = useState<number | null>(null)
   const [live, setLive] = useState<Live | null>(null)
   const abort = useRef<AbortController | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -313,14 +317,22 @@ export default function ChatPage() {
           </div>
         </div>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
             <div className="mx-auto flex max-w-[760px] flex-col gap-6">
               {messages.map(m =>
                 m.role === 'user' ? (
                   <UserMessage key={m.id} content={m.content} />
                 ) : (
-                  <AssistantMessage key={m.id} message={m} />
+                  <AssistantMessage
+                    key={m.id}
+                    message={m}
+                    sourcesOpen={openSources === m.id}
+                    onOpenSources={() =>
+                      setOpenSources(o => (o === m.id ? null : m.id))
+                    }
+                  />
                 ),
               )}
 
@@ -330,6 +342,8 @@ export default function ChatPage() {
                   {live.answer ? (
                     <AssistantMessage
                       streaming
+                      sourcesOpen={openSources === -1}
+                      onOpenSources={() => setOpenSources(o => (o === -1 ? null : -1))}
                       message={{
                         content: live.answer,
                         citations: [],
@@ -365,7 +379,32 @@ export default function ChatPage() {
               />
             </div>
           </div>
-        </>
+        </div>
+
+        {/* Beside the conversation, so the claim being checked stays on screen.
+            Only for the answer whose button was pressed — a panel showing "the
+            sources", unqualified, would be the sources of whichever answer
+            happened to be last. */}
+        {openSources !== null && projectId !== null && (() => {
+          const target =
+            openSources === -1
+              ? live && {
+                  evidence: { sources: live.sources, counts: live.counts },
+                  stripped: [] as string[],
+                }
+              : messages.find(m => m.id === openSources)
+          if (!target) return null
+          return (
+            <SourcesPanel
+              projectId={projectId}
+              sources={target.evidence?.sources ?? []}
+              counts={target.evidence?.counts ?? {}}
+              unverified={target.stripped ?? []}
+              onClose={() => setOpenSources(null)}
+            />
+          )
+        })()}
+        </div>
       )}
     </div>
   )

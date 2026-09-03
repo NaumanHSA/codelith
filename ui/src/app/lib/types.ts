@@ -374,6 +374,19 @@ export interface ChatSource {
   why: string
 }
 
+/** The material behind one citation, fetched on demand rather than stored on the
+ *  message — forty spans of several kilobytes each would multiply a conversation by
+ *  the size of the code it quoted. */
+export interface EvidenceBody {
+  path: string
+  start_line: number | null
+  end_line: number | null
+  content: string
+  /** The cited lines are no longer stored — the file has been re-chunked since. */
+  partial: boolean
+  language: string | null
+}
+
 export interface ChatMessage {
   id: number
   role: 'user' | 'assistant'

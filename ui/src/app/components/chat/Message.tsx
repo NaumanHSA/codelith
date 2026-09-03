@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Markdown } from '../Markdown'
 import type { ChatMessage } from '../../lib/types'
 
@@ -10,9 +9,10 @@ import type { ChatMessage } from '../../lib/types'
  * newlines, lists and pasted code in it, and rendering that as a single
  * run-on line loses the shape of their own question back at them.
  *
- * The evidence panel is collapsed by default. It is the reason to trust
- * the answer, and it is also forty lines of provenance nobody wants
- * between them and the next paragraph.
+ * Sources open in a panel beside the conversation, not under the answer.
+ * They are the reason to trust it — and forty lines of provenance
+ * between you and the next paragraph, which is why expanding them
+ * inline pushed the thing you were checking off the screen.
  * ------------------------------------------------------------------ */
 
 function Cursor() {
@@ -32,11 +32,17 @@ export function UserMessage({ content }: { content: string }) {
 export function AssistantMessage({
   message,
   streaming = false,
+  onOpenSources,
+  sourcesOpen = false,
 }: {
   message: Pick<ChatMessage, 'content' | 'citations' | 'stripped' | 'evidence'>
   streaming?: boolean
+  /** Opens the side panel for *this* answer. Sources used to expand inline, which
+   *  pushed the answer off screen to show what it came from — and the reason to
+   *  open them is almost always to check a claim you can still see. */
+  onOpenSources?: () => void
+  sourcesOpen?: boolean
 }) {
-  const [showSources, setShowSources] = useState(false)
   const sources = message.evidence?.sources ?? []
   const counts = message.evidence?.counts ?? {}
 
@@ -52,11 +58,14 @@ export function AssistantMessage({
           {!!sources.length && (
             <button
               type="button"
-              onClick={() => setShowSources(s => !s)}
-              className="text-ink-dim hover:text-hot-ink"
+              onClick={onOpenSources}
+              className={`tag border px-2 py-1 transition-colors ${
+                sourcesOpen
+                  ? 'border-hot bg-hot-wash text-hot-ink'
+                  : 'border-rule bg-panel text-ink-mid hover:border-ink hover:text-ink'
+              }`}
             >
-              {showSources ? '− hide' : '+'} {sources.length} source
-              {sources.length === 1 ? '' : 's'}
+              {sources.length} source{sources.length === 1 ? '' : 's'}
               {!!Object.keys(counts).length && (
                 <span className="ml-1.5 text-ink-dim">
                   ({Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(' · ')})
@@ -77,17 +86,6 @@ export function AssistantMessage({
         </div>
       )}
 
-      {showSources && (
-        <ul className="mt-2 space-y-1 border-l-2 border-rule pl-3">
-          {sources.map((s, i) => (
-            <li key={`${s.title}-${i}`} className="text-[11px]">
-              <span className="tag mr-1.5 text-ink-dim">{s.kind}</span>
-              <code className="text-ink-mid">{s.title}</code>
-              <span className="ml-1.5 text-ink-dim">— {s.why}</span>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 }

@@ -12,7 +12,7 @@ import type {
   DocType, OutputFormat, SourceType,
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
-  ModelRegistry, ModelDraft, ModelTest, Tier,
+  ModelRegistry, ModelDraft, ModelTest, Tier, EvidenceBody,
 } from './types'
 
 export const API_BASE =
@@ -551,6 +551,13 @@ export const api = {
   /** Read-only: models are configured in `.env` and resolved at call time. The
    *  PUT that used to sit beside this wrote a row nothing read back. */
   llmSettings: () => request<LLMSettings>('/settings/llm'),
+
+  /** The source behind one citation — `path/to/file.py:12-48`. */
+  evidence: (projectId: number, ref: string, signal?: AbortSignal) =>
+    request<EvidenceBody>(
+      `/projects/${projectId}/evidence?ref=${encodeURIComponent(ref)}`,
+      { signal },
+    ),
 
   /* --- the model registry: what this installation can talk to --- */
   models: (signal?: AbortSignal) =>

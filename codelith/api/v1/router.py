@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from codelith.api.v1.apps import router as apps_router
 from codelith.api.v1.auth import router as auth_router
+from codelith.api.v1.evidence import router as evidence_router
 from codelith.api.v1.jobs import router as job_router
 from codelith.api.v1.models_api import router as models_router
 from codelith.api.v1.organizations import router as org_router
@@ -24,6 +25,7 @@ v1_router.include_router(document_router)
 v1_router.include_router(chat_router)
 v1_router.include_router(drift_router)
 v1_router.include_router(preflight_router)
+v1_router.include_router(evidence_router)
 v1_router.include_router(apps_router)
 v1_router.include_router(chat_threads_router)
 v1_router.include_router(models_router)
