@@ -20,6 +20,24 @@ body {
   color: var(--on-hot);
 }
 
+/* Anything you can press says so.
+ *
+ * Tailwind's preflight sets `cursor: default` on buttons, which is correct for a
+ * `<button>` that looks like a button and wrong for the ones here that do not — a
+ * source row, a suggested question, a citation in an answer. Those read as text, and
+ * without a pointer there is nothing to tell you they are not. Set once rather than
+ * per component, because the one that gets forgotten is the one that looks least
+ * like a control and therefore needs it most.
+ *
+ * `:disabled` keeps the default: a control that cannot act should not invite a click.
+ */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+label:has(> input[type='checkbox']:not(:disabled)),
+summary {
+  cursor: pointer;
+}
+
 /* --- blueprint ground ------------------------------------------------- */
 .bp-grid {
   background-image:
@@ -313,6 +331,21 @@ body {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+/* Three of these run out of phase while retrieval is working. A single pulsing dot
+   reads as a rendering artefact, and this stage can take several seconds before the
+   first token — long enough that "is it working?" is a real question. */
+@keyframes chat-bounce {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  35% {
+    transform: translateY(-4px);
+    opacity: 1;
   }
 }
 @keyframes blink {

@@ -134,6 +134,13 @@ export default function ChatPage() {
     return suggestions.filter(q => !asked.has(q.trim().toLowerCase()))
   }, [suggestions, messages])
 
+  /** Whether the question being answered is already in `messages`. See where it is
+   *  used: the same question would otherwise be rendered twice mid-stream. */
+  const questionAlreadyStored = useMemo(() => {
+    const last = messages[messages.length - 1]
+    return !!live && !!last && last.role === 'user' && last.content === live.question
+  }, [messages, live])
+
   const lastAnswerId = useMemo(() => {
     const answers = messages.filter(m => m.role === 'assistant')
     return answers.length ? answers[answers.length - 1].id : null
@@ -299,7 +306,12 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="min-w-0 flex-1 text-center">
+          {/* Left-aligned to the conversation column, not centred on the window.
+              A title centred on the screen sits over the middle of the messages; the
+              same 760px column the answers are in is the line the eye is following,
+              so the title starts where they start. */}
+          <div className="min-w-0 flex-1 px-4">
+            <div className="mx-auto max-w-[760px]">
             <h1 className="truncate text-[13.5px] leading-snug text-ink">
               {thread && messages.length ? thread.title : 'New conversation'}
             </h1>
@@ -320,6 +332,7 @@ export default function ChatPage() {
                 </p>
               )
             )}
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -500,7 +513,12 @@ export default function ChatPage() {
 
               {live && (
                 <>
-                  <UserMessage content={live.question} />
+                  {/* The optimistic copy, only while the stored one has not arrived.
+                      Streaming puts the new thread id in the URL, which re-fetches the
+                      thread — and that fetch already contains the question, so both
+                      were on screen until the answer finished and the live block was
+                      cleared. */}
+                  {!questionAlreadyStored && <UserMessage content={live.question} />}
                   {live.answer ? (
                     <AssistantMessage
                       streaming
@@ -591,12 +609,27 @@ export default function ChatPage() {
 function Retrieving({ counts }: { counts: Record<string, number> }) {
   const found = Object.entries(counts)
   return (
-    <p className="flex items-center gap-2 text-[12px] text-ink-dim">
-      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-hot" />
-      {found.length
-        ? `Reading ${found.map(([k, v]) => `${v} ${k}`).join(', ')}…`
-        : 'Searching the codebase…'}
-    </p>
+    <div className="flex items-center gap-2.5">
+      {/* Three dots out of phase. One pulsing dot is indistinguishable from a
+          rendering artefact, and this stage can run for several seconds before a
+          token appears — long enough that "is it working?" is a real question. */}
+      <span className="flex items-center gap-1">
+        {[0, 1, 2].map(i => (
+          <span
+            key={i}
+            className="block size-[5px] rounded-full bg-hot"
+            style={{ animation: `chat-bounce 1.05s ease-in-out ${i * 0.16}s infinite` }}
+          />
+        ))}
+      </span>
+      <span className="text-[12px] text-ink-dim">
+        {found.length
+          ? `Reading ${found.map(([k, v]) => `${v} ${k}`).join(', ')}…`
+          : 'Searching the codebase…'}
+      </span>
+      {/* The counts arrive before the answer does, so this line changes as evidence
+          lands — the movement above says "running", this says what it is doing. */}
+    </div>
   )
 }
 
