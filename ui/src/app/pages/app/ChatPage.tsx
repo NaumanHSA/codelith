@@ -4,6 +4,7 @@ import { api, ApiError } from '../../lib/api'
 import type { ChatMessage, ChatSource, ChatThread, KnowledgeBase, Project } from '../../lib/types'
 import { AssistantMessage, UserMessage } from '../../components/chat/Message'
 import SourcesPanel from '../../components/chat/SourcesPanel'
+import RepositoryPicker from '../../components/chat/RepositoryPicker'
 import { Composer } from '../../components/chat/Composer'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import { SkeletonPanel } from '../../components/States'
@@ -360,32 +361,27 @@ export default function ChatPage() {
       ) : empty ? (
         /* Nothing said yet: the composer sits in the middle of the room. */
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
-          <div className="w-full max-w-[720px]">
-            {/* The choice belongs where the eye already is. In the header it was
-                above the fold and outside the column somebody is reading, so the
-                thing that decides what every answer is about read as chrome. */}
-            <div className="mb-5 flex flex-col items-center gap-2">
-              <select
-                value={projectId ?? ''}
-                onChange={e => {
-                  setParams({ project: e.target.value, thread: 'new' })
+          <div className="w-full max-w-[820px]">
+            {/* The choice belongs where the eye already is, and it needs to be
+                readable before it is made — in the header it was a name in a
+                drop-down that told you nothing about what you were choosing
+                between. */}
+            <div className="mb-6">
+              <RepositoryPicker
+                projects={projects}
+                selectedId={projectId}
+                onSelect={id => {
+                  setParams({ project: String(id), thread: 'new' })
                   setThread(null)
                 }}
-                className="max-w-full truncate border border-rule bg-panel px-3 py-1.5 text-center text-[13px] font-semibold text-ink outline-none transition-colors hover:border-ink focus:border-hot"
-              >
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              />
 
-              {/* What was found in it. A name is not enough to pick between two
-                  analysed repositories, and this is the same material the codebase
-                  page leads with — the reader has seen it before and recognises it. */}
+              {/* What was found in it. The same material the codebase page leads
+                  with, so the reader recognises it rather than parsing something
+                  new — a name alone does not distinguish two analysed repositories. */}
               {kb.data && (
-                <div className="flex flex-col items-center gap-1">
-                  <div className="flex flex-wrap items-baseline justify-center gap-x-2.5 text-[11px] text-ink-dim">
+                <div className="border border-t-0 border-rule bg-sunk/40 px-3 py-2.5">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] text-ink-dim">
                     <span className="text-ink">{kb.data.module_count} modules</span>
                     <span>{kb.data.entity_count} entities</span>
                     {!!kb.data.knowledge_base.stats?.indexed_chunks && (
@@ -398,30 +394,33 @@ export default function ChatPage() {
                         @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
                       </span>
                     )}
+                    {!!kb.data.languages?.length && (
+                      <span className="ml-auto flex flex-wrap gap-1">
+                        {kb.data.languages.map(l => (
+                          <span
+                            key={l}
+                            className="tag border border-hot-edge bg-hot-wash px-1.5 py-px text-hot-ink"
+                          >
+                            {l}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </div>
-                  {!!kb.data.languages?.length && (
-                    <div className="flex flex-wrap justify-center gap-1">
-                      {kb.data.languages.map(l => (
-                        <span
-                          key={l}
-                          className="tag border border-hot-edge bg-hot-wash px-1.5 py-px text-hot-ink"
-                        >
-                          {l}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {!!kb.data.entrypoints?.length && (
-                    <p className="max-w-[620px] text-center font-mono text-[10.5px] text-ink-dim">
-                      entry: {kb.data.entrypoints.slice(0, 3).join('  ·  ')}
+
+                  {/* The largest module's own summary. Not the project's
+                      `description`, which is empty on every project created without
+                      one — an accurate sentence about the biggest thing in the
+                      repository beats a blank line where a description should be. */}
+                  {kb.data.top_modules?.[0]?.summary && (
+                    <p className="mt-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
+                      {kb.data.top_modules[0].summary.split('. ').slice(0, 2).join('. ')}
                     </p>
                   )}
-                  {/* The largest module's own summary — the closest thing analysis
-                      wrote to a description, and better than the empty `description`
-                      most projects carry. */}
-                  {kb.data.top_modules?.[0]?.summary && (
-                    <p className="mt-1 max-w-[600px] text-center font-sans text-[11.5px] leading-relaxed text-ink-mid">
-                      {kb.data.top_modules[0].summary.split('. ').slice(0, 2).join('. ')}
+
+                  {!!kb.data.entrypoints?.length && (
+                    <p className="mt-1.5 truncate font-mono text-[10.5px] text-ink-dim">
+                      entry: {kb.data.entrypoints.slice(0, 3).join('  ·  ')}
                     </p>
                   )}
                 </div>
