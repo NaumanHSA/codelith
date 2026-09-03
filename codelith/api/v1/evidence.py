@@ -59,6 +59,36 @@ def _parse(ref: str) -> tuple[str, int | None, int | None]:
     return cleaned, None, None
 
 
+def _dedent(text: str) -> str:
+    """
+    Remove the indentation the excerpt all shares, and none of the rest.
+
+    A span cut from inside a function carries its enclosing indentation on every line
+    — measured on a real citation, sixteen characters of it, which is fifteen per cent
+    of the panel's width spent on nothing. Removing the *common* prefix reclaims that.
+
+    Not "remove the indentation", which was the tempting reading: relative indentation
+    is what says which lines are inside the `if`. Flattening it would make the excerpt
+    wrong rather than narrow.
+
+    Done here rather than when chunks are stored, and that is the substantive choice.
+    Stored chunks are the source of truth — they are what a model is given as evidence
+    and what a writer quotes, and they are addressed by line number. Dedenting them
+    would make the knowledge base disagree with the file it was read from, would need
+    a full re-analysis to take effect, and could not be undone. Presentation is where
+    the narrow panel is, so presentation is where the fix belongs.
+
+    Tabs are counted as characters, not expanded: mixing them with spaces is already a
+    problem in the file, and this must not invent an opinion about it.
+    """
+    lines = text.split("\n")
+    prefixes = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
+    common = min(prefixes, default=0)
+    if not common:
+        return text
+    return "\n".join(line[common:] if line.strip() else line.strip() for line in lines)
+
+
 class EvidenceOut(BaseModel):
     path: str
     start_line: int | None = None
@@ -171,7 +201,7 @@ async def read_evidence(
         # be a line count the reader could check and find wrong.
         start_line=first,
         end_line=last,
-        content=text,
+        content=_dedent(text),
         partial=partial,
         language=getattr(wanted[0], "language", None),
     )
