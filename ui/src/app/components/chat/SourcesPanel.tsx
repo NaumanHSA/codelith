@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ApiError } from '../../lib/api'
 import { Markdown } from '../Markdown'
 import type { ChatSource, EvidenceBody } from '../../lib/types'
@@ -93,27 +93,18 @@ function Source({
 }: {
   source: ChatSource
   projectId: number
-  /** Clicked in the answer — opens without being clicked again, and scrolls to
-   *  itself, because a reader who followed a citation should not have to find the
-   *  same reference a second time in a list of twenty-nine. */
+  /** The clicked citation also happens to be this row. Highlighted so it can be
+   *  found in the list — but not opened or scrolled to, because the pinned block
+   *  above is already showing it and two copies of the same excerpt fighting over
+   *  the scroll position is worse than one. */
   focused: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const row = useRef<HTMLLIElement>(null)
   const can = openable(source.kind)
-
-  useEffect(() => {
-    if (!focused) return
-    setOpen(true)
-    row.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [focused])
 
   return (
     <li
-      ref={row}
-      className={`border-b border-rule last:border-b-0 ${
-        focused ? 'bg-hot-wash/60' : ''
-      }`}
+      className={`border-b border-rule last:border-b-0 ${focused ? 'bg-hot-wash/50' : ''}`}
     >
       <button
         type="button"
@@ -136,12 +127,34 @@ function Source({
             {source.why}
           </span>
         </span>
-        {can && (
-          <span className="tag mt-px shrink-0 text-ink-dim">{open ? '−' : '+'}</span>
-        )}
+        {can && <span className="tag mt-px shrink-0 text-ink-dim">{open ? '−' : '+'}</span>}
       </button>
       {open && can && <Body projectId={projectId} refText={source.title} />}
     </li>
+  )
+}
+
+/** The reference a reader clicked, shown as itself.
+ *
+ *  Not found in the list — looked up directly. The model cites the lines it used and
+ *  the panel lists the chunks that were retrieved, and those are not the same ranges:
+ *  an answer citing `livenessLoop.js:177-194` sits inside a source row that says
+ *  `131-210`, and `defaults.js:39-57` inside one that says `1-57`. Matching titles
+ *  worked for four of six citations in a real answer and silently did nothing for the
+ *  other two.
+ *
+ *  So the click is honoured literally. You asked for 177-194; you get 177-194. */
+function Pinned({ projectId, refText }: { projectId: number; refText: string }) {
+  return (
+    <div className="border-b-2 border-hot bg-hot-wash/40">
+      <div className="flex items-center gap-2 px-2.5 pt-2">
+        <span className="tag border border-hot-edge bg-hot-wash px-1 text-hot-ink">cited</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink">{refText}</span>
+      </div>
+      {/* Keyed on the reference so clicking a second citation replaces this rather
+          than leaving the first one's text under a new heading. */}
+      <Body key={refText} projectId={projectId} refText={refText} />
+    </div>
   )
 }
 
@@ -162,7 +175,10 @@ export default function SourcesPanel({
   onClose: () => void
 }) {
   return (
-    <aside className="flex h-full min-h-0 w-[380px] shrink-0 flex-col border-l border-rule bg-panel">
+    // Overlays the conversation below 1280px and sits beside it above. A panel that
+    // only ever took its own column squeezed the answer it exists to explain; one
+    // that only ever floated would cover it on a wide screen for no reason.
+    <aside className="absolute inset-y-0 right-0 z-30 flex h-full min-h-0 w-[460px] max-w-[92vw] shrink-0 flex-col border-l border-rule bg-panel shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.35)] xl:relative xl:z-auto xl:shadow-none">
       <header className="flex items-center gap-2 border-b border-rule bg-sunk/60 px-3 py-2">
         <span className="block size-2 rotate-45 bg-hot" />
         <h2 className="text-[11.5px] font-bold tracking-tight text-ink">
@@ -197,7 +213,9 @@ export default function SourcesPanel({
         </p>
       )}
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {focusRef && <Pinned projectId={projectId} refText={focusRef} />}
+        <ul>
         {sources.map((s, i) => (
           <Source
             key={`${s.title}-${i}`}
@@ -206,7 +224,8 @@ export default function SourcesPanel({
             focused={!!focusRef && refKey(s.title) === refKey(focusRef)}
           />
         ))}
-      </ul>
+        </ul>
+      </div>
 
       <p className="border-t border-rule px-3 py-2 font-sans text-[10.5px] leading-snug text-ink-dim">
         Code and prose open to show the text they were read from. Entities, graph

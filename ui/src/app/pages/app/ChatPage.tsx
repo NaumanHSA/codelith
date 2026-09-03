@@ -320,7 +320,7 @@ export default function ChatPage() {
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
             <div className="mx-auto flex max-w-[760px] flex-col gap-6">
