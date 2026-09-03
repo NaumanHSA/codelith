@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { api, ApiError } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import type { ConfiguredModel, LLMSettings, ModelRegistry, Tier } from '../../lib/types'
-import { Button, Dialog, PageHead, Panel } from '../../components/ui'
+import { Dialog, PageHead, Panel } from '../../components/ui'
 import { ErrorState, SkeletonPanel } from '../../components/States'
 import ModelForm from '../../components/settings/ModelForm'
 
@@ -15,10 +15,15 @@ import ModelForm from '../../components/settings/ModelForm'
  * showed, and a page that reports the same fact twice invites the
  * reader to check whether the two agree.
  *
- * Rows rather than a dropdown, because selecting is not the only thing
- * you do to a model. With a dropdown, editing one you had not selected
- * meant selecting it first — which would have changed what the tier
- * runs on, as a side effect of wanting to read it.
+ * A dropdown, not a list of rows. Rows put every endpoint's actions
+ * within reach, and turned into a wall the moment there were more than
+ * a couple — a settings page is read far more often than it is edited,
+ * and the common case is one line per tier, not five.
+ *
+ * The cost is that the actions operate on whichever endpoint is
+ * selected, so editing one you are not using means selecting it first.
+ * That is worth it: you edit what you run, and a page that stays
+ * readable at ten endpoints beats one that saves a click at two.
  *
  * Chat and embedding endpoints are filtered apart. They take identical
  * fields and answer different calls, so nothing but a stored `kind`
@@ -56,92 +61,59 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 const kindFor = (tier: Tier) => (tier === 'embedding' ? 'embedding' : 'chat')
 
-function ModelRow({
-  model,
-  selected,
-  onSelect,
-  onEdit,
-  onTest,
-  onDelete,
-  testing,
+/** Small, bordered, and distinguishable from prose. These were plain text links
+ *  the same size as everything around them, which made the one destructive action
+ *  on the page look like a label. */
+function RowAction({
+  children,
+  onClick,
+  disabled,
+  tone = 'plain',
+  title,
 }: {
-  model: ConfiguredModel
-  selected: boolean
-  onSelect: () => void
-  onEdit: () => void
-  onTest: () => void
-  onDelete: () => void
-  testing: boolean
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+  tone?: 'plain' | 'bad'
+  title?: string
 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`tag border px-2 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        tone === 'bad'
+          ? 'border-bad/40 bg-bad-wash text-bad hover:border-bad hover:bg-bad hover:text-on-hot'
+          : 'border-rule bg-panel text-ink-mid hover:border-ink hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** What the selected endpoint is, under the dropdown that chose it. */
+function SelectedDetail({ model }: { model: ConfiguredModel }) {
   const t = model.last_test
   return (
-    <li
-      className={`border-b border-rule last:border-b-0 ${selected ? 'bg-hot-wash/50' : ''}`}
-    >
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2.5">
-        <button
-          onClick={onSelect}
-          title={selected ? 'Serving this tier' : 'Use this one for this tier'}
-          className="flex items-center gap-2"
-        >
-          <span
-            className={`block size-[11px] shrink-0 rounded-full border ${
-              selected ? 'border-hot bg-hot' : 'border-rule bg-panel hover:border-ink'
-            }`}
-          />
-          <span
-            className={`text-[12.5px] ${selected ? 'font-semibold text-hot-ink' : 'text-ink'}`}
-          >
-            {model.label}
-          </span>
-        </button>
-        <span className="tag border border-rule bg-sunk px-1.5 text-ink-dim">
-          {PROVIDER_LABEL[model.provider] ?? model.provider}
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 pb-2.5 text-[11px] text-ink-dim">
+      <span className="tag border border-rule bg-sunk px-1.5">
+        {PROVIDER_LABEL[model.provider] ?? model.provider}
+      </span>
+      {model.base_url && <span>{model.base_url}</span>}
+      {model.context_window ? <span>context {model.context_window.toLocaleString()}</span> : null}
+      {model.provider !== 'local' && (
+        <span className={model.api_key_set ? '' : 'text-warn'}>
+          {model.api_key_set ? 'key stored' : 'no key — this will not work'}
         </span>
-        <span className="tag truncate text-ink-mid">{model.model}</span>
-        {t?.ok === true && <span className="tag text-ok">✓ connected</span>}
-        {t?.ok === false && (
-          <span className="tag text-bad" title={t.detail}>
-            ✕ failed
-          </span>
-        )}
-        {t?.ok === undefined && <span className="tag text-ink-dim">untested</span>}
-
-        <span className="ml-auto flex shrink-0 gap-2">
-          <button
-            onClick={onTest}
-            disabled={testing}
-            className="tag text-ink-dim underline-offset-2 hover:text-hot-ink hover:underline disabled:opacity-50"
-          >
-            {testing ? 'testing…' : 'test'}
-          </button>
-          <button
-            onClick={onEdit}
-            className="tag text-ink-dim underline-offset-2 hover:text-hot-ink hover:underline"
-          >
-            edit
-          </button>
-          <button
-            onClick={onDelete}
-            title={selected ? 'Point this tier elsewhere first' : 'Remove this endpoint'}
-            className="tag text-ink-dim underline-offset-2 hover:text-bad hover:underline"
-          >
-            remove
-          </button>
-        </span>
-      </div>
-      <div className="flex flex-wrap items-baseline gap-x-3 px-3 pb-2 text-[11px] text-ink-dim">
-        {model.base_url && <span>{model.base_url}</span>}
-        {model.context_window ? <span>context {model.context_window.toLocaleString()}</span> : null}
-        {model.provider !== 'local' && (
-          <span className={model.api_key_set ? '' : 'text-warn'}>
-            {model.api_key_set ? 'key stored' : 'no key — this will not work'}
-          </span>
-        )}
-        {t?.dimensions ? <span>{t.dimensions} dims</span> : null}
-        {t?.ok === false && t.detail && <span className="text-bad">{t.detail}</span>}
-      </div>
-    </li>
+      )}
+      {t?.dimensions ? <span>{t.dimensions} dims</span> : null}
+      {t?.ok === true && <span className="text-ok">✓ connected</span>}
+      {t?.ok === false && <span className="text-bad">✕ {t.detail}</span>}
+      {t?.ok === undefined && <span>untested</span>}
+    </div>
   )
 }
 
@@ -203,6 +175,7 @@ export default function SettingsPage() {
             const candidates = data.models.filter(m => m.kind === kindFor(tier.id))
             const fallbackModel = live.data?.[`${tier.id}_model` as keyof LLMSettings]
             const fallbackProvider = live.data?.[`${tier.id}_provider` as keyof LLMSettings]
+            const current = candidates.find(m => m.id === selected) ?? null
 
             return (
               <Panel
@@ -210,12 +183,7 @@ export default function SettingsPage() {
                 title={`${tier.label} model`}
                 index={tier.index}
                 action={
-                  <button
-                    onClick={() => setAdding(tier.id)}
-                    className="tag border border-rule px-2 py-1 text-ink-mid transition-colors hover:border-ink hover:text-ink"
-                  >
-                    + Add a model
-                  </button>
+                  <RowAction onClick={() => setAdding(tier.id)}>+ Add a model</RowAction>
                 }
               >
                 <p className="px-3 pt-2.5 pb-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
@@ -236,25 +204,54 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <>
-                    <ul className="border-t border-rule">
-                      {candidates.map(m => (
-                        <ModelRow
-                          key={m.id}
-                          model={m}
-                          selected={selected === m.id}
-                          testing={testing === m.id}
-                          onSelect={() => void act(() => api.assignTier(tier.id, m.id))}
-                          onEdit={() => setEditing({ model: m, tier: tier.id })}
-                          onTest={() => void test(m, tier.id)}
-                          onDelete={() => void act(() => api.deleteModel(m.id))}
-                        />
-                      ))}
-                    </ul>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-rule px-3 pt-2.5 pb-2">
+                      <select
+                        value={selected ?? ''}
+                        onChange={e =>
+                          e.target.value && void act(() =>
+                            api.assignTier(tier.id, Number(e.target.value)),
+                          )
+                        }
+                        className="min-w-[240px] flex-1 border border-rule bg-panel px-2 py-1.5 font-mono text-[12px] text-ink focus:border-hot focus:outline-none"
+                      >
+                        <option value="">— nothing selected —</option>
+                        {candidates.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.label} ({m.model})
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Acting on whatever is selected. Disabled rather than hidden
+                          when nothing is, so the controls do not move about. */}
+                      <RowAction
+                        onClick={() => current && void test(current, tier.id)}
+                        disabled={!current || testing === current?.id}
+                      >
+                        {testing === current?.id ? 'testing…' : 'Test'}
+                      </RowAction>
+                      <RowAction
+                        onClick={() => current && setEditing({ model: current, tier: tier.id })}
+                        disabled={!current}
+                      >
+                        Edit
+                      </RowAction>
+                      <RowAction
+                        tone="bad"
+                        disabled={!current}
+                        title="Point this tier elsewhere first"
+                        onClick={() => current && void act(() => api.deleteModel(current.id))}
+                      >
+                        Remove
+                      </RowAction>
+                    </div>
+
+                    {current && <SelectedDetail model={current} />}
+
                     {!selected && fallbackModel && (
                       <p className="border-t border-rule bg-warn-wash px-3 py-2 font-sans text-[11.5px] text-warn">
-                        None of these is selected, so this tier is still using{' '}
-                        <code>.env</code>: {String(fallbackModel)} (
-                        {String(fallbackProvider)}).
+                        Nothing selected, so this tier is still using <code>.env</code>:{' '}
+                        {String(fallbackModel)} ({String(fallbackProvider)}).
                       </p>
                     )}
                   </>
