@@ -59,7 +59,7 @@ export default function ConfirmDelete({
 
   return (
     <Dialog open={open} onClose={close} title={title} width={460}>
-      <div className="p-3">
+      <div>
         {error && <ErrorState message={error} compact />}
 
         <div className="font-sans text-[12.5px] leading-relaxed text-ink-mid">{body}</div>

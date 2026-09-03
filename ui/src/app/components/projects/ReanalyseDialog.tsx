@@ -151,8 +151,12 @@ export default function ReanalyseDialog({
       )}
 
       <div className="mt-4 flex items-center gap-2 border-t border-rule pt-3">
+        {/* Deliberately not `ghost`. Running an analysis that will read nothing new
+            is a real choice somebody may want to make — usually to re-plan the site —
+            and a button with no background reads as disabled. `solid` is visible
+            without being the recommended action, which `hot` would imply. */}
         <Button
-          variant={pointless ? 'ghost' : 'hot'}
+          variant={pointless ? 'solid' : 'hot'}
           onClick={onConfirm}
           disabled={loading || starting}
         >

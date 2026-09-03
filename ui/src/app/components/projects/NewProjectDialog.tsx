@@ -116,7 +116,7 @@ export default function NewProjectDialog({
 
   return (
     <Dialog open={open} onClose={close} title="New project" width={560}>
-      <div className="flex flex-col gap-3 p-3">
+      <div className="flex flex-col gap-3">
         {error && <ErrorState message={error} compact />}
 
         <div>

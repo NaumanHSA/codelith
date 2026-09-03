@@ -244,13 +244,15 @@ export function Field({
  * ------------------------------------------------------------------ */
 
 export function Dialog({
-  open, onClose, title, children, width = 520,
+  open, onClose, title, children, width = 520, bodyClass = 'px-4 py-3.5',
 }: {
   open: boolean
   onClose: () => void
   title: string
   children: ReactNode
   width?: number
+  /** Override when the content pads itself, or needs to reach the edges. */
+  bodyClass?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -300,12 +302,17 @@ export function Dialog({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-100 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+    // Centred, and still scrollable when the content is taller than the window.
+    // `items-center` directly on a scroll container clips the top of anything too
+    // tall to fit; the inner `min-h-full` wrapper is what makes both true at once.
+    // It used to be `items-start`, which pinned every dialog under the top edge.
+    <div className="fixed inset-0 z-100 overflow-y-auto p-4 sm:p-8">
       <div
         className="fixed inset-0 bg-ink/45"
         onClick={onClose}
         aria-hidden
       />
+      <div className="relative flex min-h-full items-center justify-center">
       <div
         ref={ref}
         role="dialog"
@@ -327,7 +334,11 @@ export function Dialog({
             esc ✕
           </button>
         </header>
-        {children}
+        {/* Padded here rather than by every caller. Two of the three were doing it
+            already and the third was not, which is how one dialog shipped with its
+            text against the border. */}
+        <div className={bodyClass}>{children}</div>
+      </div>
       </div>
     </div>
   )

@@ -1,9 +1,16 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  # Manual only, deliberately, while the product is being reshaped daily.
+  #
+  # The suite is green locally — `make test` runs 1168 of them in thirty seconds with
+  # nothing to provision — so this is not turned off to hide a failure. It is turned
+  # off because every push during a redesign fired a run whose result nobody was going
+  # to act on, and a notification nobody acts on is one people learn to dismiss,
+  # including the one that eventually matters.
+  #
+  # Put `push` and `pull_request` back before this is published. A repository other
+  # people install from needs CI that runs without being asked.
   workflow_dispatch:
 
 jobs:
