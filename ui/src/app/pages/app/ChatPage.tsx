@@ -262,62 +262,41 @@ export default function ChatPage() {
             line and still landed in the middle of the screen, floating away from the
             edge everything else in the studio is anchored to. */}
         <div className="flex items-center gap-4">
-          <div className="flex min-w-0 shrink-0 flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="tag shrink-0 text-ink-dim">asking</span>
-              {/* A choice only while there is nothing to invalidate. Changing the
-                  repository mid-conversation would leave every answer above it
-                  grounded in a codebase that is no longer selected — the citations
-                  would still resolve, against a knowledge base nobody is looking at.
-                  Once a thread has messages this is what it is about, not a setting. */}
-              {messages.length ? (
+          {/* Empty until there is a conversation. On a new one the picker is in
+              the middle of the page, where the reader is looking, and repeating it
+              up here would be two controls for one choice. */}
+          {messages.length > 0 && (
+            <div className="flex min-w-0 shrink-0 flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="tag shrink-0 text-ink-dim">asking</span>
+                {/* Shown, not offered. Changing the repository mid-thread would leave
+                    every answer above grounded in a codebase no longer selected — the
+                    citations would still resolve, against a knowledge base nobody is
+                    looking at. */}
                 <span className="max-w-[260px] truncate text-[12px] font-semibold text-ink">
                   {project?.name ?? '—'}
                 </span>
-              ) : (
-                <select
-                  value={projectId ?? ''}
-                  onChange={e => {
-                    setParams({ project: e.target.value, thread: 'new' })
-                    setThread(null)
-                  }}
-                  className="max-w-[260px] truncate border border-rule bg-paper px-2 py-[3px] text-[12px] font-semibold text-ink outline-none focus:border-hot"
-                >
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 pl-[52px] text-[10.5px] text-ink-dim">
+                {project?.kb_status && (
+                  <span className={project.kb_status === 'stale' ? 'text-warn' : 'text-ok'}>
+                    {project.kb_status === 'stale' ? 'reading is stale' : 'analysed'}
+                  </span>
+                )}
+                {kb.data?.knowledge_base && (
+                  <>
+                    <span>{kb.data.module_count} modules</span>
+                    <span>{kb.data.entity_count} entities</span>
+                    {kb.data.knowledge_base.commit_sha && (
+                      <span className="font-mono">
+                        @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-            {/* What you are actually asking about. A name alone is not enough to tell
-                two analysed repositories apart, and the state matters more here than
-                anywhere: a question against a stale reading gets a stale answer. */}
-            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 pl-[52px] text-[10.5px] text-ink-dim">
-              {project?.kb_status && (
-                <span className={project.kb_status === 'stale' ? 'text-warn' : 'text-ok'}>
-                  {project.kb_status === 'stale' ? 'reading is stale' : 'analysed'}
-                </span>
-              )}
-              {kb.data?.knowledge_base && (
-                <>
-                  <span>{kb.data.module_count} modules</span>
-                  <span>{kb.data.entity_count} entities</span>
-                  {!!kb.data.knowledge_base.stats?.indexed_chunks && (
-                    <span>
-                      {kb.data.knowledge_base.stats.indexed_chunks.toLocaleString()} indexed
-                    </span>
-                  )}
-                  {kb.data.knowledge_base.commit_sha && (
-                    <span className="font-mono">
-                      @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+          )}
 
           <div className="min-w-0 flex-1 text-center">
             <h1 className="truncate text-[13.5px] leading-snug text-ink">
@@ -382,6 +361,73 @@ export default function ChatPage() {
         /* Nothing said yet: the composer sits in the middle of the room. */
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
           <div className="w-full max-w-[720px]">
+            {/* The choice belongs where the eye already is. In the header it was
+                above the fold and outside the column somebody is reading, so the
+                thing that decides what every answer is about read as chrome. */}
+            <div className="mb-5 flex flex-col items-center gap-2">
+              <select
+                value={projectId ?? ''}
+                onChange={e => {
+                  setParams({ project: e.target.value, thread: 'new' })
+                  setThread(null)
+                }}
+                className="max-w-full truncate border border-rule bg-panel px-3 py-1.5 text-center text-[13px] font-semibold text-ink outline-none transition-colors hover:border-ink focus:border-hot"
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* What was found in it. A name is not enough to pick between two
+                  analysed repositories, and this is the same material the codebase
+                  page leads with — the reader has seen it before and recognises it. */}
+              {kb.data && (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex flex-wrap items-baseline justify-center gap-x-2.5 text-[11px] text-ink-dim">
+                    <span className="text-ink">{kb.data.module_count} modules</span>
+                    <span>{kb.data.entity_count} entities</span>
+                    {!!kb.data.knowledge_base.stats?.indexed_chunks && (
+                      <span>
+                        {kb.data.knowledge_base.stats.indexed_chunks.toLocaleString()} indexed
+                      </span>
+                    )}
+                    {kb.data.knowledge_base.commit_sha && (
+                      <span className="font-mono">
+                        @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
+                      </span>
+                    )}
+                  </div>
+                  {!!kb.data.languages?.length && (
+                    <div className="flex flex-wrap justify-center gap-1">
+                      {kb.data.languages.map(l => (
+                        <span
+                          key={l}
+                          className="tag border border-hot-edge bg-hot-wash px-1.5 py-px text-hot-ink"
+                        >
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!!kb.data.entrypoints?.length && (
+                    <p className="max-w-[620px] text-center font-mono text-[10.5px] text-ink-dim">
+                      entry: {kb.data.entrypoints.slice(0, 3).join('  ·  ')}
+                    </p>
+                  )}
+                  {/* The largest module's own summary — the closest thing analysis
+                      wrote to a description, and better than the empty `description`
+                      most projects carry. */}
+                  {kb.data.top_modules?.[0]?.summary && (
+                    <p className="mt-1 max-w-[600px] text-center font-sans text-[11.5px] leading-relaxed text-ink-mid">
+                      {kb.data.top_modules[0].summary.split('. ').slice(0, 2).join('. ')}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <h2 className="mb-1 text-center text-[22px] text-ink">
               What do you want to know about{' '}
               <span className="text-hot-ink">{project?.name ?? 'this codebase'}</span>?
