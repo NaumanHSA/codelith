@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../../lib/api'
+import { Markdown } from '../Markdown'
 import type { ChatSource, EvidenceBody } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
@@ -57,33 +58,63 @@ function Body({ projectId, refText }: { projectId: number; refText: string }) {
   if (!body) {
     return <p className="px-2.5 py-2 font-sans text-[11px] text-ink-dim">reading…</p>
   }
+  // Through the markdown renderer as a fenced block, so it gets the same
+  // highlighting and the same copy button as code anywhere else in the product —
+  // rather than a `<pre>` of grey text that happens to contain source.
+  const fence = ['```' + (body.language ?? ''), body.content, '```'].join('\n')
   return (
-    <div className="border-t border-rule">
+    <div className="border-t border-rule bg-sunk/40">
       {body.partial && (
         <p className="border-b border-rule bg-warn-wash px-2.5 py-1 font-sans text-[10.5px] text-warn">
           Those exact lines are no longer stored — this file has been re-analysed since.
           Showing what is there now.
         </p>
       )}
-      <pre className="max-h-[320px] overflow-auto px-2.5 py-2 text-[10.5px] leading-relaxed whitespace-pre-wrap text-ink">
-        {body.content}
-      </pre>
+      <div className="doc chat-answer max-h-[360px] overflow-auto px-2 py-1 text-[10.5px]">
+        <Markdown>{fence}</Markdown>
+      </div>
+      <p className="border-t border-rule px-2.5 py-1 font-mono text-[10px] text-ink-dim">
+        {body.path}
+        {body.start_line != null && `:${body.start_line}-${body.end_line}`}
+      </p>
     </div>
   )
 }
 
+/** The path and range inside a title, ignoring a `(markdown, unverified)` suffix.
+ *  A citation in the answer is written without it, so the two only match once both
+ *  are reduced to the part that identifies the span. */
+const refKey = (title: string) => title.replace(/\s*\([^)]*\)\s*$/, '').trim()
+
 function Source({
   source,
   projectId,
+  focused,
 }: {
   source: ChatSource
   projectId: number
+  /** Clicked in the answer — opens without being clicked again, and scrolls to
+   *  itself, because a reader who followed a citation should not have to find the
+   *  same reference a second time in a list of twenty-nine. */
+  focused: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const row = useRef<HTMLLIElement>(null)
   const can = openable(source.kind)
 
+  useEffect(() => {
+    if (!focused) return
+    setOpen(true)
+    row.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focused])
+
   return (
-    <li className="border-b border-rule last:border-b-0">
+    <li
+      ref={row}
+      className={`border-b border-rule last:border-b-0 ${
+        focused ? 'bg-hot-wash/60' : ''
+      }`}
+    >
       <button
         type="button"
         disabled={!can}
@@ -119,12 +150,15 @@ export default function SourcesPanel({
   sources,
   counts,
   unverified,
+  focusRef,
   onClose,
 }: {
   projectId: number
   sources: ChatSource[]
   counts: Record<string, number>
   unverified: string[]
+  /** A citation clicked in the answer, to open and scroll to. */
+  focusRef?: string | null
   onClose: () => void
 }) {
   return (
@@ -165,7 +199,12 @@ export default function SourcesPanel({
 
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {sources.map((s, i) => (
-          <Source key={`${s.title}-${i}`} source={s} projectId={projectId} />
+          <Source
+            key={`${s.title}-${i}`}
+            source={s}
+            projectId={projectId}
+            focused={!!focusRef && refKey(s.title) === refKey(focusRef)}
+          />
         ))}
       </ul>
 

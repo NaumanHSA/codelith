@@ -35,8 +35,28 @@ from codelith.services.project_service import ProjectService
 router = APIRouter(prefix="/projects", tags=["Evidence"])
 
 #: `path/to/file.py:12-48`, which is the shape `Evidence.title` uses for a span. The
-#: range is optional: `read_file` cites a whole file.
-_SPAN = re.compile(r"^(?P<path>.+?)(?::(?P<start>\d+)-(?P<end>\d+))?$")
+#: range is optional — `read_file` cites a whole file.
+_SPAN = re.compile(r"^(?P<path>.+?):(?P<start>\d+)-(?P<end>\d+)$")
+
+#: A trailing `(markdown, unverified)`. Prose evidence carries its type and its
+#: standing in the title, because a block gets reordered and quoted back and the
+#: label has to travel with it — see `knowledge/retrieval.py`. It is not part of the
+#: path, and treating it as one is why every README citation reported itself missing
+#: from a knowledge base it was retrieved from.
+_SUFFIX = re.compile(r"\s*\([^)]*\)\s*$")
+
+#: Lines of context kept either side of a citation when the stored chunk is much wider
+#: than the range asked for. Enough to see what the snippet sits inside; not so much
+#: that the answer is a file.
+_CONTEXT_LINES = 4
+
+
+def _parse(ref: str) -> tuple[str, int | None, int | None]:
+    """`(path, start, end)` from a citation title."""
+    cleaned = _SUFFIX.sub("", ref.strip())
+    if match := _SPAN.match(cleaned):
+        return match.group("path").strip(), int(match.group("start")), int(match.group("end"))
+    return cleaned, None, None
 
 
 class EvidenceOut(BaseModel):
@@ -70,12 +90,9 @@ async def read_evidence(
     """
     await ProjectService(db).get(project_id, user)
 
-    match = _SPAN.match(ref.strip())
-    if not match:
+    path, start, end = _parse(ref)
+    if not path:
         raise HTTPException(status_code=422, detail="That is not a citation reference.")
-    path = match.group("path").strip()
-    start = int(match.group("start")) if match.group("start") else None
-    end = int(match.group("end")) if match.group("end") else None
 
     kb = (
         await db.execute(
@@ -96,12 +113,22 @@ async def read_evidence(
             "or removed since this answer was written.",
         )
 
-    # Every chunk overlapping the cited range. Chunk boundaries are not line
-    # boundaries, so asking for 12-48 can mean two stored chunks or half of one, and
-    # showing the overlapping chunks whole is more useful than slicing them to the
-    # exact lines — the surrounding context is what makes a snippet readable.
+    # One chunk, not every overlapping one. Chunking is deliberately overlapping —
+    # `livenessLoop.js` stores 14-129, 87-178, 131-210 and 179-232 among others — so
+    # a citation of 177-194 touches three of them, and joining those repeated the same
+    # code three times and returned ten kilobytes to show eighteen lines.
+    #
+    # The tightest chunk that contains the citation wins; failing that, the one that
+    # overlaps it most. Either way it is a contiguous piece of one file, which is what
+    # makes narrowing it below safe.
     if start is not None and end is not None:
-        wanted = [
+        def rank(c) -> tuple:
+            lo, hi = c.start_line or 0, c.end_line or 0
+            contains = lo <= start and hi >= end
+            overlap = max(0, min(hi, end) - max(lo, start))
+            return (0 if contains else 1, hi - lo if contains else -overlap)
+
+        overlapping = [
             c
             for c in chunks
             if c.start_line is not None
@@ -109,6 +136,7 @@ async def read_evidence(
             and c.start_line <= end
             and c.end_line >= start
         ]
+        wanted = [min(overlapping, key=rank)] if overlapping else []
     else:
         wanted = chunks
 
@@ -120,12 +148,30 @@ async def read_evidence(
     else:
         partial = False
 
-    wanted.sort(key=lambda c: c.start_line or 0)
+    text = "\n\n".join(c.content or "" for c in wanted).strip()
+    first, last = wanted[0].start_line, wanted[-1].end_line
+
+    # Even the tightest chunk can be far wider than the citation, so it is sliced to
+    # the cited lines with a few either side. Line numbers are chunk-relative, which
+    # only works because `wanted` is a single contiguous chunk.
+    if start is not None and end is not None and len(wanted) == 1 and first is not None:
+        span = (last or first) - first
+        if span > (end - start) + _CONTEXT_LINES * 4:
+            lines = text.splitlines()
+            lo = max(0, (start - first) - _CONTEXT_LINES)
+            hi = min(len(lines), (end - first) + 1 + _CONTEXT_LINES)
+            if lo < hi:
+                text = "\n".join(lines[lo:hi])
+                first, last = first + lo, first + hi - 1
+
     return EvidenceOut(
         path=path,
-        start_line=wanted[0].start_line,
-        end_line=wanted[-1].end_line,
-        content="\n\n".join(c.content or "" for c in wanted).strip(),
+        # The narrowed span and text, not the chunk's own — the block above may have
+        # sliced both, and reporting the chunk's range beside a shorter excerpt would
+        # be a line count the reader could check and find wrong.
+        start_line=first,
+        end_line=last,
+        content=text,
         partial=partial,
         language=getattr(wanted[0], "language", None),
     )

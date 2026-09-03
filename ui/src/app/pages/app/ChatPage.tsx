@@ -48,6 +48,9 @@ export default function ChatPage() {
   /** Which answer's sources are open in the side panel, by message id. `-1` is the
    *  one still streaming, which has no id yet. Null closes the panel. */
   const [openSources, setOpenSources] = useState<number | null>(null)
+  /** A citation clicked in an answer. The panel opens at it rather than making the
+   *  reader find the same reference again in a list of twenty-nine. */
+  const [focusRef, setFocusRef] = useState<string | null>(null)
   const [live, setLive] = useState<Live | null>(null)
   const abort = useRef<AbortController | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -329,9 +332,14 @@ export default function ChatPage() {
                     key={m.id}
                     message={m}
                     sourcesOpen={openSources === m.id}
-                    onOpenSources={() =>
+                    onOpenSources={() => {
+                      setFocusRef(null)
                       setOpenSources(o => (o === m.id ? null : m.id))
-                    }
+                    }}
+                    onCitation={ref => {
+                      setOpenSources(m.id)
+                      setFocusRef(ref)
+                    }}
                   />
                 ),
               )}
@@ -343,7 +351,14 @@ export default function ChatPage() {
                     <AssistantMessage
                       streaming
                       sourcesOpen={openSources === -1}
-                      onOpenSources={() => setOpenSources(o => (o === -1 ? null : -1))}
+                      onOpenSources={() => {
+                        setFocusRef(null)
+                        setOpenSources(o => (o === -1 ? null : -1))
+                      }}
+                      onCitation={ref => {
+                        setOpenSources(-1)
+                        setFocusRef(ref)
+                      }}
                       message={{
                         content: live.answer,
                         citations: [],
@@ -400,7 +415,11 @@ export default function ChatPage() {
               sources={target.evidence?.sources ?? []}
               counts={target.evidence?.counts ?? {}}
               unverified={target.stripped ?? []}
-              onClose={() => setOpenSources(null)}
+              focusRef={focusRef}
+              onClose={() => {
+                setOpenSources(null)
+                setFocusRef(null)
+              }}
             />
           )
         })()}

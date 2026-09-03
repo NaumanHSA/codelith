@@ -34,6 +34,7 @@ export function AssistantMessage({
   streaming = false,
   onOpenSources,
   sourcesOpen = false,
+  onCitation,
 }: {
   message: Pick<ChatMessage, 'content' | 'citations' | 'stripped' | 'evidence'>
   streaming?: boolean
@@ -42,6 +43,8 @@ export function AssistantMessage({
    *  open them is almost always to check a claim you can still see. */
   onOpenSources?: () => void
   sourcesOpen?: boolean
+  /** A citation in the answer was clicked — open the panel at that source. */
+  onCitation?: (ref: string) => void
 }) {
   const sources = message.evidence?.sources ?? []
   const counts = message.evidence?.counts ?? {}
@@ -49,22 +52,21 @@ export function AssistantMessage({
   return (
     <div className="min-w-0">
       <div className="doc chat-answer min-w-0">
-        <Markdown>{message.content}</Markdown>
+        <Markdown onCitation={onCitation}>{message.content}</Markdown>
         {streaming && <Cursor />}
       </div>
 
       {!streaming && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-rule pt-2.5 text-[11px]">
           {!!sources.length && (
             <button
               type="button"
               onClick={onOpenSources}
-              className={`tag border px-2 py-1 transition-colors ${
-                sourcesOpen
-                  ? 'border-hot bg-hot-wash text-hot-ink'
-                  : 'border-rule bg-panel text-ink-mid hover:border-ink hover:text-ink'
+              className={`font-semibold underline-offset-4 transition-colors hover:underline ${
+                sourcesOpen ? 'text-hot-ink underline' : 'text-ink-mid hover:text-hot-ink'
               }`}
             >
+              <span className="mr-1 text-hot">◆</span>
               {sources.length} source{sources.length === 1 ? '' : 's'}
               {!!Object.keys(counts).length && (
                 <span className="ml-1.5 text-ink-dim">

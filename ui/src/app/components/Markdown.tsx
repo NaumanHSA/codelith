@@ -95,13 +95,49 @@ function Copy({ text }: { text: string }) {
   )
 }
 
-export function Markdown({ children }: { children: string }) {
+/** `src/loop/livenessLoop.js:177-194` — a path with a line range, which is how the
+ *  answer path renders a citation it could resolve. Deliberately strict: an inline
+ *  code span is usually a symbol or a flag, and turning every one of them into a
+ *  button would be worse than leaving citations flat. */
+const CITATION = /^[\w./@-]+\.[A-Za-z0-9]+(?::\d+-\d+)?$/
+
+export function Markdown({
+  children,
+  onCitation,
+}: {
+  children: string
+  /** Makes resolved citations clickable. Chat passes this; documentation does not —
+   *  a page's provenance lives in its own panel, and the same span there is prose. */
+  onCitation?: (ref: string) => void
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
       urlTransform={urlTransform}
       components={{
+        code({ children, className, ...props }) {
+          const text = extractText(children)
+          // Fenced blocks carry a language class and are handled by `pre`; only a
+          // bare inline span can be a citation.
+          if (onCitation && !className && CITATION.test(text.trim())) {
+            return (
+              <button
+                type="button"
+                onClick={() => onCitation(text.trim())}
+                title="Show this source"
+                className="cursor-pointer border-b border-dotted border-hot-ink/60 font-mono text-[0.92em] text-hot-ink transition-colors hover:border-solid hover:bg-hot-wash"
+              >
+                {text}
+              </button>
+            )
+          }
+          return (
+            <code className={className} {...props}>
+              {children}
+            </code>
+          )
+        },
         pre({ children, ...props }) {
           // The copy button needs a positioned ancestor, and a code block a
           // reader cannot copy out of is a code block they retype by hand.
