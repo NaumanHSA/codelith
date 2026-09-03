@@ -30,14 +30,13 @@ function Card({ app, extra }: { app: ProjectApp; extra?: React.ReactNode }) {
 
   const body = (
     <>
-      {/* The drawing sits behind the words rather than above them: at this size a
-          band of artwork on top of every card would push the thing you came to read
-          below the fold. It lifts and gains its accent on hover, which is the whole
-          of the motion — a card that animates on arrival is a card that has to be
-          waited for. */}
+      {/* Bottom-right, behind the footer line. It was top-right and collided with
+          both the title row and the "open →" affordance — artwork that sits on top of
+          the one control on the card is decoration charging rent. Down here it fills
+          the space the short text leaves rather than competing for the space it uses. */}
       {Art && (
         <div
-          className="pointer-events-none absolute -top-1 -right-2 h-[76px] w-[140px] opacity-[0.18] transition-all duration-300 group-hover:-top-2 group-hover:opacity-40"
+          className="pointer-events-none absolute -right-3 -bottom-2 h-[70px] w-[130px] opacity-[0.14] transition-all duration-300 group-hover:-bottom-1 group-hover:opacity-35"
           aria-hidden
         >
           <Art />
@@ -60,12 +59,15 @@ function Card({ app, extra }: { app: ProjectApp; extra?: React.ReactNode }) {
         )}
       </div>
 
+      {/* The short form. `blurb` is written to lead the Home page, where it is the
+          first thing anybody reads about the product; here it is one of three cards
+          beside a knowledge base, and five lines of it buried the rest of the page. */}
       <p
-        className={`relative mt-1.5 max-w-[92%] font-sans text-[12px] leading-relaxed ${
+        className={`relative mt-1.5 max-w-[88%] font-sans text-[12px] leading-relaxed ${
           open ? 'text-ink-mid' : 'text-ink-dim'
         }`}
       >
-        {app.blurb}
+        {app.short || app.blurb}
       </p>
 
       {open && extra ? <div className="relative mt-2.5">{extra}</div> : null}

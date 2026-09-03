@@ -26,6 +26,7 @@ class AppCatalogItem(BaseModel):
     id: str
     label: str
     blurb: str
+    short: str = ""
     needs: list[str]
     #: Contains `{id}` — a project id, which the caller substitutes.
     route_template: str
@@ -40,6 +41,7 @@ async def list_apps(user: CurrentUser) -> list[AppCatalogItem]:
             id=f.id,
             label=f.label,
             blurb=f.blurb,
+            short=f.short,
             needs=list(f.needs),
             route_template=f.route,
             built=f.built,

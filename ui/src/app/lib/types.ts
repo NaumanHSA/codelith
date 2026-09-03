@@ -446,6 +446,8 @@ export interface ProjectApp {
   id: string
   label: string
   blurb: string
+  /** The one-line form, for a card beside two others. */
+  short: string
   needs: string[]
   route: string
   /** `available` · `locked` · `planned` */
@@ -459,6 +461,8 @@ export interface AppCatalogItem {
   id: string
   label: string
   blurb: string
+  /** The one-line form, for a card beside two others. */
+  short: string
   needs: string[]
   /** Contains `{id}` — substitute a project id. */
   route_template: string

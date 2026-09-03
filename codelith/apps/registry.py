@@ -47,6 +47,11 @@ class App:
     label: str
     #: One sentence, written for somebody deciding whether to click.
     blurb: str
+    #: The same thing in one line, for a card that sits beside two others rather than
+    #: leading a page. Written rather than truncated: `blurb` cut at three lines stops
+    #: mid-clause, and a sentence that ends is worth more than a longer one that
+    #: trails off.
+    short: str
     #: What it consumes from the knowledge base, in the KB's own vocabulary. This is
     #: documentation for a reader, not a dependency the code resolves — but it is the
     #: question to answer before adding an app, so it is recorded next to it.
@@ -69,6 +74,9 @@ APPS: tuple[App, ...] = (
             "contains, so a project with no HTTP routes is never offered an API "
             "reference."
         ),
+        short=(
+            "Markdown, DOCX, MkDocs or Docusaurus, written from the analysis. Only the document types the code can actually support."
+        ),
         needs=("retrieval", "narratives", "entities"),
         route="/app/projects/{id}/docs",
     ),
@@ -79,6 +87,9 @@ APPS: tuple[App, ...] = (
             "Ask a question and get an answer grounded in the source. Every citation "
             "is checked against the evidence actually retrieved, and one that does "
             "not resolve is stripped rather than shown."
+        ),
+        short=(
+            "Answers grounded in the source, with every citation checked against what was actually retrieved."
         ),
         needs=("retrieval", "code graph", "entities"),
         route="/app/chat?project={id}&thread=new",
@@ -91,6 +102,9 @@ APPS: tuple[App, ...] = (
             "added or rewritten, routes that came and went, and which written pages "
             "now describe code that is no longer there. Needs the codebase analysed "
             "twice; one reading is a photograph, two are a difference."
+        ),
+        short=(
+            "What moved between two readings — and which written pages now describe code that is no longer there."
         ),
         needs=("modules", "entities", "written pages"),
         route="/app/projects/{id}/drift",

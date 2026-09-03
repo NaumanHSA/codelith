@@ -285,6 +285,7 @@ async def get_apps(project_id: int, db: DbSession, user: CurrentUser):
             id=f.id,
             label=f.label,
             blurb=f.blurb,
+            short=f.short,
             needs=list(f.needs),
             route=f.route.format(id=project_id),
             state=state,

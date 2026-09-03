@@ -234,6 +234,8 @@ class AppOut(BaseModel):
     id: str
     label: str
     blurb: str
+    #: The one-line form, for a card beside two others rather than one leading a page.
+    short: str = ""
     needs: list[str] = Field(default_factory=list)
     route: str
     state: str
