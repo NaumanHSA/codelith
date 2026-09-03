@@ -25,9 +25,14 @@ from codelith.models.chat import ChatMessage, ChatThread
 
 logger = structlog.get_logger(__name__)
 
-#: A thread's title comes from its first question. Long enough to be recognisable in
-#: a list, short enough not to wrap.
+#: The provisional title, taken from the first question so the sidebar is never
+#: showing a blank row while an answer streams. Replaced once there is an answer to
+#: name the conversation by.
 _TITLE_CHARS = 60
+
+#: How much of each side of the first exchange the naming call sees. A title needs
+#: the subject, not the whole answer.
+_TITLE_CONTEXT_CHARS = 700
 
 
 class ChatService:
@@ -110,8 +115,81 @@ class ChatService:
         )
         self.db.add(message)
         thread.last_message_at = datetime.now(UTC)
+
+        # Now there is something to name the conversation after. The provisional title
+        # is the first message verbatim, and most conversations open with a greeting —
+        # a sidebar of rows reading "Hi there" is a sidebar nobody can navigate.
+        if await self._needs_naming(thread):
+            await self._name(thread, content)
+
         await self.db.flush()
         return message
+
+    async def _first_question(self, thread: ChatThread) -> str:
+        """
+        The opening question, by query rather than through `thread.messages`.
+
+        The thread on this path comes from `get_or_create_thread`, which does not
+        eager-load its messages — touching the relationship here would be a lazy load
+        on an async session, which raises rather than loading.
+        """
+        row = (
+            await self.db.execute(
+                select(ChatMessage.content)
+                .where(ChatMessage.thread_id == thread.id, ChatMessage.role == "user")
+                .order_by(ChatMessage.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return (row or "").strip()
+
+    async def _needs_naming(self, thread: ChatThread) -> bool:
+        """
+        Whether this thread has yet to be named properly.
+
+        True while the title is still the placeholder or the first message verbatim. A
+        title somebody has seen and kept is not overwritten — renaming a conversation
+        the reader recognises is worse than one clumsy row.
+        """
+        if thread.title in ("", "New conversation"):
+            return True
+        question = await self._first_question(thread)
+        if not question:
+            return False
+        return thread.title == question.replace("\n", " ")[:_TITLE_CHARS]
+
+    async def _name(self, thread: ChatThread, answer: str) -> None:
+        """
+        Title the thread from its first exchange.
+
+        Never raises and never blocks the answer being stored: a conversation with a
+        clumsy title is a small problem, and one that failed to save because naming it
+        went wrong is a large one. The provisional title stays on any failure.
+        """
+        question = await self._first_question(thread)
+        if not question:
+            return
+
+        try:
+            from codelith.llm.client import chat_completion
+            from codelith.llm.prompts.question_prompts import THREAD_TITLE
+            from codelith.llm.router import select_spec
+
+            raw = await chat_completion(
+                messages=THREAD_TITLE.render(
+                    question=question[:_TITLE_CONTEXT_CHARS],
+                    answer=answer[:_TITLE_CONTEXT_CHARS],
+                ),
+                spec=select_spec("classify"),
+            )
+            title = _coerce_title(raw)
+        except Exception as exc:
+            logger.warning("thread_title_failed", thread_id=thread.id, error=str(exc))
+            return
+
+        if title:
+            thread.title = title
+
 
     async def load(self, project_id: int, thread_id: int) -> ChatThread:
         """One conversation with its messages, for a reload."""
@@ -271,3 +349,22 @@ class ChatService:
 
 
 __all__ = ["ChatService"]
+
+
+def _coerce_title(raw: str | None) -> str:
+    """The title out of the model's JSON, or `""` when there is nothing usable."""
+    import json
+    import re
+
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    # Fenced JSON is common enough to be worth handling rather than losing the title.
+    text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
+    try:
+        title = json.loads(text).get("title", "")
+    except Exception:
+        title = text
+    title = " ".join(str(title).split()).strip().strip("\"'").rstrip(".")
+    # A title longer than the provisional one it replaces is not an improvement.
+    return title[:_TITLE_CHARS] if 3 <= len(title) <= _TITLE_CHARS else ""

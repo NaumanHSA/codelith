@@ -72,7 +72,14 @@ export default function ChatPage() {
   /** Written during analysis, about this repository. Empty for a reading taken
    *  before that existed — in which case nothing is offered, because a generic
    *  suggestion on this page advertises that the code has not been read. */
-  const suggestions = kb.data?.suggested_questions ?? []
+  const suggestions = useMemo(() => {
+    const all = kb.data?.suggested_questions ?? []
+    // Shuffled, so opening a second conversation does not offer the same five.
+    // Fourteen are written and five are shown; always taking the first five would
+    // mean nine of them were never seen. Fixed for the life of this thread —
+    // re-drawing on every keystroke would move a row out from under the cursor.
+    return [...all].sort(() => Math.random() - 0.5)
+  }, [kb.data, thread?.id])
 
   // `new` is a real state, not the absence of one. Without it, pressing New chat
   // and reloading would silently resume the conversation it was meant to leave.
@@ -258,20 +265,31 @@ export default function ChatPage() {
           <div className="flex min-w-0 shrink-0 flex-col gap-1">
             <div className="flex items-center gap-2">
               <span className="tag shrink-0 text-ink-dim">asking</span>
-              <select
-                value={projectId ?? ''}
-                onChange={e => {
-                  setParams({ project: e.target.value, thread: 'new' })
-                  setThread(null)
-                }}
-                className="max-w-[260px] truncate border border-rule bg-paper px-2 py-[3px] text-[12px] font-semibold text-ink outline-none focus:border-hot"
-              >
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              {/* A choice only while there is nothing to invalidate. Changing the
+                  repository mid-conversation would leave every answer above it
+                  grounded in a codebase that is no longer selected — the citations
+                  would still resolve, against a knowledge base nobody is looking at.
+                  Once a thread has messages this is what it is about, not a setting. */}
+              {messages.length ? (
+                <span className="max-w-[260px] truncate text-[12px] font-semibold text-ink">
+                  {project?.name ?? '—'}
+                </span>
+              ) : (
+                <select
+                  value={projectId ?? ''}
+                  onChange={e => {
+                    setParams({ project: e.target.value, thread: 'new' })
+                    setThread(null)
+                  }}
+                  className="max-w-[260px] truncate border border-rule bg-paper px-2 py-[3px] text-[12px] font-semibold text-ink outline-none focus:border-hot"
+                >
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             {/* What you are actually asking about. A name alone is not enough to tell
                 two analysed repositories apart, and the state matters more here than

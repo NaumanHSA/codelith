@@ -72,3 +72,20 @@ ROUTE_QUESTION = PromptTemplate(
 )
 
 __all__ = ["ROUTE_QUESTION"]
+
+THREAD_TITLE = PromptTemplate(
+    system=(
+        "Name this conversation, for a list of conversations in a sidebar.\n\n"
+        "Respond ONLY with valid JSON - no markdown fences, no prose:\n"
+        '{"title": "..."}\n\n'
+        "Rules:\n"
+        "  - Three to six words. It sits in a narrow column and must not wrap.\n"
+        "  - Describe what was actually discussed, not how the person opened. Many "
+        "conversations start with a greeting, and a list of rows reading 'Hi there' "
+        "is a list nobody can navigate - which is the whole reason this exists.\n"
+        "  - Name the real subject where there is one: a module, a mechanism, a file. "
+        "'Face attribute detection' beats 'Discussion about a feature'.\n"
+        "  - Sentence case, no trailing punctuation, no quotes around it."
+    ),
+    user="Question:\n$question\n\nAnswer:\n$answer",
+)
