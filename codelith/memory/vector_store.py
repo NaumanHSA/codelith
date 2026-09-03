@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codelith.knowledge import embedding_guard
 from codelith.models.chunk import CodeChunk
 
 
@@ -32,6 +33,16 @@ def _rank_by_cosine(
     if q_norm == 0.0:
         # A zero query has no direction, so every distance is equally meaningless.
         # Returning the first `limit` rows is arbitrary; returning nothing is honest.
+        return []
+
+    # Vectors of a different width cannot be compared, and numpy will not even build
+    # a matrix from ragged rows — one stray vector from a since-changed embedding
+    # model would take out the whole search with a `ValueError` nobody could trace
+    # back to it. `knowledge/embedding_guard.py` is what produces the message
+    # explaining *why* there is a mismatch; this is what keeps the process up while
+    # somebody reads it.
+    rows = embedding_guard.usable(rows, len(q))
+    if not rows:
         return []
 
     matrix = np.asarray([r.embedding for r in rows], dtype="float32")

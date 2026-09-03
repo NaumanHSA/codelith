@@ -17,7 +17,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # chosen providers need and do not have. Both tiers being independently local or
     # hosted makes "which model actually wrote this?" a real question, and an empty
     # OPENAI_API_KEY should not first surface as a 401 forty minutes into an analysis.
+
+    # Build the schema on first run. There is no separate migrate step to forget:
+    # the database is a file this process owns, and an empty one is indistinguishable
+    # from a first launch. Existing databases are left alone.
+    from codelith.db.bootstrap import ensure_schema
+
+    if await ensure_schema(engine):
+        logger.info("database_created", url=engine.url.render_as_string(hide_password=True))
+
+    # The settings page is the source of truth once anything has been configured
+    # there. Loaded before the tiers are reported, so the log says what will actually
+    # be called rather than what `.env` would have chosen. An installation that has
+    # never opened that page loads nothing here and behaves exactly as it did.
+    from codelith.db.session import AsyncSessionLocal
     from codelith.llm.providers import configured_specs, missing_configuration
+
+    try:
+        async with AsyncSessionLocal() as db:
+            from codelith.llm.providers import set_assigned
+            from codelith.services.model_registry import ModelRegistry
+
+            assigned = await ModelRegistry(db).specs()
+        set_assigned(assigned)
+        if assigned:
+            logger.info("model_registry_loaded", tiers=sorted(assigned))
+    except Exception as exc:
+        # A registry that cannot be read must not stop the application starting —
+        # `.env` is still a complete configuration, and a settings page nobody can
+        # reach is a smaller problem than a server that will not boot.
+        logger.warning("model_registry_unavailable", error=str(exc))
 
     for tier, spec in configured_specs().items():
         logger.info(
@@ -31,13 +60,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     for problem in missing_configuration():
         logger.warning("llm_configuration_incomplete", problem=problem)
 
-    # Build the schema on first run. There is no separate migrate step to forget:
-    # the database is a file this process owns, and an empty one is indistinguishable
-    # from a first launch. Existing databases are left alone.
-    from codelith.db.bootstrap import ensure_schema
-
-    if await ensure_schema(engine):
-        logger.info("database_created", url=engine.url.render_as_string(hide_password=True))
 
     # Hand back pages a job claimed and never resolved.
     #

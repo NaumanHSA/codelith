@@ -49,6 +49,10 @@ class KBPersisterAgent(BaseAgent):
                 "narratives": sorted(topics),
                 "languages": languages,
                 "indexed_chunks": state.get("indexed_chunks", 0),
+                # Which embedding model produced this reading's vectors. Read back by
+                # `knowledge/embedding_guard.py` before anything searches it — a
+                # vector is only comparable to others from the same model.
+                "embedding": state.get("embedding_provenance") or {},
                 "summarised_modules": state.get("summarised_modules", 0),
                 "missing_summaries": missing_summaries,
                 "suggested_doc_types": suggest_doc_types(entity_kinds, roles),

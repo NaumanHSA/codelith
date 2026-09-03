@@ -11,8 +11,10 @@ from __future__ import annotations
 from typing import Any
 
 from codelith.agents.base import BaseAgent
+from codelith.knowledge import embedding_guard
 from codelith.knowledge.builder import SourceFile, chunk_files, chunk_prose
 from codelith.llm.client import create_embeddings
+from codelith.llm.providers import embedding_spec
 from codelith.memory.vector_store import VectorStore
 from codelith.tracing.artifacts import save_artifact
 
@@ -107,4 +109,17 @@ class SemanticIndexerAgent(BaseAgent):
                 self.name, "completed", {"chunks": stored, "embed_failures": failures}
             )
 
-            return {"indexed_chunks": stored, "embed_failures": failures}
+            # Which model produced these vectors, and how wide they are. Recorded
+            # rather than configured: a vector only means anything to the model that
+            # made it, and `knowledge/embedding_guard.py` needs to know which one
+            # that was before a later search compares against it.
+            width = next(
+                (len(e) for e in embeddings if e), None
+            )
+            return {
+                "indexed_chunks": stored,
+                "embed_failures": failures,
+                "embedding_provenance": embedding_guard.record(
+                    embedding_spec().model, width
+                ),
+            }

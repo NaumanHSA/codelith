@@ -35,6 +35,7 @@ from codelith.config import get_settings
 
 LOCAL = "local"
 OPENAI = "openai"
+ANTHROPIC = "anthropic"
 
 QUALITY = "quality"
 FAST = "fast"
@@ -61,9 +62,35 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 #: answer and reads as the model being vague.
 OPENAI_CONTEXT_WINDOW = 128_000
 
+#: Anthropic, through its OpenAI-compatible layer, so the same client places the call
+#: and no second SDK is needed. Fixed for the same reason OpenAI's is: a provider that
+#: names a vendor should mean that vendor, and anything else is what `local` is for.
+ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
+
 #: The default for a `local` tier that names no endpoint — LM Studio, which is what
 #: the README tells people to install.
 LOCAL_BASE_URL = "http://localhost:1234/v1"
+
+#: Endpoints assigned in the settings page, resolved from the database at startup and
+#: whenever they change. Empty means nothing has been configured there, and every tier
+#: falls back to `.env` — which is what keeps this additive: an installation that never
+#: opens the settings page behaves exactly as it did before there was one.
+#:
+#: A module-level cache rather than a lookup, because `spec_for_tier` is called from
+#: synchronous code deep inside agents and turning it async would ripple through every
+#: caller for a value that changes when somebody clicks Save.
+_ASSIGNED: dict[str, ModelSpec] = {}
+
+
+def set_assigned(specs: dict[str, ModelSpec]) -> None:
+    """Replace the resolved tier assignments. Called at startup and after a save."""
+    _ASSIGNED.clear()
+    _ASSIGNED.update(specs)
+
+
+def assigned_tiers() -> dict[str, ModelSpec]:
+    """What the database currently overrides, for diagnostics and the settings page."""
+    return dict(_ASSIGNED)
 
 
 @dataclass(frozen=True)
@@ -110,8 +137,14 @@ def spec_for_tier(tier: str) -> ModelSpec:
     settings looked at. A tier set to `openai` never reads a base URL or a window,
     so no combination of the two can point it anywhere but OpenAI.
     """
-    s = get_settings()
     tier = tier if tier in (FAST, EMBEDDING) else QUALITY
+
+    # The settings page wins when it has an answer. `.env` remains the fallback, and
+    # the only source on an installation that has never configured anything.
+    if assigned := _ASSIGNED.get(tier):
+        return assigned
+
+    s = get_settings()
 
     if tier == FAST:
         provider, model = s.MODEL_FAST_PROVIDER, s.MODEL_FAST
@@ -124,14 +157,16 @@ def spec_for_tier(tier: str) -> ModelSpec:
         provider, model = s.MODEL_QUALITY_PROVIDER, s.MODEL_QUALITY
         base_url, window = s.MODEL_QUALITY_BASE_URL, s.MODEL_QUALITY_CONTEXT_WINDOW
 
-    if provider == OPENAI:
-        return _openai_spec(tier, model, s.OPENAI_API_KEY)
+    if provider in (OPENAI, ANTHROPIC):
+        return _openai_spec(tier, model, s.OPENAI_API_KEY, provider=provider)
     return _compatible_spec(tier, model, base_url, window)
 
 
-def _openai_spec(tier: str, model: str, api_key: str) -> ModelSpec:
+def _openai_spec(
+    tier: str, model: str, api_key: str, *, provider: str = OPENAI
+) -> ModelSpec:
     """
-    OpenAI: a key and a model name.
+    A hosted provider: a key and a model name.
 
     No base URL and no window are read, because neither is a decision the operator
     should be making. Point somewhere else and you are using an OpenAI-compatible
@@ -140,9 +175,9 @@ def _openai_spec(tier: str, model: str, api_key: str) -> ModelSpec:
     """
     return ModelSpec(
         tier=tier,
-        provider=OPENAI,
+        provider=provider,
         model=model,
-        base_url=OPENAI_BASE_URL,
+        base_url=ANTHROPIC_BASE_URL if provider == ANTHROPIC else OPENAI_BASE_URL,
         api_key=api_key,
         # Embeddings are never trimmed, so the window is meaningless for that tier.
         context_window=0 if tier == EMBEDDING else OPENAI_CONTEXT_WINDOW,
@@ -200,7 +235,7 @@ def missing_configuration() -> list[str]:
         if not spec.model.strip():
             problems.append(f"MODEL_{upper} is empty — no model name to call")
 
-        if spec.provider == OPENAI:
+        if spec.provider in (OPENAI, ANTHROPIC):
             if not spec.api_key.strip():
                 problems.append(
                     f"MODEL_{upper}_PROVIDER is openai but OPENAI_API_KEY is empty. "
@@ -229,6 +264,10 @@ __all__ = [
     "missing_configuration",
     "LOCAL",
     "OPENAI",
+    "ANTHROPIC",
+    "ANTHROPIC_BASE_URL",
+    "set_assigned",
+    "assigned_tiers",
     "OPENAI_BASE_URL",
     "OPENAI_CONTEXT_WINDOW",
     "LOCAL_BASE_URL",
