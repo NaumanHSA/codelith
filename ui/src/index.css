@@ -349,18 +349,6 @@ summary {
   }
 }
 
-/* A connector drawing itself in. Paired with pathLength=100 so one keyframe works
-   on a connector of any length, and with fill-mode forwards so the line it has just
-   drawn stays drawn — the trail behind the pulse is the record of where it has been. */
-@keyframes pipe-draw {
-  from {
-    stroke-dashoffset: 100;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
 /* A node accepting the pulse. Brief, and on the stroke rather than the fill: a card
    that changes colour reads as selected, one whose edge flares reads as reached. */
 @keyframes pipe-arrive {
