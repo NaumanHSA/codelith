@@ -7,6 +7,7 @@ const STAGES = [
   {
     num: '01',
     name: 'Analyse',
+    note: 'Every file, once',
     tagline: 'Extract the facts',
     desc: 'Clones the repository and walks every file. Records what is actually there — HTTP routes, entry points, module boundaries, dependencies, config, data stores. Nothing is inferred.',
     facts: [
@@ -19,6 +20,7 @@ const STAGES = [
   {
     num: '02',
     name: 'Knowledge base',
+    note: 'Pinned to the SHA',
     tagline: 'Build the index',
     desc: 'Chunks and embeds every finding into a structured store pinned to the commit SHA. The knowledge base is the product of analysis — written once, reused by every document you ask for.',
     facts: [
@@ -31,6 +33,7 @@ const STAGES = [
   {
     num: '03',
     name: 'Unlock',
+    note: 'From the evidence',
     tagline: 'See what the codebase offers',
     desc: 'Analysis has already run, so the studio knows what exists. Documentation and Ask the code become available together, and the document types offered are the ones the evidence supports — an API Reference only when routes were found, and it says how many.',
     facts: [
@@ -43,6 +46,7 @@ const STAGES = [
   {
     num: '04',
     name: 'Use',
+    note: 'No repo reads',
     tagline: 'Retrieve, then work',
     desc: 'Every feature pulls the slice of the knowledge base it needs and nothing more. Documentation retrieves per section, writes prose and runs QA against source. Ask retrieves per question and checks every citation it produces. Neither opens the repository again.',
     facts: [
@@ -110,113 +114,182 @@ const AGENTS = [
   'publisher',
 ]
 
-/** The four-stage pipeline as a live schematic. */
-function FlowDiagram({ active }: { active: number }) {
-  const cols = [40, 175, 310, 445]
-  const on = (i: number) => i <= active
+/* ------------------------------------------------------------------ *
+ * The four-stage pipeline as a live schematic.
+ *
+ * Drawn in the same vocabulary as the diagram on Home — rounded cards on
+ * a warm ground, a pulse that draws each connector in, a flare as it
+ * lands — because a visitor who signs up should recognise the studio
+ * rather than meet a second product.
+ *
+ * The beat matters more than the shapes. Stages used to swap on a bare
+ * interval, so the schematic never showed the thing it exists to show:
+ * that one stage feeds the next. Now the card dwells, the connector
+ * draws itself in, and only then does the next card arrive. The gap is
+ * the argument.
+ *
+ * Connectors are normalised with pathLength, so one keyframe covers any
+ * length, and drawn connectors stay drawn — the hot trail behind the
+ * pulse is how far the reading has got.
+ * ------------------------------------------------------------------ */
 
+/** How long a stage holds before handing on, and how long the handover takes. */
+const DWELL = 2400
+const TRAVEL = 620
+
+const CARD_W = 178
+const CARD_H = 88
+const CARD_Y = 24
+const COLS = [16, 240, 464, 688]
+const WIRE_Y = CARD_Y + 44
+
+function FlowDiagram({
+  active,
+  moving,
+  paused,
+  onPick,
+}: {
+  active: number
+  moving: boolean
+  paused: boolean
+  onPick: (i: number) => void
+}) {
   return (
-    <svg viewBox="0 0 540 150" className="w-full" role="img" aria-label="Four-stage pipeline">
+    <svg viewBox="0 0 880 170" className="w-full" role="img" aria-label="Four-stage pipeline: analyse, knowledge base, unlock, use.">
       <defs>
-        <pattern id="fg" width="12" height="12" patternUnits="userSpaceOnUse">
-          <path d="M12 0H0V12" fill="none" stroke="var(--grid-line)" />
+        <pattern id="fg" width="16" height="16" patternUnits="userSpaceOnUse">
+          <path d="M16 0H0V16" fill="none" stroke="var(--grid-line)" />
         </pattern>
       </defs>
-      <rect width="540" height="150" fill="url(#fg)" />
+      <rect width="880" height="170" fill="url(#fg)" />
 
+      {/* Connectors. Behind the pulse they stay hot; ahead of it they are bare rule. */}
       {[0, 1, 2].map(i => {
-        const x1 = cols[i] + 78
-        const x2 = cols[i + 1] + 2
-        const live = on(i + 1)
+        const x1 = COLS[i] + CARD_W
+        const x2 = COLS[i + 1]
+        const d = `M${x1} ${WIRE_Y} H${x2 - 7}`
+        const crossed = i < active
+        const drawing = moving && i === active
         return (
           <g key={i}>
-            <line x1={x1} y1="62" x2={x2} y2="62" stroke="var(--rule)" strokeWidth="1.5" />
-            {live && (
-              <line
-                x1={x1} y1="62" x2={x2} y2="62"
-                stroke="var(--hot)" strokeWidth="1.5" className="anim-flow"
+            <path d={d} fill="none" stroke="var(--rule)" strokeWidth="1.5" />
+            {(crossed || drawing) && (
+              <path
+                key={drawing ? `draw-${active}` : 'done'}
+                d={d}
+                pathLength={100}
+                fill="none"
+                stroke="var(--hot)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeDasharray="100"
+                style={
+                  drawing
+                    ? { animation: `pipe-draw ${TRAVEL}ms linear forwards` }
+                    : undefined
+                }
               />
             )}
             <path
-              d={`M${x2 - 6} 58 L${x2} 62 L${x2 - 6} 66`}
+              d={`M${x2 - 7} ${WIRE_Y - 4.5} L${x2 - 1} ${WIRE_Y} L${x2 - 7} ${WIRE_Y + 4.5}`}
               fill="none"
-              stroke={live ? 'var(--hot)' : 'var(--rule)'}
-              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              stroke={crossed ? 'var(--hot)' : 'var(--rule)'}
+              strokeWidth="1.6"
             />
           </g>
         )
       })}
 
-      {STAGES.map((s, i) => {
-        const x = cols[i]
+      {STAGES.map((stage, i) => {
+        const x = COLS[i]
         const cur = i === active
-        const past = i < active
+        const lit = i <= active
         return (
-          <g key={s.num} style={{ transition: 'opacity .2s' }} opacity={past || cur ? 1 : 0.4}>
-            {cur && (
+          <g key={stage.num} onClick={() => onPick(i)} className="cursor-pointer">
+            <rect
+              // Remounted on arrival so the flare replays rather than firing once.
+              key={cur ? `arrive-${active}` : 'idle'}
+              x={x}
+              y={CARD_Y}
+              width={CARD_W}
+              height={CARD_H}
+              rx="8"
+              fill={lit ? 'var(--hot-wash)' : 'var(--panel)'}
+              stroke={lit ? 'var(--hot)' : 'var(--rule)'}
+              strokeWidth={cur ? 2.2 : lit ? 1.6 : 1.2}
+              style={cur ? { animation: 'pipe-arrive 620ms ease-out' } : undefined}
+              className="transition-[fill,stroke] duration-300"
+            />
+            <text
+              x={x + 16} y={CARD_Y + 26} fontSize="10" letterSpacing="1"
+              fill={lit ? 'var(--hot-ink)' : 'var(--ink-dim)'} fontFamily="var(--font-mono)"
+            >
+              {stage.num}
+            </text>
+            <text
+              x={x + 16} y={CARD_Y + 50} fontSize="15" fontWeight="600"
+              fill={lit ? 'var(--hot-ink)' : 'var(--ink)'} fontFamily="var(--font-mono)"
+            >
+              {stage.name}
+            </text>
+            <text
+              x={x + 16} y={CARD_Y + 70} fontSize="10.5"
+              fill="var(--ink-dim)" fontFamily="var(--font-mono)"
+            >
+              {stage.note}
+            </text>
+
+            {/* How long this stage has left. The rule fills over the dwell, so the
+                schematic says when it will hand on instead of jumping unannounced. */}
+            <rect x={x + 16} y={CARD_Y + 78} width={CARD_W - 32} height="3" rx="1.5" fill="var(--rule)" />
+            {cur && !paused && (
               <rect
-                x={x - 3} y="27" width="86" height="70"
-                fill="none" stroke="var(--hot)" strokeWidth="1" strokeDasharray="3 3"
-              />
-            )}
-            <rect
-              x={x} y="30" width="80" height="64"
-              fill={cur ? 'var(--hot-wash)' : 'var(--panel)'}
-              stroke={cur ? 'var(--hot)' : 'var(--ink)'}
-              strokeWidth={cur ? 2 : 1.2}
-            />
-            <text
-              x={x + 7} y="45" fontSize="8" fontWeight="700" letterSpacing="0.1em"
-              fill={cur ? 'var(--hot-ink)' : 'var(--ink-dim)'} fontFamily="var(--font-mono)"
-            >
-              {s.num}
-            </text>
-            <text
-              x={x + 7} y="62" fontSize="11" fontWeight="700"
-              fill="var(--ink)" fontFamily="var(--font-mono)"
-            >
-              {s.name.split(' ')[0]}
-            </text>
-            {s.name.includes(' ') && (
-              <text
-                x={x + 7} y="75" fontSize="11" fontWeight="700"
-                fill="var(--ink)" fontFamily="var(--font-mono)"
+                key={`sweep-${active}-${moving}`}
+                x={x + 16} y={CARD_Y + 78} height="3" rx="1.5" fill="var(--hot)"
+                width={moving ? CARD_W - 32 : 0}
               >
-                {s.name.split(' ')[1]}
-              </text>
-            )}
-            <rect
-              x={x + 7} y="82" width={cur ? 40 : 18} height="3"
-              fill={cur ? 'var(--hot)' : 'var(--rule)'}
-              style={{ transition: 'width .3s' }}
-            />
-            {cur && (
-              <circle cx={x + 74} cy="38" r="3" fill="var(--hot)">
-                <animate attributeName="opacity" values="1;.2;1" dur="1.3s" repeatCount="indefinite" />
-              </circle>
+                {!moving && (
+                  <animate
+                    attributeName="width"
+                    from="0"
+                    to={CARD_W - 32}
+                    dur={`${DWELL}ms`}
+                    fill="freeze"
+                  />
+                )}
+              </rect>
             )}
           </g>
         )
       })}
 
-      <line x1="525" y1="62" x2="533" y2="62" stroke="var(--rule)" strokeWidth="1.5" />
-      {[0, 1, 2].map(i => (
-        <path
-          key={i}
-          d={`M533 62 V${34 + i * 28} H540`}
-          fill="none"
-          stroke={active === 3 ? 'var(--hot)' : 'var(--rule)'}
-          strokeWidth="1.2"
-        />
+      {/* Which half is paid for once and which is paid for every time. Brackets
+          rather than a single dashed rule: a bracket has ends, so it says which
+          stages it covers. The old stub fanning off the right edge was cropped by
+          the viewBox and read as a rendering fault. */}
+      {[
+        { from: COLS[0], to: COLS[1] + CARD_W, label: 'READ ONCE', hot: false },
+        { from: COLS[2], to: COLS[3] + CARD_W, label: 'WRITE MANY TIMES', hot: active >= 2 },
+      ].map(b => (
+        <g key={b.label} className="transition-colors">
+          <path
+            d={`M${b.from} 126 V134 H${b.to} V126`}
+            fill="none"
+            stroke={b.hot ? 'var(--hot)' : 'var(--rule)'}
+            strokeWidth="1.2"
+          />
+          <text
+            x={(b.from + b.to) / 2} y="153" fontSize="9.5" letterSpacing="1.4"
+            textAnchor="middle"
+            fill={b.hot ? 'var(--hot-ink)' : 'var(--ink-dim)'}
+            fontFamily="var(--font-mono)"
+          >
+            {b.label}
+          </text>
+        </g>
       ))}
-
-      <line x1="40" y1="118" x2="500" y2="118" stroke="var(--rule)" strokeDasharray="2 4" />
-      <text x="40" y="132" fontSize="8" letterSpacing="0.12em" fill="var(--ink-dim)" fontFamily="var(--font-mono)">
-        READ ONCE
-      </text>
-      <text x="310" y="132" fontSize="8" letterSpacing="0.12em" fill="var(--hot-ink)" fontFamily="var(--font-mono)">
-        WRITE MANY TIMES
-      </text>
     </svg>
   )
 }
@@ -224,17 +297,34 @@ function FlowDiagram({ active }: { active: number }) {
 export default function LandingPage() {
   const { user } = useAuth()
   const [active, setActive] = useState(0)
+  const [moving, setMoving] = useState(false)
   const [paused, setPaused] = useState(false)
   const [lines, setLines] = useState(1)
 
   const enterTo = user ? '/app' : '/sign-in'
   const enterLabel = user ? 'Open the studio →' : 'Sign in →'
 
+  // Two beats, not one. The stage holds, then the connector draws itself in, and
+  // only then does the next stage arrive — so the schematic shows one stage feeding
+  // the next rather than four cards taking turns.
   useEffect(() => {
     if (paused) return
-    const t = setInterval(() => setActive(s => (s + 1) % STAGES.length), 3200)
-    return () => clearInterval(t)
-  }, [paused])
+    if (!moving) {
+      const t = setTimeout(() => setMoving(true), DWELL)
+      return () => clearTimeout(t)
+    }
+    const t = setTimeout(() => {
+      setActive(s => (s + 1) % STAGES.length)
+      setMoving(false)
+    }, TRAVEL)
+    return () => clearTimeout(t)
+  }, [paused, moving, active])
+
+  // Held still for anybody who has asked for less motion. The tab strip below still
+  // drives the whole section by hand.
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) setPaused(true)
+  }, [])
 
   useEffect(() => {
     if (lines >= TERMINAL.length) return
@@ -243,6 +333,14 @@ export default function LandingPage() {
   }, [lines])
 
   const stage = STAGES[active]
+
+  /** Choosing a stage cancels a handover in flight, or the pulse lands on a connector
+   *  nobody is watching and drags the reader forward again. */
+  const pick = (i: number) => {
+    setActive(i)
+    setMoving(false)
+    setPaused(true)
+  }
 
   const cta = 'tag inline-flex items-center justify-center gap-1.5 border transition-colors'
 
@@ -408,8 +506,8 @@ export default function LandingPage() {
           </button>
         </div>
 
-        <div className="mb-4 border border-rule bg-panel p-4">
-          <FlowDiagram active={active} />
+        <div className="mb-4 overflow-hidden rounded-sm border border-rule bg-sunk/70 px-4 py-5">
+          <FlowDiagram active={active} moving={moving} paused={paused} onPick={pick} />
         </div>
 
         <div className="grid grid-cols-2 gap-px border border-rule bg-rule lg:grid-cols-4">
@@ -418,10 +516,7 @@ export default function LandingPage() {
             return (
               <button
                 key={s.num}
-                onClick={() => {
-                  setActive(i)
-                  setPaused(true)
-                }}
+                onClick={() => pick(i)}
                 className={`relative px-3 py-2.5 text-left transition-colors ${
                   cur ? 'bg-hot-wash' : 'bg-panel hover:bg-sunk'
                 }`}
@@ -447,7 +542,10 @@ export default function LandingPage() {
             {!paused && (
               <div className="flex items-center gap-2.5">
                 <span className="h-[2px] w-40 overflow-hidden bg-rule">
-                  <span className="block h-full bg-hot" style={{ animation: 'sweep 3.2s linear' }} />
+                  <span
+                  className="block h-full bg-hot"
+                  style={{ animation: `sweep ${DWELL + TRAVEL}ms linear` }}
+                />
                 </span>
                 <span className="tag text-ink-dim">
                   {active + 1} / {STAGES.length}

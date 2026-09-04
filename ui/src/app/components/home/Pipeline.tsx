@@ -265,13 +265,20 @@ export default function Pipeline({
         </button>
       </div>
 
-      <div className="border border-rule bg-panel">
+      <div className="overflow-hidden rounded-sm border border-rule bg-panel">
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full"
+          className="w-full bg-sunk/70"
           role="img"
           aria-label="A repository is analysed once into a knowledge base, which Documentation, Ask the code and What changed all read."
         >
+          <defs>
+            <pattern id="pipe-grid" width="16" height="16" patternUnits="userSpaceOnUse">
+              <path d="M16 0H0V16" fill="none" stroke="var(--grid-line)" />
+            </pattern>
+          </defs>
+          <rect width={W} height={H} fill="url(#pipe-grid)" />
+
           {/* Spine */}
           <Edge d="M264 67 H320" flowing={phase === 'analysis'} />
           <Edge d="M560 67 H616" flowing={phase === 'kb'} />
@@ -314,7 +321,7 @@ export default function Pipeline({
 
         {/* What the hovered node is. The diagram carries the shape; this carries the
             sentence, so hovering does something rather than merely lighting up. */}
-        <div className="min-h-[58px] border-t border-rule bg-sunk/40 px-4 py-2.5">
+        <div className="min-h-[58px] border-t border-rule bg-panel px-4 py-2.5">
           {shown ? (
             <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
               <span className="font-semibold text-ink">{shown.label} — </span>
