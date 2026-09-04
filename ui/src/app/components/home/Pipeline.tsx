@@ -7,201 +7,210 @@ import type { AppCatalogItem, Project } from '../../lib/types'
  * Home said this in a sentence and then showed three cards that looked
  * like three separate products. The claim the whole architecture rests
  * on is that they are not separate: one pass over the repository builds
- * one knowledge base, and everything else reads it. A row of equal
- * cards cannot show that, because equal boxes have no order and no
- * source.
+ * one knowledge base, and everything else reads it. A row of equal cards
+ * cannot show that, because equal boxes have no order and no source.
  *
- * So it is a diagram. The spine runs left to right — repository,
- * analysis, knowledge base — and the three apps hang below the knowledge
- * base, sharing one bus. The pulse travels the spine, and only when it
- * reaches the knowledge base does it fan out to all three at once.
- * That timing is the argument: nothing downstream can start until the
- * reading exists, and once it does they all become available together.
+ * Drawn in the landing page's schematic language, deliberately and down
+ * to the measurements: the same small plates on a gridded ground, the
+ * same hard ink border, the same dashed marquee and crawling dash on the
+ * wire, the same 8px letter-spaced caps. Somebody arrives here from that
+ * page, and the diagram they were reading two clicks ago should be the
+ * diagram they are reading now.
  *
- * One SVG rather than HTML cards with connectors behind them. Lines
- * that have to find the edges of a responsive grid are lines that are
- * wrong at some width; inside a viewBox the geometry is fixed and the
- * whole thing scales.
+ * What is Home's own is the shape. The landing page runs four stages in
+ * a line; here the spine turns down at the knowledge base and fans to the
+ * three apps, so the dashed rule dividing READ ONCE from WRITE MANY TIMES
+ * runs horizontally between them — and exactly one line crosses it. That
+ * crossing is the argument: nothing reaches an app except through the
+ * reading, and once the reading exists all three become available
+ * together.
+ *
+ * One SVG rather than HTML cards with connectors behind them. Lines that
+ * have to find the edges of a responsive grid are lines that are wrong at
+ * some width; inside a viewBox the geometry is fixed and the whole thing
+ * scales.
  *
  * Hover is not decoration and not a link — the cards on Home used to be
- * links that could not do what they promised, which is why they are
- * gone. Hovering a node explains it underneath, so the diagram doubles
- * as the copy it replaced.
+ * links that could not do what they promised, which is why they are gone.
+ * Hovering a plate explains it underneath, so the diagram doubles as the
+ * copy it replaced.
  * ------------------------------------------------------------------ */
 
-/** Phases of one loop. The spine advances a node at a time; the fan-out is a single
+/** Phases of one loop. The spine advances a plate at a time; the fan-out is a single
  *  phase because the three apps arrive together, which is the point being made. */
 const PHASES = ['source', 'analysis', 'kb', 'apps'] as const
 type Phase = (typeof PHASES)[number]
 
-const STEP_MS = 1250
+/** Slower than the landing page's 3.2s. There is more to take in here — six plates
+ *  and a fan-out rather than four in a row — and a schematic that has moved on before
+ *  you have finished reading a plate is a schematic nobody reads. */
+const STEP_MS = 3600
+
+const W = 540
+const H = 256
+const CARD_W = 100
+const CARD_H = 68
+/** The three columns. Leaves sit on the spine's columns so the fan-out drops read as
+ *  columns rather than as diagonals. */
+const COLS = [30, 220, 410]
+const SPINE_Y = 24
+const LEAF_Y = 170
+/** Where READ ONCE stops being true. Exactly one line crosses it. */
+const SPLIT_Y = 122
+const BUS_Y = 152
 
 type NodeSpec = {
   id: string
   x: number
   y: number
-  w: number
-  h: number
   num: string
   label: string
-  line: string
+  /** Up to two lines. The plates are narrow by design, and a name that wraps is
+   *  better than one that runs off the edge or shrinks to fit. */
+  lines: string[]
+  tagline: string
   detail: string
   phase: Phase
 }
 
-const W = 880
-const H = 340
-const CARD_H = 82
-const LEAF_H = 74
-
-/** The spine, then the leaves under it. Leaves sit on the same x as the spine cards
- *  so the fan-out drops read as columns rather than as diagonals. */
 const SPINE: NodeSpec[] = [
   {
     id: 'source',
-    x: 24, y: 26, w: 240, h: CARD_H,
-    num: '01', label: 'Your repository',
-    line: 'A URL or a folder',
+    x: COLS[0], y: SPINE_Y, num: '01',
+    label: 'Your repository', lines: ['Your', 'repository'],
+    tagline: 'A URL or a folder',
     detail:
-      'Cloned once, read once. Nothing is sent anywhere — the repository is walked on this machine and the clone is discarded when the reading is built.',
+      'Cloned once, read once. Nothing is sent anywhere — the repository is walked on this machine, and the clone is discarded when the reading is built.',
     phase: 'source',
   },
   {
     id: 'analysis',
-    x: 320, y: 26, w: 240, h: CARD_H,
-    num: '02', label: 'Analysis',
-    line: 'Every file, once',
+    x: COLS[1], y: SPINE_Y, num: '02',
+    label: 'Analysis', lines: ['Analysis'],
+    tagline: 'Every file, once',
     detail:
-      'Nine agents walk the source: modules and their roles, routes, entrypoints, env vars, the import graph, and a semantic index. It takes no document type and never has.',
+      'Nine agents walk the source: modules and their roles, routes, entry points, env vars, the import graph, and a semantic index. It takes no document type and never has.',
     phase: 'analysis',
   },
   {
     id: 'kb',
-    x: 616, y: 26, w: 240, h: CARD_H,
-    num: '03', label: 'Knowledge base',
-    line: 'Pinned to the commit',
+    x: COLS[2], y: SPINE_Y, num: '03',
+    label: 'Knowledge base', lines: ['Knowledge', 'base'],
+    tagline: 'Pinned to the commit',
     detail:
       'The product of analysis, not a step toward one. Stored against the commit SHA it was read at, so two readings of one repository can be compared — which is what What changed is.',
     phase: 'kb',
   },
 ]
 
-const LEAF_Y = 236
-const LEAVES: Omit<NodeSpec, 'phase'>[] = [
+const LEAVES: NodeSpec[] = [
   {
     id: 'documentation',
-    x: 24, y: LEAF_Y, w: 240, h: LEAF_H,
-    num: '04', label: 'Documentation',
-    line: 'retrieval · narratives',
+    x: COLS[0], y: LEAF_Y, num: '04',
+    label: 'Documentation', lines: ['Documentation'],
+    tagline: 'Retrieval · narratives',
     detail:
       'Markdown, DOCX, MkDocs or Docusaurus, written from the reading. Document types are offered from what the code contains, so a project with no HTTP routes is never offered an API reference.',
+    phase: 'apps',
   },
   {
     id: 'ask',
-    x: 320, y: LEAF_Y, w: 240, h: LEAF_H,
-    num: '05', label: 'Ask the code',
-    line: 'retrieval · code graph',
+    x: COLS[1], y: LEAF_Y, num: '05',
+    label: 'Ask the code', lines: ['Ask the', 'code'],
+    tagline: 'Retrieval · code graph',
     detail:
       'Answers grounded in the source, with every citation checked against the evidence actually retrieved. One that does not resolve is stripped rather than shown.',
+    phase: 'apps',
   },
   {
     id: 'drift',
-    x: 616, y: LEAF_Y, w: 240, h: LEAF_H,
-    num: '06', label: 'What changed',
-    line: 'modules · written pages',
+    x: COLS[2], y: LEAF_Y, num: '06',
+    label: 'What changed', lines: ['What', 'changed'],
+    tagline: 'Modules · written pages',
     detail:
       'What moved between two readings, and which written pages now describe code that is no longer there. Needs the codebase analysed twice.',
+    phase: 'apps',
   },
 ]
 
-const ALL = [...SPINE, ...LEAVES.map(l => ({ ...l, phase: 'apps' as Phase }))]
+const ALL = [...SPINE, ...LEAVES]
 
 /** Reached by the pulse at or before this phase. */
-function isLit(phase: Phase, at: Phase): boolean {
-  return PHASES.indexOf(at) >= PHASES.indexOf(phase)
-}
+const reached = (phase: Phase, at: Phase) => PHASES.indexOf(at) >= PHASES.indexOf(phase)
 
-function Node({
+/** One plate. Square-cornered and hard-bordered, with the marquee, the growing rule
+ *  and the beacon that mark the stage the pulse is standing on. */
+function Plate({
   node,
+  current,
   lit,
-  arriving,
   hovered,
   onHover,
 }: {
   node: NodeSpec
+  current: boolean
   lit: boolean
-  arriving: boolean
   hovered: boolean
   onHover: (id: string | null) => void
 }) {
-  const active = lit || hovered
+  const on = current || hovered
+  const { x, y } = node
+
   return (
     <g
+      opacity={lit || hovered ? 1 : 0.4}
+      style={{ transition: 'opacity .2s' }}
       onMouseEnter={() => onHover(node.id)}
       onMouseLeave={() => onHover(null)}
-      className="cursor-default"
     >
+      {on && (
+        <rect
+          x={x - 3} y={y - 3} width={CARD_W + 6} height={CARD_H + 6}
+          fill="none" stroke="var(--hot)" strokeWidth="1" strokeDasharray="3 3"
+        />
+      )}
       <rect
-        x={node.x}
-        y={node.y}
-        width={node.w}
-        height={node.h}
-        rx="8"
-        fill={active ? 'var(--hot-wash)' : 'var(--panel)'}
-        stroke={active ? 'var(--hot)' : 'var(--rule)'}
-        strokeWidth={hovered ? 2.2 : active ? 1.6 : 1.2}
-        style={arriving ? { animation: 'pipe-arrive 620ms ease-out' } : undefined}
-        className="transition-[fill,stroke] duration-300"
+        x={x} y={y} width={CARD_W} height={CARD_H}
+        fill={on ? 'var(--hot-wash)' : 'var(--panel)'}
+        stroke={on ? 'var(--hot)' : 'var(--ink)'}
+        strokeWidth={on ? 2 : 1.2}
       />
       <text
-        x={node.x + 16}
-        y={node.y + 24}
-        className="font-mono"
-        fontSize="10"
-        letterSpacing="1"
-        fill={active ? 'var(--hot-ink)' : 'var(--ink-dim)'}
+        x={x + 9} y={y + 17} fontSize="8" fontWeight="700" letterSpacing="0.1em"
+        fill={on ? 'var(--hot-ink)' : 'var(--ink-dim)'} fontFamily="var(--font-mono)"
       >
         {node.num}
       </text>
-      <text
-        x={node.x + 16}
-        y={node.y + 46}
-        className="font-mono"
-        fontSize="15"
-        fontWeight="600"
-        fill={active ? 'var(--hot-ink)' : 'var(--ink)'}
-      >
-        {node.label}
-      </text>
-      <text
-        x={node.x + 16}
-        y={node.y + 65}
-        className="font-mono"
-        fontSize="10.5"
-        fill="var(--ink-dim)"
-      >
-        {node.line}
-      </text>
+      {node.lines.map((line, i) => (
+        <text
+          key={line}
+          x={x + 9} y={y + 34 + i * 13} fontSize="10.5" fontWeight="700"
+          fill="var(--ink)" fontFamily="var(--font-mono)"
+        >
+          {line}
+        </text>
+      ))}
+      <rect
+        x={x + 9} y={y + 54} width={on ? 52 : 18} height="3"
+        fill={on ? 'var(--hot)' : 'var(--rule)'}
+        style={{ transition: 'width .3s' }}
+      />
+      {current && (
+        <circle cx={x + CARD_W - 9} cy={y + 12} r="3" fill="var(--hot)">
+          <animate attributeName="opacity" values="1;.2;1" dur="1.3s" repeatCount="indefinite" />
+        </circle>
+      )}
     </g>
   )
 }
 
-/** A connector, and the pulse that runs along it when its phase is reached. */
-function Edge({ d, flowing }: { d: string; flowing: boolean }) {
+/** A wire, and the crawling dash that marks it as carried. */
+function Wire({ d, live }: { d: string; live: boolean }) {
   return (
     <>
-      <path d={d} fill="none" stroke="var(--rule)" strokeWidth="1.4" />
-      {flowing && (
-        <path
-          d={d}
-          pathLength={100}
-          fill="none"
-          stroke="var(--hot)"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeDasharray="18 100"
-          style={{ animation: `pipe-flow ${STEP_MS}ms linear` }}
-        />
+      <path d={d} fill="none" stroke="var(--rule)" strokeWidth="1.5" />
+      {live && (
+        <path d={d} fill="none" stroke="var(--hot)" strokeWidth="1.5" className="anim-flow" />
       )}
     </>
   )
@@ -218,116 +227,177 @@ export default function Pipeline({
   const [running, setRunning] = useState(true)
   const [hovered, setHovered] = useState<string | null>(null)
 
-  // Stopped for anybody who has asked for less motion. A loop that runs regardless is
-  // the reason that setting exists.
+  // Held still for anybody who has asked for less motion. A loop that runs regardless
+  // is the reason that setting exists.
   useEffect(() => {
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    if (reduce?.matches) setRunning(false)
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) setRunning(false)
   }, [])
 
   useEffect(() => {
     if (!running || hovered) return
-    const id = setInterval(() => {
-      setPhase(p => PHASES[(PHASES.indexOf(p) + 1) % PHASES.length])
-    }, STEP_MS)
-    return () => clearInterval(id)
+    const t = setInterval(
+      () => setPhase(p => PHASES[(PHASES.indexOf(p) + 1) % PHASES.length]),
+      STEP_MS,
+    )
+    return () => clearInterval(t)
   }, [running, hovered])
 
   const ready = (projects ?? []).filter(p => p.apps_ready).length
-  const shown = hovered ? ALL.find(n => n.id === hovered) : null
-  // Named apps are checked against the registry, so the diagram cannot promise one
-  // the studio does not have. Only once the catalogue has actually arrived, though —
-  // an empty set while it loads would blink all three leaves out and back in.
-  const catalogue = features?.length ? new Set(features.map(f => f.id)) : null
-  const nodes = catalogue
-    ? ALL.filter(n => n.phase !== 'apps' || catalogue.has(n.id))
-    : ALL
 
-  // Drawn from the nodes rather than written out, so an app the registry does not
-  // carry takes its own connector with it instead of leaving a line into blank paper.
-  const kbBottom = { x: 616 + 120, y: 26 + CARD_H }
-  const busY = 178
-  const drops = nodes
-    .filter(n => n.phase === 'apps')
-    .map(n => `M${kbBottom.x} ${busY} H${n.x + n.w / 2} V${n.y}`)
+  // Named apps are checked against the registry, so the diagram cannot promise one the
+  // studio does not have. Only once the catalogue has actually arrived, though — an
+  // empty set while it loads would blink all three leaves out and back in.
+  const catalogue = features?.length ? new Set(features.map(f => f.id)) : null
+  const leaves = catalogue ? LEAVES.filter(l => catalogue.has(l.id)) : LEAVES
+  const nodes = [...SPINE, ...leaves]
+
+  const shown = hovered ? (ALL.find(n => n.id === hovered) ?? null) : null
+  const step = PHASES.indexOf(phase) + 1
+  const writing = reached('apps', phase)
+  const kbCx = COLS[2] + CARD_W / 2
 
   return (
     <section className="mb-5">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="tag text-ink-dim">Read once, use many times</span>
-        <span className="h-px flex-1 bg-rule" />
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b border-rule pb-3">
+        <div>
+          <p className="tag mb-1.5 text-hot-ink">How it works</p>
+          <h2 className="text-[17px] leading-tight font-bold tracking-[-0.03em] text-ink">
+            Analyse once. Use it as many times as you need.
+          </h2>
+        </div>
         <button
-          type="button"
           onClick={() => setRunning(r => !r)}
-          className="tag text-ink-dim transition-colors hover:text-hot-ink"
+          className="tag border border-rule bg-panel px-3 py-2 text-ink-dim transition-colors hover:border-ink hover:text-ink"
         >
-          {running ? '❙❙ pause' : '▶ play'}
+          {running ? '❚❚ pause' : '▶ resume'}
         </button>
       </div>
 
-      <div className="border border-rule bg-panel">
+      <div className="border border-rule bg-panel p-4">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="w-full"
           role="img"
           aria-label="A repository is analysed once into a knowledge base, which Documentation, Ask the code and What changed all read."
         >
-          {/* Spine */}
-          <Edge d="M264 67 H320" flowing={phase === 'analysis'} />
-          <Edge d="M560 67 H616" flowing={phase === 'kb'} />
+          <defs>
+            <pattern id="pipe-grid" width="12" height="12" patternUnits="userSpaceOnUse">
+              <path d="M12 0H0V12" fill="none" stroke="var(--grid-line)" />
+            </pattern>
+          </defs>
+          <rect width={W} height={H} fill="url(#pipe-grid)" />
 
-          {/* The fan-out: one trunk down from the knowledge base, then a branch to
-              each app. Every branch is normalised to the same pathLength, so the
-              three pulses arrive together however far each one has to travel —
-              which is the claim. Drawing them in sequence would say the opposite. */}
-          <Edge d={`M${kbBottom.x} ${kbBottom.y} V${busY}`} flowing={phase === 'apps'} />
-          {drops.map(d => (
-            <Edge key={d} d={d} flowing={phase === 'apps'} />
-          ))}
+          {/* The spine. */}
+          {[0, 1].map(i => {
+            const x1 = COLS[i] + CARD_W
+            const x2 = COLS[i + 1]
+            const live = reached(SPINE[i + 1].phase, phase)
+            return (
+              <g key={i}>
+                <Wire d={`M${x1} ${SPINE_Y + 34} H${x2 - 6}`} live={live} />
+                <path
+                  d={`M${x2 - 6} ${SPINE_Y + 30} L${x2} ${SPINE_Y + 34} L${x2 - 6} ${SPINE_Y + 38}`}
+                  fill="none"
+                  strokeWidth="1.5"
+                  stroke={live ? 'var(--hot)' : 'var(--rule)'}
+                />
+              </g>
+            )
+          })}
 
-          {/* Arrowheads on the spine, so direction reads when the loop is paused. */}
-          <path d="M314 67 l-6 -3.5 v7 z" fill="var(--rule)" />
-          <path d="M610 67 l-6 -3.5 v7 z" fill="var(--rule)" />
+          {/* Where reading stops and writing starts. Exactly one line crosses it, and
+              it leaves the knowledge base — which is the whole claim, drawn. */}
+          <line
+            x1="20" y1={SPLIT_Y} x2={W - 20} y2={SPLIT_Y}
+            stroke="var(--rule)" strokeDasharray="2 4"
+          />
+          <text
+            x="20" y={SPLIT_Y - 8} fontSize="8" letterSpacing="0.12em"
+            fill="var(--ink-dim)" fontFamily="var(--font-mono)"
+          >
+            READ ONCE
+          </text>
+          <text
+            x="20" y={SPLIT_Y + 16} fontSize="8" letterSpacing="0.12em"
+            fill={writing ? 'var(--hot-ink)' : 'var(--ink-dim)'}
+            fontFamily="var(--font-mono)"
+          >
+            WRITE MANY TIMES
+          </text>
+
+          {/* The fan-out: one trunk down across the split, then a branch to each app.
+              Drawn from the plates rather than written out, so an app the registry does
+              not carry takes its own branch with it instead of leaving a line into
+              blank paper. */}
+          <Wire d={`M${kbCx} ${SPINE_Y + CARD_H} V${BUS_Y}`} live={writing} />
+          {leaves.map(leaf => {
+            const cx = leaf.x + CARD_W / 2
+            return (
+              <g key={leaf.id}>
+                <Wire d={`M${kbCx} ${BUS_Y} H${cx} V${LEAF_Y - 6}`} live={writing} />
+                <path
+                  d={`M${cx - 4} ${LEAF_Y - 6} L${cx} ${LEAF_Y} L${cx + 4} ${LEAF_Y - 6}`}
+                  fill="none"
+                  strokeWidth="1.5"
+                  stroke={writing ? 'var(--hot)' : 'var(--rule)'}
+                />
+              </g>
+            )
+          })}
 
           {nodes.map(n => (
-            <Node
+            <Plate
               key={n.id}
               node={n}
-              lit={isLit(n.phase, phase)}
-              arriving={n.phase === phase}
+              current={n.phase === phase}
+              lit={reached(n.phase, phase)}
               hovered={hovered === n.id}
               onHover={setHovered}
             />
           ))}
-
-          <text
-            x="24"
-            y={busY - 12}
-            className="font-mono"
-            fontSize="10"
-            letterSpacing="1.5"
-            fill="var(--ink-dim)"
-          >
-            ONE READING — READ BY ALL THREE
-          </text>
         </svg>
+      </div>
 
-        {/* What the hovered node is. The diagram carries the shape; this carries the
-            sentence, so hovering does something rather than merely lighting up. */}
-        <div className="min-h-[58px] border-t border-rule bg-sunk/40 px-4 py-2.5">
+      {/* What the hovered plate is. The diagram carries the shape; this carries the
+          sentence, so hovering does something rather than merely lighting up. */}
+      <div
+        key={shown?.id ?? 'idle'}
+        className="anim-rise border border-t-0 border-rule bg-panel p-4"
+      >
+        <p className="tag mb-2.5 text-hot-ink">
+          {shown ? shown.tagline : 'One reading, three apps'}
+        </p>
+        <p className="mb-3 max-w-[72ch] font-sans text-[13.5px] leading-[1.75] text-ink-mid">
           {shown ? (
-            <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
+            <>
               <span className="font-semibold text-ink">{shown.label} — </span>
               {shown.detail}
-            </p>
+            </>
           ) : (
-            <p className="font-sans text-[12px] leading-relaxed text-ink-dim">
+            <>
               One pass over the repository builds one knowledge base, and all three apps
-              read it. {ready ? `${ready} codebase${ready > 1 ? 's are' : ' is'} ready.` : 'Add a codebase to start.'}{' '}
+              read it. Nothing opens the repository again.{' '}
+              {ready
+                ? `${ready} codebase${ready > 1 ? 's are' : ' is'} ready.`
+                : 'Add a codebase to start.'}{' '}
               Hover any step to see what it does.
-            </p>
+            </>
           )}
-        </div>
+        </p>
+        {running && !shown && (
+          <div className="flex items-center gap-2.5">
+            <span className="h-[2px] w-40 overflow-hidden bg-rule">
+              <span
+                key={phase}
+                className="block h-full bg-hot"
+                style={{ animation: `sweep ${STEP_MS}ms linear` }}
+              />
+            </span>
+            <span className="tag text-ink-dim">
+              {step} / {PHASES.length}
+            </span>
+          </div>
+        )}
       </div>
     </section>
   )
