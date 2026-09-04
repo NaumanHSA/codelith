@@ -336,6 +336,33 @@ summary {
 /* Three of these run out of phase while retrieval is working. A single pulsing dot
    reads as a rendering artefact, and this stage can take several seconds before the
    first token — long enough that "is it working?" is a real question. */
+/* A pulse travelling a pipeline edge.
+   Every path carries `pathLength="100"`, so one dash pattern works for edges of very
+   different real lengths — without it the comet is a dot on the short hops and a
+   stripe on the long ones. */
+@keyframes pipe-flow {
+  from {
+    stroke-dashoffset: 118;
+  }
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+/* A node accepting the pulse. Brief, and on the stroke rather than the fill: a card
+   that changes colour reads as selected, one whose edge flares reads as reached. */
+@keyframes pipe-arrive {
+  0% {
+    stroke-width: 1.2;
+  }
+  40% {
+    stroke-width: 3;
+  }
+  100% {
+    stroke-width: 1.6;
+  }
+}
+
 @keyframes chat-bounce {
   0%,
   70%,
