@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { ProjectApp } from '../../lib/types'
-import { APP_ART } from '../home/AppArt'
+import { APP_MARK } from '../home/AppMark'
 
 /* ------------------------------------------------------------------ *
  * What this codebase unlocks.
@@ -10,11 +10,11 @@ import { APP_ART } from '../home/AppArt'
  * takes no document type, and Ask the Code grew on the same knowledge
  * base without touching the documentation pipeline.
  *
- * These are the same three things Home offers, so they carry the same
- * drawings. They were bare text blocks here and illustrated there,
- * which made the reader work out twice that they were the same
- * product — the second time on the page where they had already chosen
- * a codebase and the cards matter most.
+ * These are the same three things Home offers, so they carry a mark of
+ * the same app — but drawn for this size rather than borrowed from it.
+ * Home's 120×64 plate ghosted into a card corner produced clipped
+ * fragments that read as a rendering fault, which is what a drawing
+ * does when it is used four times smaller than it was drawn.
  *
  * Locked cards are shown rather than hidden. They are how somebody
  * learns the shape of the product without reading marketing copy, and
@@ -26,24 +26,24 @@ export type AppExtras = Record<string, React.ReactNode>
 
 function Card({ app, extra }: { app: ProjectApp; extra?: React.ReactNode }) {
   const open = app.state === 'available'
-  const Art = APP_ART[app.id]
+  const Mark = APP_MARK[app.id]
 
   const body = (
     <>
-      {/* Bottom-right, behind the footer line. It was top-right and collided with
-          both the title row and the "open →" affordance — artwork that sits on top of
-          the one control on the card is decoration charging rent. Down here it fills
-          the space the short text leaves rather than competing for the space it uses. */}
-      {Art && (
-        <div
-          className="pointer-events-none absolute -right-3 -bottom-2 h-[70px] w-[130px] opacity-[0.14] transition-all duration-300 group-hover:-bottom-1 group-hover:opacity-35"
-          aria-hidden
-        >
-          <Art />
-        </div>
-      )}
-
-      <div className="relative flex items-baseline gap-2">
+      <div className="flex items-center gap-2.5">
+        {/* In the title row, where an icon belongs — not behind the words hoping to
+            be noticed. Bordered, so it reads as a plate mark rather than a sticker. */}
+        {Mark && (
+          <span
+            className={`flex size-7 shrink-0 items-center justify-center border p-1 transition-colors ${
+              open
+                ? 'border-rule bg-sunk/60 group-hover:border-hot group-hover:bg-hot-wash'
+                : 'border-rule bg-sunk/40 opacity-60'
+            }`}
+          >
+            <Mark />
+          </span>
+        )}
         <h3 className={`text-[13px] font-semibold ${open ? 'text-ink' : 'text-ink-mid'}`}>
           {app.label}
         </h3>
@@ -63,30 +63,29 @@ function Card({ app, extra }: { app: ProjectApp; extra?: React.ReactNode }) {
           first thing anybody reads about the product; here it is one of three cards
           beside a knowledge base, and five lines of it buried the rest of the page. */}
       <p
-        className={`relative mt-1.5 max-w-[88%] font-sans text-[12px] leading-relaxed ${
+        className={`mt-2 font-sans text-[12px] leading-relaxed ${
           open ? 'text-ink-mid' : 'text-ink-dim'
         }`}
       >
         {app.short || app.blurb}
       </p>
 
-      {open && extra ? <div className="relative mt-2.5">{extra}</div> : null}
+      {open && extra ? <div className="mt-2.5">{extra}</div> : null}
 
       {!open && app.reason && (
-        <p className="relative mt-2 font-sans text-[11.5px] text-ink-dim">{app.reason}</p>
+        <p className="mt-2 font-sans text-[11.5px] text-ink-dim">{app.reason}</p>
       )}
 
       {/* What it reads from the knowledge base. The honest answer to "why is this
           locked" is that the KB does not exist yet, so naming what it consumes is
           more use than a padlock. */}
-      <p className="tag relative mt-auto pt-2.5 text-ink-dim">
+      <p className="tag mt-auto pt-3 text-ink-dim">
         reads {app.needs.join(' · ')}
       </p>
     </>
   )
 
-  const shell =
-    'group relative flex min-w-0 flex-col overflow-hidden border p-3.5 transition-all duration-200'
+  const shell = 'group flex min-w-0 flex-col border p-3.5 transition-all duration-200'
 
   if (!open) {
     return (
