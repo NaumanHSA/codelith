@@ -77,6 +77,17 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
             >
               {none ? 'Get started' : 'Add a codebase'} →
             </Link>
+            {/* The way in to work already done. Everything an app does happens on one
+                codebase, so opening one is the step between Home and any of them —
+                and until now the only route to it was the rail. */}
+            {!none && (
+              <Link
+                to="/app/projects"
+                className="tag inline-flex items-center border border-rule bg-panel px-4 py-2.5 text-ink-mid transition-colors hover:border-ink hover:text-ink"
+              >
+                Open a codebase →
+              </Link>
+            )}
             <span className="font-sans text-[11px] leading-snug text-ink-dim">
               {none
                 ? 'Nothing happens until a codebase has been read.'

@@ -4,7 +4,7 @@ import { api } from '../../lib/api'
 import { relativeTime } from '../../lib/format'
 import { StatusBadge } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
-import AppCards from '../../components/home/AppCards'
+import WhatItUnlocks from '../../components/home/WhatItUnlocks'
 import HomeBanner from '../../components/home/HomeBanner'
 import JobsTimeline from '../../components/home/JobsTimeline'
 import RecentProjects from '../../components/home/RecentProjects'
@@ -106,7 +106,7 @@ export default function HomePage() {
 
       <HomeBanner projects={projects.data ?? null} />
 
-      <AppCards features={features.data ?? null} projects={projects.data ?? null} />
+      <WhatItUnlocks features={features.data ?? null} projects={projects.data ?? null} />
 
       <JobsTimeline jobs={jobs.data ?? null} loading={jobs.loading} />
 
