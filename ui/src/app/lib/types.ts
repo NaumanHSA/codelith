@@ -641,3 +641,65 @@ export interface ModelDraft {
   api_key?: string | null
   tier_hint?: Tier | null
 }
+
+
+/* ------------------------------------------------------------------ *
+ * Published sites.
+ *
+ * A publication is an address; a build is what that address is serving.
+ * Republishing mints a new build and repoints the address, which is why
+ * the panel shows one row per publication rather than one per build.
+ * ------------------------------------------------------------------ */
+
+export interface PublicationBuild {
+  id: number
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled'
+  content_hash: string
+  renderer: string
+  renderer_version: string
+  page_count: number
+  file_count: number
+  bytes_total: number
+  commit_sha: string | null
+  error: string | null
+  verify_json: Record<string, unknown>
+  created_at: string
+  finished_at: string | null
+}
+
+export interface Publication {
+  id: number
+  project_id: number
+  /** Which codebase it came from, for the page that lists every publication. */
+  project_name: string
+  /** `live`, or the label of a frozen version. */
+  target: string
+  slug: string
+  renderer: string
+  visibility: string
+  status: 'building' | 'live' | 'failed' | 'unpublished'
+  published_at: string | null
+  unpublished_at: string | null
+  current_build: PublicationBuild | null
+  /** Path only. The studio joins it to the API origin, because that is the
+   *  host a reader will actually be able to reach. */
+  url: string
+  /** The commit the newest reading covers, and whether the published build
+   *  was written from it. Null on either means there is nothing to compare. */
+  latest_commit: string | null
+  is_current: boolean | null
+}
+
+export interface PublishAccepted {
+  /** Nothing was built: what is serving is already what this would produce. */
+  unchanged: boolean
+  publication: Publication
+  job_id: number | null
+}
+
+export interface RendererInfo {
+  name: string
+  version: string
+  available: boolean
+  reason: string
+}

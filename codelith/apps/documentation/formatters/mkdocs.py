@@ -102,7 +102,11 @@ class MkDocsFormatter:
                         "---\n"
                         f'title: "{page.title}"\n'
                         "---\n\n"
-                        + rewrite_links(page.content_markdown, from_page=page.address),
+                        + rewrite_links(
+                            page.content_markdown,
+                            from_page=page.address,
+                            present=tree.addresses,
+                        ),
                     )
                 nav.append({section.title: entries})
 

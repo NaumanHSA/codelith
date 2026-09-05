@@ -26,6 +26,12 @@ from dataclasses import dataclass, field
 #: The route shape `LinkerAgent` writes. Captures the page address and any anchor.
 _STUDIO_ROUTE = re.compile(r"\(/app/projects/\d+/docs/([^)#\s]+)(#[^)\s]*)?\)")
 
+#: The same route, with the link text in front of it, so a link to a page that is not
+#: in the export can be unwrapped to plain text instead of left dangling.
+_STUDIO_LINK = re.compile(
+    r"\[([^\]]*)\]\(/app/projects/\d+/docs/([^)#\s]+)(#[^)\s]*)?\)"
+)
+
 
 @dataclass(slots=True)
 class ExportPage:
@@ -67,8 +73,26 @@ class SiteTree:
     def is_empty(self) -> bool:
         return not any(s.pages for s in self.sections)
 
+    @property
+    def addresses(self) -> set[str]:
+        """
+        Every page this export actually contains.
 
-def rewrite_links(markdown: str, *, from_page: str, suffix: str = ".md") -> str:
+        Handed to `rewrite_links` so a link to a page that was planned but never
+        written becomes plain text rather than a dead href. Most of a site is usually
+        unwritten, so without this an export ships one broken link per unwritten page
+        it happens to mention.
+        """
+        return {p.address for s in self.sections for p in s.pages}
+
+
+def rewrite_links(
+    markdown: str,
+    *,
+    from_page: str,
+    suffix: str = ".md",
+    present: set[str] | None = None,
+) -> str:
     """
     Turn studio routes back into relative paths between exported files.
 
@@ -78,20 +102,42 @@ def rewrite_links(markdown: str, *, from_page: str, suffix: str = ".md") -> str:
 
     `suffix` is `.md` for MkDocs, `.mdx` for Docusaurus, `.html` for the static
     export — the only difference between the three.
+
+    `present` is the set of addresses the export actually contains, and it exists
+    because most of a site is usually not written yet. A page in the nav but not yet
+    composed is not exported, while the prose of the pages that *were* composed still
+    links to it — so without this every export ships dead links, one per unwritten
+    page it happened to mention. A real site of two written pages and nineteen planned
+    ones produced twenty-two of them, and nobody had noticed, because a downloaded
+    archive is not something anyone link-checks.
+
+    A link to a page that is not there becomes its own text. The sentence still reads;
+    it just stops promising somewhere to go. Passing `None` keeps every link, which is
+    what the studio itself wants, where planned pages are real destinations.
     """
     from_section = from_page.split("/")[0] if "/" in from_page else ""
 
-    def replace(match: re.Match[str]) -> str:
-        address = match.group(1).rstrip("/")
-        anchor = match.group(2) or ""
+    def path_to(address: str, anchor: str) -> str:
         section, _, slug = address.partition("/")
         if not slug:
             # A section address with no page — link at the section's index.
-            return f"({section}/index{suffix}{anchor})"
+            return f"{section}/index{suffix}{anchor}"
         target = f"{slug}{suffix}" if section == from_section else f"../{section}/{slug}{suffix}"
-        return f"({target}{anchor})"
+        return f"{target}{anchor}"
 
-    return _STUDIO_ROUTE.sub(replace, markdown)
+    if present is not None:
+        def unwrap(match: re.Match[str]) -> str:
+            text, address, anchor = match.group(1), match.group(2).rstrip("/"), match.group(3) or ""
+            if address not in present:
+                return text or address
+            return f"[{text}]({path_to(address, anchor)})"
+
+        markdown = _STUDIO_LINK.sub(unwrap, markdown)
+
+    # Whatever is left is a bare route, or every route when `present` is None.
+    return _STUDIO_ROUTE.sub(
+        lambda m: f"({path_to(m.group(1).rstrip('/'), m.group(2) or '')})", markdown
+    )
 
 
 def slugify_filename(name: str) -> str:

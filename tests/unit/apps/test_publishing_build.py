@@ -167,3 +167,204 @@ class TestVerifier:
         self._site(tmp_path, "".join(f'<a href="gone{i}.html">x</a>' for i in range(200)))
         d = verify_build(tmp_path).as_dict()
         assert d["broken_total"] == 200 and len(d["broken"]) == 50
+
+
+class TestLinksToUnwrittenPages:
+    """
+    The bug publishing found on its first real site.
+
+    Two pages written, nineteen still planned, and the prose of the written two linked
+    to the planned ones. Export drops unwritten pages but kept the links to them, so
+    every archive shipped with dead hrefs: twenty-two of them, unnoticed, because
+    nobody link-checks a ZIP they just downloaded.
+    """
+
+    def _linking_tree(self):
+        body = (
+            "See [ONNX runtime](/app/projects/1/docs/utilities/onnx-runtime) "
+            "and [Installation](/app/projects/1/docs/guides/install)."
+        )
+        return SiteTree(
+            title="Site",
+            sections=[
+                ExportSection(
+                    slug="guides",
+                    title="Guides",
+                    pages=[
+                        ExportPage(
+                            section_slug="guides", slug="intro", title="Intro",
+                            content_markdown=body, order_index=0, intent=None,
+                            commit_sha=None, source_files=[],
+                        ),
+                        ExportPage(
+                            section_slug="guides", slug="install", title="Installation",
+                            content_markdown="# Installation", order_index=1, intent=None,
+                            commit_sha=None, source_files=[],
+                        ),
+                    ],
+                )
+            ],
+            home_markdown="# Site",
+            version_label=None,
+        )
+
+    def test_a_site_that_links_to_unwritten_pages_still_verifies(self, tmp_path):
+        BuiltinRenderer().build(self._linking_tree(), tmp_path)
+        report = verify_build(tmp_path)
+        assert report.ok, f"broken={report.broken}"
+
+    def test_the_link_becomes_its_own_text(self, tmp_path):
+        BuiltinRenderer().build(self._linking_tree(), tmp_path)
+        page = next(p for p in tmp_path.rglob("*.html") if "intro" in p.name)
+        html = page.read_text(encoding="utf-8")
+        assert "ONNX runtime" in html, "the sentence must still read"
+        assert "onnx-runtime.html" not in html, "but must not promise a page that is absent"
+
+    def test_a_link_to_a_page_that_exists_survives(self, tmp_path):
+        BuiltinRenderer().build(self._linking_tree(), tmp_path)
+        page = next(p for p in tmp_path.rglob("*.html") if "intro" in p.name)
+        assert "install.html" in page.read_text(encoding="utf-8")
+
+
+class TestDiagrams:
+    """
+    Diagrams arrive as `data:image/svg+xml;base64,…` and used to render as a
+    screenful of their own base64.
+
+    `markdown-it`'s link validator allows a `data:` image for png, gif, jpeg and webp
+    and refuses it for svg, because an SVG data URI can carry script. The refusal is
+    silent: the image falls back to literal text. Writing each one out as a file
+    sidesteps the validator, and is safe for the reason the validator exists — an SVG
+    loaded through `<img src>` cannot execute script.
+    """
+
+    #: A real, tiny SVG, base64 encoded.
+    SVG = (
+        "data:image/svg+xml;base64,"
+        "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIvPg=="
+    )
+
+    def _tree_with_diagram(self, body=None):
+        return SiteTree(
+            title="Site",
+            sections=[
+                ExportSection(
+                    slug="guides", title="Guides",
+                    pages=[
+                        ExportPage(
+                            section_slug="guides", slug="arch", title="Architecture",
+                            content_markdown=body or f"## Diagrams\n\n![System Context]({self.SVG})\n",
+                            order_index=0, intent=None, commit_sha=None, source_files=[],
+                        )
+                    ],
+                )
+            ],
+            home_markdown="# Site",
+            version_label=None,
+        )
+
+    def test_the_diagram_becomes_a_file(self, tmp_path):
+        BuiltinRenderer().build(self._tree_with_diagram(), tmp_path)
+        svgs = list((tmp_path / "assets" / "diagrams").glob("*.svg"))
+        assert len(svgs) == 1
+        assert svgs[0].read_bytes().startswith(b"<svg")
+
+    def test_the_page_shows_an_image_not_its_source(self, tmp_path):
+        BuiltinRenderer().build(self._tree_with_diagram(), tmp_path)
+        page = next(p for p in tmp_path.rglob("*.html") if "arch" in p.name)
+        html = page.read_text(encoding="utf-8")
+        assert "<img" in html and "assets/diagrams/" in html
+        assert "base64" not in html, "the source must not be sitting in the page"
+
+    def test_the_reference_resolves(self, tmp_path):
+        """The whole point: a diagram that verification accepts."""
+        BuiltinRenderer().build(self._tree_with_diagram(), tmp_path)
+        report = verify_build(tmp_path)
+        assert report.ok, f"broken={report.broken}"
+
+    def test_the_same_diagram_twice_is_stored_once(self, tmp_path):
+        body = f"![One]({self.SVG})\n\n![Two again]({self.SVG})\n"
+        BuiltinRenderer().build(self._tree_with_diagram(body), tmp_path)
+        assert len(list((tmp_path / "assets" / "diagrams").glob("*.svg"))) == 1
+
+    def test_a_corrupt_data_uri_does_not_take_the_build_down(self, tmp_path):
+        BuiltinRenderer().build(
+            self._tree_with_diagram("![Broken](data:image/svg+xml;base64,not!valid!)\n"), tmp_path
+        )
+        assert list(tmp_path.rglob("*.html")), "the page still exists"
+
+    def test_the_diagram_source_block_is_dropped(self, tmp_path):
+        """A published site has readers, not authors. D2 source is noise to all of them."""
+        body = (
+            f"![System Context]({self.SVG})\n\n"
+            "<details>\n<summary>Diagram source</summary>\n\n"
+            "```d2\na -> b\n```\n\n</details>\n"
+        )
+        BuiltinRenderer().build(self._tree_with_diagram(body), tmp_path)
+        html = next(p for p in tmp_path.rglob("*.html") if "arch" in p.name).read_text(encoding="utf-8")
+        assert "Diagram source" not in html
+        assert "a -&gt; b" not in html and "a -> b" not in html
+
+
+class TestPublishedNavigation:
+    """The studio's shape: tabs, a rail for the open section, headings on the right."""
+
+    def _two_sections(self):
+        def page(section, slug, title, body):
+            return ExportPage(
+                section_slug=section, slug=slug, title=title, content_markdown=body,
+                order_index=0, intent=None, commit_sha=None, source_files=[],
+            )
+        return SiteTree(
+            title="Site",
+            sections=[
+                ExportSection(slug="start", title="Getting Started", pages=[
+                    page("start", "intro", "Intro", "## Core\n\ntext\n\n### Detail\n\nmore\n")]),
+                ExportSection(slug="testing", title="Testing", pages=[
+                    page("testing", "suites", "Test Suites", "## Suites\n\ntext\n")]),
+            ],
+            home_markdown="# Site",
+            version_label=None,
+        )
+
+    def _page(self, tmp_path, name):
+        BuiltinRenderer().build(self._two_sections(), tmp_path)
+        return next(p for p in tmp_path.rglob("*.html") if name in p.name).read_text(encoding="utf-8")
+
+    def test_both_sections_are_tabs(self, tmp_path):
+        html = self._page(tmp_path, "intro")
+        tabs = html.split('<nav class="tabs">')[1].split("</nav>")[0]
+        assert "Getting Started" in tabs and "Testing" in tabs and "Overview" in tabs
+
+    def test_the_rail_holds_only_the_open_section(self, tmp_path):
+        """
+        The bug this replaces: every page of every section in one flat list, so
+        Getting Started and Testing sat together as though they were one thing.
+        """
+        html = self._page(tmp_path, "intro")
+        rail = html.split('<aside class="left">')[1].split("</aside>")[0]
+        assert "Intro" in rail
+        assert "Test Suites" not in rail
+
+    def test_headings_fill_the_right_rail(self, tmp_path):
+        html = self._page(tmp_path, "intro")
+        right = html.split('<aside class="right">')[1].split("</aside>")[0]
+        assert "On this page" in right
+        assert 'href="#core"' in right and 'href="#detail"' in right
+
+    def test_the_open_tab_is_marked(self, tmp_path):
+        html = self._page(tmp_path, "suites")
+        tabs = html.split('<nav class="tabs">')[1].split("</nav>")[0]
+        assert 'class="tab on" href="../testing/suites.html">Testing' in tabs
+
+    def test_the_chrome_is_there(self, tmp_path):
+        html = self._page(tmp_path, "intro")
+        assert 'class="brand"' in html and "code<i>·</i>lith" in html
+        assert 'class="theme"' in html, "the light/dark toggle"
+        assert "<footer>" in html and "Codelith" in html
+
+    def test_the_theme_is_applied_before_the_first_paint(self, tmp_path):
+        """A toggle that flashes the wrong theme on every navigation is worse than none."""
+        html = self._page(tmp_path, "intro")
+        head = html.split("</head>")[0]
+        assert "localStorage.getItem('codelith-theme')" in head

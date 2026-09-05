@@ -102,18 +102,41 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
-/** Wall-clock elapsed between two ISO timestamps (or now). */
+/**
+ * Wall-clock elapsed between two ISO timestamps (or now).
+ *
+ * Both ends go through `parseApiDate`. With two API timestamps the offsets cancel and
+ * a naive read happens to be right, but a running job compares one against `Date.now()`
+ * and is wrong by the machine's offset, which is how long every unfinished job claimed
+ * to have been going.
+ */
 export function elapsedSeconds(from: string | null, to: string | null): number | null {
   if (!from) return null
-  const start = new Date(from).getTime()
-  const end = to ? new Date(to).getTime() : Date.now()
+  const start = parseApiDate(from).getTime()
+  const end = to ? parseApiDate(to).getTime() : Date.now()
   if (Number.isNaN(start) || Number.isNaN(end)) return null
   return Math.max(0, (end - start) / 1000)
 }
 
+/**
+ * A timestamp from the API, as a real instant.
+ *
+ * Every datetime the API returns is UTC, but SQLite does not keep the offset, so it
+ * arrives without one: `2026-09-05T17:49:59` rather than `...Z`. Javascript reads a
+ * bare ISO string as *local* time, which silently shifts every timestamp in the
+ * studio by the machine's offset. On a three-day-old row nobody notices; on something
+ * published a second ago it reads "4h ago", which is how this was found.
+ *
+ * Anything already carrying a zone or an offset is left exactly as it is.
+ */
+export function parseApiDate(iso: string): Date {
+  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso)
+  return new Date(zoned ? iso : `${iso}Z`)
+}
+
 export function relativeTime(iso: string | null | undefined): string {
   if (!iso) return '-'
-  const t = new Date(iso).getTime()
+  const t = parseApiDate(iso).getTime()
   if (Number.isNaN(t)) return '-'
   const secs = Math.round((Date.now() - t) / 1000)
   if (secs < 45) return 'just now'
@@ -124,12 +147,12 @@ export function relativeTime(iso: string | null | undefined): string {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.round(hrs / 24)
   if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return parseApiDate(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '-'
-  const d = new Date(iso)
+  const d = parseApiDate(iso)
   if (Number.isNaN(d.getTime())) return '-'
   return d.toLocaleString(undefined, {
     month: 'short',

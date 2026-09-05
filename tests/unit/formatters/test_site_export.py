@@ -180,11 +180,14 @@ class TestDocusaurus:
 
 
 class TestStaticHtml:
-    def test_it_is_a_page_per_file_plus_one_stylesheet(self, tree) -> None:
+    def test_it_is_a_page_per_file_plus_the_theme(self, tree) -> None:
         files = names(StaticSiteFormatter().format_site_tree(tree))
 
         assert files == {
             "assets/theme.css",
+            # One small script, for the light/dark toggle. Local, and the only thing
+            # it touches is localStorage.
+            "assets/theme.js",
             "index.html",
             "api/endpoints.html",
             "api/schemas.html",
@@ -204,24 +207,36 @@ class TestStaticHtml:
         tree.sections[1].pages[0].content_markdown = "## Install\n\n- one\n- two\n"
         body = read(StaticSiteFormatter().format_site_tree(tree), "guides/setup.html")
 
-        assert "<h2>Install</h2>" in body
+        # Headings carry an id, because the right-hand rail links to them.
+        assert '<h2 id="install">Install</h2>' in body
         assert "<li>one</li>" in body
 
-    def test_every_page_carries_the_whole_nav(self, tree) -> None:
+    def test_sections_are_tabs_and_the_open_one_fills_the_rail(self, tree) -> None:
+        """
+        The studio's shape, reproduced. A flat list of every page in the site stops
+        being navigable at about fifteen pages, which is most real sites.
+        """
         body = read(StaticSiteFormatter().format_site_tree(tree), "api/schemas.html")
 
+        # Every section is reachable as a tab...
         assert "API Reference" in body and "Guides" in body
-        assert 'href="../guides/setup.html"' in body
+        assert 'class="tab on"' in body
+
+        # ...but the left rail holds this section's pages, not the whole site.
+        rail = body.split('<aside class="left">')[1].split("</aside>")[0]
+        assert "Schemas" in rail and "Endpoints" in rail
+        assert "Setup" not in rail, "a page from another section must not be in the rail"
 
     def test_prev_and_next_cross_sections(self, tree) -> None:
         body = read(StaticSiteFormatter().format_site_tree(tree), "api/schemas.html")
 
-        assert "← Endpoints" in body
-        assert "Setup →" in body
+        assert "<span>Previous</span>Endpoints" in body
+        assert "<span>Next</span>Setup" in body
+        assert 'href="../guides/setup.html"' in body
 
     def test_provenance_reaches_the_reader(self, tree) -> None:
         body = read(StaticSiteFormatter().format_site_tree(tree), "api/schemas.html")
-        assert "Written from 1 file at 4065c2f" in body
+        assert "Written from 1 file at <code>4065c2f</code>" in body
 
     def test_links_point_at_html_files(self, tree) -> None:
         body = read(StaticSiteFormatter().format_site_tree(tree), "api/endpoints.html")

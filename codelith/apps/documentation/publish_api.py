@@ -101,6 +101,19 @@ async def list_publications(project_id: int, db: DbSession, user: CurrentUser):
     return [await _out(service, p) for p in await service.list_for_project(project_id, user)]
 
 
+@router.get("/publications", response_model=list[PublicationOut])
+async def list_all_publications(db: DbSession, user: CurrentUser):
+    """
+    Everything published anywhere, for the page that lists it.
+
+    Deliberately not scoped to a project. Once a link has been sent to somebody, the
+    question stops being "what did I publish from this codebase" and becomes "what is
+    out there", and that question has no project in it.
+    """
+    service = PublicationService(db)
+    return [await _out(service, p) for p in await service.list_for_org(user)]
+
+
 @router.post("/publications/{publication_id}/rotate", response_model=PublicationOut)
 async def rotate_link(
     publication_id: int, db: DbSession, user: ManagerUser, request: Request
@@ -149,6 +162,7 @@ async def _out(service: PublicationService, publication) -> PublicationOut:
     """
     out = PublicationOut.model_validate(publication)
     out.url = f"/published/{publication.slug}/"
+    out.project_name = publication.project.name if publication.project else ""
     out.latest_commit, out.is_current = await _staleness(service, publication)
     return out
 

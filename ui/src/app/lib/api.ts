@@ -13,6 +13,7 @@ import type {
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
   ModelRegistry, ModelDraft, ModelTest, Tier, EvidenceBody,
+  Publication, PublishAccepted, RendererInfo,
 } from './types'
 
 export const API_BASE =
@@ -443,6 +444,55 @@ export const api = {
       `/projects/${projectId}/preflight?target=${encodeURIComponent(target)}`,
       { signal },
     ),
+
+  /* ── Publishing ─────────────────────────────────────────────────── *
+   * Export downloads a ZIP; publishing gives the site a URL that other
+   * people can open. The publish call is the one worth reading: it
+   * answers 202 whether or not it started anything, and `unchanged`
+   * says which happened.
+   * ---------------------------------------------------------------- */
+
+  /** What this machine can build. Asked before anything is offered. */
+  renderers: (signal?: AbortSignal) =>
+    request<RendererInfo[]>('/publishing/renderers', { signal }),
+
+  /** Everything published for this project, newest first. */
+  publications: (projectId: number, signal?: AbortSignal) =>
+    request<Publication[]>(`/projects/${projectId}/site/publications`, { signal }),
+
+  /** Everything published anywhere. Once a link is out there, the question has no
+   *  project in it. */
+  allPublications: (signal?: AbortSignal) =>
+    request<Publication[]>('/publications', { signal }),
+
+  /**
+   * Publish the live site, or a frozen version.
+   *
+   * `force` is sent only after the reader has been told that nothing has
+   * changed, so the unchanged answer is never something they have to
+   * dismiss twice.
+   */
+  publishSite: (
+    projectId: number,
+    body: { target?: string; renderer?: string | null; force?: boolean } = {},
+  ) =>
+    // `request` serialises for us, so this passes the object rather than a string.
+    request<PublishAccepted>(`/projects/${projectId}/site/publish`, {
+      method: 'POST',
+      body: { target: 'live', force: false, ...body },
+    }),
+
+  /** Mint a new address. Every link that was ever shared stops working. */
+  rotatePublication: (publicationId: number) =>
+    request<Publication>(`/publications/${publicationId}/rotate`, { method: 'POST' }),
+
+  /** Point the address back at the build before this one. */
+  rollbackPublication: (publicationId: number) =>
+    request<Publication>(`/publications/${publicationId}/rollback`, { method: 'POST' }),
+
+  /** Stop serving, and delete the files. The record of it survives. */
+  unpublish: (publicationId: number) =>
+    request<Publication>(`/publications/${publicationId}`, { method: 'DELETE' }),
 
   appCatalog: (signal?: AbortSignal) =>
     request<AppCatalogItem[]>('/apps', { signal }),

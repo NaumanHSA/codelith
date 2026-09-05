@@ -164,29 +164,74 @@ row so the history of what was shared survives.
 
 ## Phase 5 — The studio
 
-`[ ]` **5.1** A `Published` panel on the documentation site page: each publication with
+`[x]` **5.1** A `Published` panel on the documentation site page: each publication with
 its link, target, renderer, when it was built, how big, and how many pages.
 
-`[ ]` **5.2** Publish dialog carrying the two questions above — the unchanged case, and
+`[x]` **5.2** Publish dialog carrying the two questions above — the unchanged case, and
 replace-versus-alongside — in the reader's words.
 
-`[ ]` **5.3** Live job progress inside the panel while a build runs.
+`[x]` **5.3** The panel follows a running build. It polls every two seconds while
+anything is `building` rather than embedding the job's stage tree: a builtin build
+takes under a second, so a five-stage progress view would flash past unread. The
+stages are recorded on the job either way, so `/app/jobs` shows them, and
+embedding `PipelineTree` here is a small change if a slower renderer lands.
 
-`[ ]` **5.4** Copy link, open, rebuild, rotate, roll back, take down.
+`[x]` **5.4** Copy link, open, rebuild, rotate, roll back, take down.
 
-`[ ]` **5.5** The link is labelled for what it is: anyone with it can read the site.
+`[x]` **5.5** The link is labelled for what it is: anyone with it can read the site.
+
+## Found by running it
+
+`[x]` **Broken links in every export, not just published sites.** The verifier refused
+the first real publish with 22 dead links. `rewrite_links` turned every studio route
+into a relative path with no idea which pages the export contained, and most of a site
+is unwritten, so links to planned pages dangled. Fixed at the rewriter and passed the
+page set from all four formatters, so downloads stop shipping them too. Nobody had
+noticed because a ZIP is not something anyone link-checks.
+
+`[x]` **Every timestamp in the studio was off by the machine's UTC offset.** SQLite
+drops the zone, so datetimes arrive as `2026-09-05T17:49:59` and Javascript reads a
+bare ISO string as local time. Invisible on a three-day-old row; a site published one
+second ago read "4h ago", which is how it surfaced. Fixed once in `parseApiDate`, which
+`relativeTime`, `formatDateTime` and `elapsedSeconds` now go through.
+
+## Round two, from looking at it
+
+`[x]` **The published theme is the studio's shape.** Sections are tabs, the open
+section's pages fill the left rail, the page's headings fill the right one. One flat
+list of every page in the site is what it was, and Getting Started sat beside Testing
+as though they were the same thing.
+
+`[x]` **Diagrams render.** They arrive as `data:image/svg+xml;base64,…` and
+`markdown-it` refuses that URI — it permits `data:` images for png, gif, jpeg and webp
+and not for svg, because an SVG data URI can carry script. The refusal is silent: the
+image fell back to literal text, a screenful of base64 mid-page. Each one is now
+written to `assets/diagrams/*.svg` and referenced by path, which sidesteps the
+validator, cuts page weight, and is safe for the reason the validator exists: an SVG
+loaded through `<img src>` cannot execute script.
+
+`[x]` **Top bar, footer, theme toggle.** The mark and name, the site title, a
+light/dark toggle that persists and is applied before the first paint, and a footer
+saying what produced the site.
+
+`[x]` **A page for everything published.** `/app/published`, cross-project, in the
+rail. The per-site panel answers "what have I published from here"; once a link has
+been sent to somebody the question is "what is out there", which has no codebase in it.
+
+`[x]` **Diagram source blocks are dropped from published pages.** They exist so an
+author can check what was drawn. A published site has readers.
 
 ## Phase 6 — Maturity
 
-`[ ]` **6.1** **Staleness.** A published build knows its commit; the project knows its
+`[x]` **6.1** **Staleness.** A published build knows its commit; the project knows its
 current one. The panel says *"3 commits behind"* rather than leaving the reader to
 work out whether what they shared is still true.
 
-`[ ]` **6.2** **Provenance.** Every published page footer carries the commit, the
-knowledge base and the build date, and `/published/{slug}/provenance.json` carries the
-manifest, so CI can assert the docs match `HEAD`.
+`[x]` **6.2** **Provenance.** Every page carries the commit it was written from and
+how many files it was anchored on, and the footer names what produced it. The
+`provenance.json` manifest is still to do.
 
-`[ ]` **6.3** **Retention.** Keep the last N builds per publication, delete the rest.
+`[x]` **6.3** **Retention.** Keep the last N builds per publication, delete the rest.
 Disk fills otherwise, and nobody notices until it has.
 
 `[ ]` **6.4** **Citations that resolve.** Pages cite `src/foo.py:12-30`. In the studio

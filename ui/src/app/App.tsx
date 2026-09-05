@@ -17,6 +17,7 @@ import JobProgressPage from './pages/app/JobProgressPage'
 import DriftPage from './pages/app/DriftPage'
 import DocumentsPage from './pages/app/DocumentsPage'
 import JobsPage from './pages/app/JobsPage'
+import PublishedPage from './pages/app/PublishedPage'
 import SettingsPage from './pages/app/SettingsPage'
 
 /** `/compose` was retired into the documentation site. `replace` so Back does not
@@ -111,6 +112,7 @@ export default function App() {
                 <Route path="projects/:projectId/drift" element={<DriftPage />} />
                 <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
                 <Route path="jobs" element={<JobsPage />} />
+                <Route path="published" element={<PublishedPage />} />
                 <Route path="chat" element={<ChatPage />} />
                 {/*
                   The documentation site. Section and page are optional: no

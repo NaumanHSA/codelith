@@ -165,6 +165,10 @@ class PublicationService:
         await self.site_service.projects.get(project_id, user)
         return list(await self.publications.list_for_project(project_id))
 
+    async def list_for_org(self, user: User) -> list[DocSitePublication]:
+        """Everything published across the user's org."""
+        return list(await self.publications.list_for_org(user.org_id))
+
     async def get(self, publication_id: int, user: User) -> DocSitePublication:
         pub = await self.publications.get_by_id(publication_id)
         if pub is None:

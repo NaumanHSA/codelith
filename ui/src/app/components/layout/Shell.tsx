@@ -26,6 +26,9 @@ const NAV = [
   { to: '/app', index: '01', label: 'Home', end: true },
   { to: '/app/projects', index: '02', label: 'Codebases' },
   { to: '/app/jobs', index: '03', label: 'Jobs' },
+  // Its own destination rather than a panel inside one codebase: once a link has
+  // been shared the question is "what is out there", which has no codebase in it.
+  { to: '/app/published', index: '04', label: 'Published' },
 ]
 
 /** How many codebases the index at the foot of the rail shows before deferring
@@ -210,7 +213,7 @@ function ShellBody() {
           {({ isActive }) => (
             <>
               {isActive && <span className="absolute top-0 left-0 h-full w-[3px] bg-hot" />}
-              <span className="tag text-ink-dim">04</span>
+              <span className="tag text-ink-dim">05</span>
               Settings
             </>
           )}

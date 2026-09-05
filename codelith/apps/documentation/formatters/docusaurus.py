@@ -118,7 +118,10 @@ module.exports = config;
                         f"sidebar_position: {position}\n"
                         "---\n\n"
                         + rewrite_links(
-                            page.content_markdown, from_page=page.address, suffix=""
+                            page.content_markdown,
+                            from_page=page.address,
+                            suffix="",
+                            present=tree.addresses,
                         ),
                     )
                 sidebar.append({"type": "category", "label": section.title, "items": ids})

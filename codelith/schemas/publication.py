@@ -37,6 +37,9 @@ class PublicationOut(BaseModel):
 
     id: int
     project_id: int
+    #: Which codebase this came from. Needed by the page that lists every
+    #: publication, where the project is the only thing telling two apart.
+    project_name: str = ""
     #: `live`, or the label of a frozen version.
     target: str
     slug: str

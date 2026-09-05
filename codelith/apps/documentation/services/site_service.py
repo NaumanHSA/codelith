@@ -899,7 +899,11 @@ class SiteService:
                     zf.writestr(
                         f"{slugify_filename(section.slug)}/{slugify_filename(page.slug)}.md",
                         f"# {page.title}\n\n"
-                        + rewrite_links(page.content_markdown, from_page=page.address),
+                        + rewrite_links(
+                            page.content_markdown,
+                            from_page=page.address,
+                            present=tree.addresses,
+                        ),
                     )
             if tree.home_markdown:
                 zf.writestr("index.md", f"# {tree.title}\n\n{tree.home_markdown}\n")

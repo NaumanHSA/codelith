@@ -20,6 +20,7 @@ import WriteBar from '../../components/docs/WriteBar'
 import PageDiff from '../../components/docs/PageDiff'
 import PageProgress from '../../components/docs/PageProgress'
 import PageProvenance from '../../components/docs/PageProvenance'
+import Published from '../../components/docs/Published'
 import RevisePanel, { type ReviseTarget } from '../../components/docs/RevisePanel'
 import SiteNav from '../../components/docs/SiteNav'
 import SiteToolbar from '../../components/docs/SiteToolbar'
@@ -463,6 +464,18 @@ ${body}
 
       {showCoverage ? (
         <div className="mx-auto w-full max-w-[1100px] p-5">
+          {/* Above the coverage list, because publishing is what a finished site is
+              for, and the list below is about finishing it. Manager-gated the same
+              way writing is: publishing puts pages where other people can read them. */}
+          <div className="mb-5">
+            <Published
+              projectId={id}
+              version={version}
+              canManage={can('manager')}
+              onJob={() => reload()}
+            />
+          </div>
+
           <Coverage
             site={site}
             onOpen={open}

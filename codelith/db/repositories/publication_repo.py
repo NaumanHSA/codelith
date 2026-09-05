@@ -69,8 +69,40 @@ class PublicationRepository(BaseRepository[DocSitePublication]):
             (
                 await self.session.execute(
                     select(DocSitePublication)
-                    .options(selectinload(DocSitePublication.current_build))
+                    .options(
+                        selectinload(DocSitePublication.current_build),
+                        selectinload(DocSitePublication.project),
+                    )
                     .where(DocSitePublication.project_id == project_id)
+                    .order_by(DocSitePublication.id.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    async def list_for_org(self, org_id: int) -> Sequence[DocSitePublication]:
+        """
+        Everything published anywhere in an org, newest first.
+
+        The per-project list answers "what have I published from here"; this answers
+        "what is out there", which is the only question that matters once links have
+        been sent to people. Joined through the project, because a publication has no
+        org of its own and should not: it belongs to a site, which belongs to a
+        project, which is where org membership is decided.
+        """
+        from codelith.models.project import Project
+
+        return (
+            (
+                await self.session.execute(
+                    select(DocSitePublication)
+                    .join(Project, Project.id == DocSitePublication.project_id)
+                    .options(
+                        selectinload(DocSitePublication.current_build),
+                        selectinload(DocSitePublication.project),
+                    )
+                    .where(Project.org_id == org_id)
                     .order_by(DocSitePublication.id.desc())
                 )
             )
