@@ -8,7 +8,6 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SkeletonPanel } from './components/States'
 import Shell from './components/layout/Shell'
 
-import LandingPage from './pages/LandingPage'
 import SignInPage from './pages/auth/SignInPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import HomePage from './pages/app/HomePage'
@@ -67,7 +66,11 @@ export default function App() {
         <AuthProvider>
           <RunningJobsProvider>
             <Routes>
-              <Route path="/" element={<LandingPage />} />
+              {/* There is no landing page. The application opens on the sign-in
+                  form and then the studio, so the root is just the way in —
+                  RequireAuth below sends a visitor without a session to /sign-in,
+                  and one with a session straight to Home. */}
+              <Route path="/" element={<Navigate to="/app" replace />} />
               <Route
                 path="/sign-in"
                 element={

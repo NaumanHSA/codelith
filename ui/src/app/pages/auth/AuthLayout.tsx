@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { GitHubMark, Logo } from '../../components/ui'
 
 /* Split front door: evidence on the left, the form on the right. */
@@ -16,12 +15,12 @@ export default function AuthLayout({
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
       {/* left: the pitch, on the blueprint ground */}
       <section className="bp-grid hidden flex-col justify-between border-r border-rule p-8 lg:flex">
-        <Link to="/" className="flex w-fit items-center gap-2">
+        <div className="flex w-fit items-center gap-2">
           <Logo size={17} />
           <span className="text-[11.5px] font-bold tracking-tight text-ink">
             code<span className="text-hot">·</span>lith
           </span>
-        </Link>
+        </div>
 
         <div className="max-w-[46ch]">
           <p className="tag mb-3 text-hot-ink">Local documentation studio</p>
@@ -61,12 +60,12 @@ export default function AuthLayout({
 
       {/* right: the form */}
       <section className="flex flex-col justify-center bg-panel px-5 py-10 sm:px-8">
-        <Link to="/" className="mb-8 flex w-fit items-center gap-2 lg:hidden">
+        <div className="mb-8 flex w-fit items-center gap-2 lg:hidden">
           <Logo size={17} />
           <span className="text-[11.5px] font-bold tracking-tight text-ink">
             code<span className="text-hot">·</span>lith
           </span>
-        </Link>
+        </div>
 
         <div className="mb-5 flex items-end gap-3 border-b border-rule pb-3">
           <span className="text-[30px] leading-[0.8] font-bold tracking-tighter text-rule select-none">

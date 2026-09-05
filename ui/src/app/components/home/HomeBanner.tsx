@@ -1,94 +1,115 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Chip } from '../ui'
 import type { Project } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
  * What this is, and where you start — said once, at the top of Home.
  *
- * Home opened straight into counters and cards, which assumes the reader
- * already knows what a knowledge base is for here and why three
- * unrelated-looking apps sit next to each other. The landing page
- * explains it, and then you sign in and the explanation is gone.
+ * This is the landing page's hero, moved. There is no landing page any
+ * more: the application opens on the sign-in form and then the studio,
+ * so the one explanation of what a knowledge base is for, and why three
+ * unrelated-looking apps sit next to each other, had nowhere left to
+ * live. It reads the same here — a reader who has just signed in is
+ * exactly the reader it was written for.
  *
- * It carries the pipeline, so the pipeline is stated where it explains
- * something rather than as a legend in the last panel of the right-hand
- * column, which is where it used to live. Down one rail rather than
- * across three boxes: the order is the point, and boxes of equal weight
- * do not show order.
+ * Two things change in the move.
  *
- * It also carries the only button that starts anything. Nothing in this
- * product happens until a codebase has been read, and that step used to
- * sit in a band of its own below — one more thing to scan past. Which
- * is why this band has no collapse: an entry point you can hide is not
- * one.
+ * The buttons. "Open the studio" is meaningless once you are in it, and
+ * "Read the source" belongs on a page for people deciding whether to
+ * install this. In their place the two that matter here: nothing in this
+ * product happens until a codebase has been read, and the way back to
+ * one already read is the step between Home and any app.
+ *
+ * The terminal is marked as an example. On a marketing page a specimen
+ * run reads as a specimen; on a dashboard, above a panel of the reader's
+ * own jobs, "job #38" reads as one of theirs — and neurosurfer is not
+ * their repository. The numbers are honest about the product and dishonest
+ * about whose they are, so the header says which.
  * ------------------------------------------------------------------ */
 
-const STEPS = [
-  {
-    label: 'Analyse',
-    desc: 'Walk every file. Routes, entry points, module boundaries, dependencies — pinned to the commit it read.',
-  },
-  {
-    label: 'Unlock',
-    desc: 'Documentation and Ask the code become available together. They read one knowledge base.',
-  },
-  {
-    label: 'Use',
-    desc: 'Each app retrieves what it needs. None of them reads the repository again.',
-  },
+/** The specimen run. Illustrative — see the note above. */
+const TERMINAL = [
+  { t: 'cmd', s: '$ codelith analyse github.com/acme/neurosurfer' },
+  { t: 'ok', s: '  ✓ repo_analyzer        257 files · 45 modules          3.7s' },
+  { t: 'ok', s: '  ✓ structured_extractor 45 modules · 77 facts          141ms' },
+  { t: 'ok', s: '  ✓ semantic_indexer     1,103 chunks · pgvector          21s' },
+  { t: 'ok', s: '  ✓ module_summarizer    40/40 summarised                 13s' },
+  { t: 'ok', s: '  ✓ architecture_synth   5 components mapped              93s' },
+  { t: 'live', s: '  … narrative_writer     writing 6 narratives…' },
 ]
 
 export default function HomeBanner({ projects }: { projects: Project[] | null }) {
   const none = projects !== null && projects.length === 0
   const unread = (projects ?? []).filter(p => !p.apps_ready).length
 
+  // The run types itself out. It is the only thing on Home that shows what analysis
+  // actually does rather than describing it.
+  const [lines, setLines] = useState(1)
+  useEffect(() => {
+    if (lines >= TERMINAL.length) return
+    const t = setTimeout(() => setLines(v => v + 1), 480)
+    return () => clearTimeout(t)
+  }, [lines])
+
+  const cta = 'tag inline-flex items-center justify-center gap-1.5 border transition-colors'
+
   return (
-    <section className="mb-5 border border-rule bg-panel">
-      <div className="tag flex items-center gap-2 border-b border-rule bg-sunk/60 px-4 py-2 text-ink-dim">
-        <span className="block size-[6px] shrink-0 rotate-45 bg-hot" />
-        <span className="truncate">Codelith — local-first code intelligence</span>
-        <span className="ml-auto flex shrink-0 items-center gap-1.5 text-ok">
-          <span className="block size-[5px] rounded-full bg-ok" />
-          runs fully offline
-        </span>
-      </div>
+    <section className="bp-grid mb-5 border border-rule">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div className="border-rule px-5 py-10 lg:border-r lg:py-12">
+          <div className="mb-5 flex flex-wrap gap-1.5">
+            <Chip>open source</Chip>
+            <Chip>MIT</Chip>
+            <Chip>self-hosted</Chip>
+            <Chip tone="hot">● runs fully offline</Chip>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <div className="border-b border-rule px-5 py-6 lg:border-r lg:border-b-0">
-          <h2 className="mb-3.5 text-[clamp(21px,2.6vw,30px)] leading-[1.06] font-bold tracking-[-0.035em] text-ink">
-            Read the codebase once.
+          <h1 className="mb-5 text-[clamp(28px,4.4vw,52px)] leading-[0.95] font-bold tracking-[-0.045em] text-ink">
+            Read the codebase
             <br />
-            Use it <span className="text-hot">many times.</span>
-          </h2>
+            once. Use it
+            <br />
+            <span className="relative inline-block">
+              <span className="relative z-10 text-hot">many times.</span>
+              <span className="absolute inset-x-0 bottom-[0.1em] z-0 h-[0.16em] bg-hot/20" />
+            </span>
+          </h1>
 
-          <p className="mb-5 max-w-[58ch] font-sans text-[12.5px] leading-[1.65] text-ink-mid">
-            Point Codelith at a repository. It reads every file and builds a structured
-            knowledge base of what is actually there — not a summary of it.{' '}
-            <strong className="font-semibold text-ink">
-              That knowledge base is the product.
-            </strong>{' '}
-            Everything below is something you do with it, and none of it leaves your
-            machine.
+          <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
+            Point Codelith at a repository. It walks every file and builds a structured
+            knowledge base — routes, entry points, module boundaries, dependencies, data
+            stores — pinned to the commit it read.
+          </p>
+          <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
+            That knowledge base is the product. Everything else is something you do with
+            it: <strong className="font-semibold text-ink">write documentation</strong>,{' '}
+            <strong className="font-semibold text-ink">ask the code questions</strong>, and
+            more as they land. None of them read the repository again.
+          </p>
+          <p className="mb-6 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
+            Everything runs on your machine against a local LLM.{' '}
+            <strong className="font-semibold text-ink">No code leaves the box.</strong>
           </p>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               to="/app/projects?new=1"
-              className="tag inline-flex items-center border border-hot bg-hot px-4 py-2.5 text-on-hot transition-colors hover:border-hot-press hover:bg-hot-press"
+              className={`${cta} border-hot bg-hot px-5 py-2.5 text-on-hot hover:border-hot-press hover:bg-hot-press`}
             >
               {none ? 'Get started' : 'Add a codebase'} →
             </Link>
             {/* The way in to work already done. Everything an app does happens on one
-                codebase, so opening one is the step between Home and any of them —
-                and until now the only route to it was the rail. */}
+                codebase, so opening one is the step between Home and any of them. */}
             {!none && (
               <Link
                 to="/app/projects"
-                className="tag inline-flex items-center border border-rule bg-panel px-4 py-2.5 text-ink-mid transition-colors hover:border-ink hover:text-ink"
+                className={`${cta} border-rule bg-panel px-4 py-[10px] text-ink-mid hover:border-ink hover:text-ink`}
               >
                 Open a codebase →
               </Link>
             )}
-            <span className="font-sans text-[11px] leading-snug text-ink-dim">
+            <span className="font-sans text-[11.5px] leading-snug text-ink-dim">
               {none
                 ? 'Nothing happens until a codebase has been read.'
                 : unread
@@ -98,29 +119,51 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
           </div>
         </div>
 
-        {/* The pipeline, down one rail. */}
-        <ol className="flex flex-col justify-center px-5 py-6">
-          {STEPS.map((s, i) => (
-            <li key={s.label} className="relative flex gap-3 pb-4 last:pb-0">
-              {/* The rail joins a step to the next one, so the last has none. */}
-              {i < STEPS.length - 1 && (
-                <span
-                  aria-hidden
-                  className="absolute top-[19px] bottom-0 left-[9px] w-px bg-rule"
-                />
-              )}
-              <span className="relative z-10 flex size-[19px] shrink-0 items-center justify-center border border-rule bg-panel text-[9.5px] font-bold text-ink-dim">
-                {i + 1}
-              </span>
-              <div className="min-w-0 pt-px">
-                <div className="text-[11.5px] font-semibold text-ink">{s.label}</div>
-                <p className="mt-0.5 font-sans text-[11px] leading-[1.55] text-ink-dim">
-                  {s.desc}
-                </p>
+        <div className="flex flex-col justify-center border-t border-rule px-5 py-8 lg:border-t-0">
+          <div className="border border-ink bg-term">
+            <div className="tag flex items-center gap-2 border-b border-term-rule px-3 py-2 text-term-dim">
+              <span className="size-[6px] rotate-45 bg-hot" />
+              example run — analysis
+              <span className="ml-auto">local</span>
+            </div>
+            <div className="px-3 py-2.5">
+              {TERMINAL.slice(0, lines).map((l, i) => (
+                <div
+                  key={i}
+                  className={`anim-rise overflow-x-auto text-[11px] leading-[1.75] whitespace-pre ${
+                    l.t === 'cmd'
+                      ? 'text-on-ink'
+                      : l.t === 'live'
+                        ? 'text-term-dim'
+                        : 'text-term-ok'
+                  }`}
+                >
+                  {l.s}
+                  {l.t === 'live' && i === lines - 1 && (
+                    <span className="anim-blink text-hot">▌</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="tag flex items-center gap-2 border-t border-term-rule px-3 py-1.5 text-term-dim">
+              <span>elapsed 2m 32s</span>
+              <span className="ml-auto text-hot">6/7 stages</span>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-px border border-rule bg-rule">
+            {[
+              ['zero', 'bytes uploaded'],
+              ['20', 'local agents'],
+              ['1', 'read per commit'],
+            ].map(([v, k]) => (
+              <div key={k} className="bg-panel px-2.5 py-2">
+                <div className="text-[16px] leading-none font-bold text-ink">{v}</div>
+                <div className="tag mt-1 text-ink-dim">{k}</div>
               </div>
-            </li>
-          ))}
-        </ol>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   )

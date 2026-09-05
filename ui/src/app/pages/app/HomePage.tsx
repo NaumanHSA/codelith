@@ -6,6 +6,7 @@ import { StatusBadge } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Pipeline from '../../components/home/Pipeline'
 import HomeBanner from '../../components/home/HomeBanner'
+import AgentTicker from '../../components/home/AgentTicker'
 import JobsTimeline from '../../components/home/JobsTimeline'
 import RecentProjects from '../../components/home/RecentProjects'
 import type { Doc, Job } from '../../lib/types'
@@ -105,6 +106,9 @@ export default function HomePage() {
       </header>
 
       <HomeBanner projects={projects.data ?? null} />
+
+      {/* Between the claim and the schematic that shows the order they run in. */}
+      <AgentTicker />
 
       <Pipeline features={features.data ?? null} />
 
