@@ -15,6 +15,7 @@ from codelith.models.knowledge import KBEntity, KBModule, KBNarrative, Knowledge
 from codelith.models.model_config import ModelConfig, TierAssignment
 from codelith.models.organization import Organization, OrgMember
 from codelith.models.project import Project, ProjectSource
+from codelith.models.publication import DocSitePublication, DocSitePublicationBuild
 from codelith.models.setting import SystemSetting
 from codelith.models.site import DocPage, DocSite, DocSiteVersion
 from codelith.models.user import OAuthAccount, User
@@ -26,6 +27,8 @@ __all__ = [
     "OrgMember",
     "User",
     "OAuthAccount",
+    "DocSitePublication",
+    "DocSitePublicationBuild",
     "Project",
     "ProjectSource",
     "Job",

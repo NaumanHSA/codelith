@@ -13,6 +13,7 @@ from codelith.api.v1.settings import router as settings_router
 from codelith.apps.ask import router as chat_router
 from codelith.apps.ask import threads_router as chat_threads_router
 from codelith.apps.documentation.api import router as document_router
+from codelith.apps.documentation.publish_api import router as publishing_router
 from codelith.apps.drift import router as drift_router
 
 v1_router = APIRouter()
@@ -32,3 +33,4 @@ v1_router.include_router(models_router)
 v1_router.include_router(settings_router)
 # Development only — the route itself 404s in production.
 v1_router.include_router(retrieval_router)
+v1_router.include_router(publishing_router)

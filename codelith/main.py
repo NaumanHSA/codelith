@@ -28,6 +28,13 @@ def create_app() -> FastAPI:
 
     app.include_router(v1_router, prefix="/api/v1")
 
+    # Published documentation, mounted at the root rather than under /api/v1. The
+    # people a site is shared with open it in a browser; they have no account here
+    # and no idea what an API is.
+    from codelith.apps.documentation.published_api import router as published_router
+
+    app.include_router(published_router)
+
     @app.get("/health", tags=["Health"])
     async def health() -> dict[str, str]:
         return {"status": "ok", "env": settings.APP_ENV}
