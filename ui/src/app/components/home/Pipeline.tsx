@@ -694,30 +694,18 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
         backgroundImage:
           'linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px)',
         backgroundSize: '32px 32px',
-        padding: '32px',
       }}
     >
-      <div style={{ width: '100%' }}>
-        {/* The banner above already carries the identity strip, the offline pill,
-            the headline and this section's opening paragraph — it is the first thing
-            on Home and says what the product is. Repeating any of it here would be
-            Home saying the same sentence twice, a hundred pixels apart, so all that
-            is left is the label that names the section. */}
-        <h2
-          style={{
-            ...MONO,
-            fontSize: 'clamp(20px, 2.4vw, 28px)',
-            fontWeight: 700,
-            color: 'var(--ink)',
-            letterSpacing: '-0.02em',
-            margin: 0,
-            marginBottom: 30,
-            opacity: v(1) ? 1 : 0,
-            transition: 'opacity 0.6s ease',
-          }}
-        >
-          How it works
-        </h2>
+      {/* Titled the way every other panel on Home is titled. The banner above
+          carries the identity strip, the headline and this section's opening
+          paragraph, so a heading is all this needs, and a heading unlike the ones
+          either side of it would only look like a different kind of thing. */}
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule bg-sunk/60 px-3 py-2">
+        <h2 className="text-[11.5px] font-semibold tracking-tight text-ink">How it works</h2>
+        <span className="tag text-ink-dim">read once, use many times</span>
+      </header>
+
+      <div style={{ padding: 32 }}>
 
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
           <Node

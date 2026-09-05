@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Chip } from '../ui'
+import { Chip, GitHubMark } from '../ui'
 import type { Project } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
@@ -55,7 +55,7 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
   const cta = 'tag inline-flex items-center justify-center gap-1.5 border transition-colors'
 
   return (
-    <section className="bp-grid border-b border-rule">
+    <section className="bp-grid border-b border-rule bg-panel">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div className="border-rule px-5 py-10 lg:border-r lg:py-12">
           <div className="mb-5 flex flex-wrap gap-1.5">
@@ -107,6 +107,18 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
                 Open a codebase →
               </Link>
             )}
+            {/* The one link that leaves the machine, and only because somebody
+                clicked it. It sits with the other two because reading the source is
+                the third thing a person does with a local-first tool they have just
+                been told keeps nothing from them. */}
+            <a
+              href="https://github.com/codelith"
+              target="_blank"
+              rel="noreferrer"
+              className={`${cta} border-rule bg-panel px-4 py-[10px] text-ink-mid hover:border-ink hover:text-ink`}
+            >
+              <GitHubMark size={12} /> Read the source
+            </a>
             <span className="font-sans text-[11.5px] leading-snug text-ink-dim">
               {none
                 ? 'Nothing happens until a codebase has been read.'

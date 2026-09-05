@@ -96,7 +96,10 @@ export default function HomePage() {
       <AgentTicker />
       <Pipeline features={features.data ?? null} />
 
-      <div className="p-5">
+      {/* Vertical gutter only. A horizontal one here made every panel below
+          40px narrower than the three bands above, which reads as a mistake
+          rather than as a margin. */}
+      <div className="py-5">
         <JobsTimeline jobs={jobs.data ?? null} loading={jobs.loading} />
 
       {/* Two columns: the work on the left, what came out of it on the right.
