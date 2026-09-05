@@ -27,17 +27,24 @@ import type { AppCatalogItem } from '../../lib/types'
  *   `--font-mono` and `--font-sans`, and the product's claim is that
  *   nothing leaves the machine.
  *
- * Geometry is expressed against the card width rather than in percent.
- * A card's centre is 120px from the row's edge whatever the row is
- * wide, so `calc(120px + …)` puts every drop on its column at any
- * width — and the fan still lands correctly when the registry carries
- * fewer than three apps.
+ * Geometry is arithmetic, not percentages. Plates share the row and the
+ * gap between them is what is fixed, so a column's centre is a `calc`
+ * over the row's own width — which puts every drop on its column at any
+ * width, and still lands when the registry carries fewer than three
+ * apps. Percentages only work for plates of a fixed width, and a fixed
+ * width in a container this wide just spends the difference on gaps.
  * ------------------------------------------------------------------ */
 
-/** The plate metrics the whole layout is measured against. */
-const CARD_W = 240
-const NODE_H = 198
-const FEATURE_H = 262
+/** The plate metrics the whole layout is measured against.
+ *
+ *  Plates share the row rather than holding a fixed 240px, because a fixed width in
+ *  a container this wide spends the difference on gaps — the same air, moved. They
+ *  grow instead, and the gap between them is what stays fixed. Heights are floors,
+ *  not fixed: the row stretches every plate to its tallest, so a plate is as tall as
+ *  it needs to be and no taller. */
+const GAP = 68
+const NODE_MIN_H = 150
+const FEATURE_MIN_H = 210
 
 /** A marching dash, horizontal and vertical. Painted as a repeating gradient on an
  *  HTML rule rather than an SVG stroke, so it can be laid out with the cards. */
@@ -255,9 +262,9 @@ function Node({
     <div
       className="pipe-card"
       style={{
-        width: CARD_W,
-        height: NODE_H,
-        flexShrink: 0,
+        flex: '1 1 0',
+        minWidth: 0,
+        minHeight: NODE_MIN_H,
         display: 'flex',
         flexDirection: 'column',
         border: `1.5px solid ${active || hub ? 'var(--hot)' : 'var(--ink)'}`,
@@ -332,9 +339,9 @@ function Feature({
     <div
       className="pipe-card"
       style={{
-        width: CARD_W,
-        height: FEATURE_H,
-        flexShrink: 0,
+        flex: '1 1 0',
+        minWidth: 0,
+        minHeight: FEATURE_MIN_H,
         display: 'flex',
         flexDirection: 'column',
         border: `1.5px ${active ? 'solid' : 'dashed'} var(--hot)`,
@@ -449,10 +456,9 @@ function Arrow({ visible, active }: { visible: boolean; active: boolean }) {
   return (
     <div
       style={{
-        flex: 1,
+        flex: `0 0 ${GAP}px`,
         display: 'flex',
         alignItems: 'center',
-        minWidth: 56,
         opacity: visible ? 1 : 0,
         transition: 'opacity 0.45s ease',
       }}
@@ -491,10 +497,16 @@ function Arrow({ visible, active }: { visible: boolean; active: boolean }) {
  * of apps the registry happens to carry.
  */
 function Fan({ count, visible, active }: { count: number; visible: boolean; active: boolean }) {
-  const half = CARD_W / 2
-  /** The centre of column `i`, as a CSS length. */
+  /**
+   * The centre of column `i`, as a CSS length.
+   *
+   * The rows lay out as `count` equal plates separated by fixed gaps, so a column is
+   * `(100% - gaps) / count` wide and column `i` starts `i` gaps further along. Written
+   * out rather than in percentages because percentages only land when the plates are a
+   * fixed width — these grow, and the arithmetic has to grow with them.
+   */
   const at = (i: number) =>
-    count < 2 ? '50%' : `calc(${half}px + (100% - ${CARD_W}px) * ${i} / ${count - 1})`
+    `calc((100% - ${(count - 1) * GAP}px) * ${2 * i + 1} / ${2 * count} + ${GAP * i}px)`
   const last = at(count - 1)
 
   return (
@@ -621,7 +633,7 @@ const FEATURES = [
 /** When each piece appears on first paint. */
 const REVEAL = [120, 420, 740, 1060, 1380, 1700, 2020]
 /** How long the travelling highlight rests on each stage once the reveal is done. */
-const TRAVEL_MS = 750
+const TRAVEL_MS = 3000
 
 export default function Pipeline({ features }: { features: AppCatalogItem[] | null }) {
   const [phase, setPhase] = useState(0)
@@ -665,12 +677,12 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
         backgroundImage:
           'linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px)',
         backgroundSize: '32px 32px',
-        padding: '56px 24px',
+        padding: '32px',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ width: '100%' }}>
         <div
-          style={{ marginBottom: 36, opacity: v(1) ? 1 : 0, transition: 'opacity 0.6s ease' }}
+          style={{ marginBottom: 26, opacity: v(1) ? 1 : 0, transition: 'opacity 0.6s ease' }}
         >
           <div
             style={{
@@ -791,7 +803,7 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
 
         <Fan count={shown.length} visible={v(7)} active={active === 3} />
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: GAP }}>
           {shown.map(f => (
             <Feature
               key={f.id}
@@ -809,8 +821,8 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
 
         <div
           style={{
-            marginTop: 32,
-            paddingTop: 20,
+            marginTop: 22,
+            paddingTop: 16,
             borderTop: '1px solid var(--rule)',
             display: 'flex',
             alignItems: 'center',
