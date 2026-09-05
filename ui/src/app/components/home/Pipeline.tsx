@@ -621,7 +621,7 @@ const FEATURES = [
     label: 'DOCUMENTATION',
     title: 'Documentation',
     description:
-      'Markdown, DOCX, MkDocs, or Docusaurus — written from the reading. Document types emerge from what the code contains.',
+      'Markdown, DOCX, MkDocs or Docusaurus, written from the reading. Document types emerge from what the code contains.',
     icon: <DocsIcon />,
     preview: <DocsPreview />,
   },
@@ -641,7 +641,7 @@ const FEATURES = [
     label: 'CODE DRIFT',
     title: 'What Changed',
     description:
-      'Track what changed between any two commits — structure, dependencies, API contracts, and behavior.',
+      'Track what changed between any two commits: structure, dependencies, API contracts and behaviour.',
     icon: <DriftIcon />,
     preview: <DriftPreview />,
   },
@@ -684,13 +684,13 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
 
   return (
     <section
-      className="mb-5 border border-rule"
+      className="border-b border-rule"
       style={{
         // Prose is sans here, as the draft had it. The studio's body font is the mono
         // one — every other component opts into `font-sans` for prose — and the draft
         // got Inter from an outer wrapper it had as a standalone page and this has not.
         fontFamily: 'var(--font-sans)',
-        backgroundColor: 'var(--paper)',
+        backgroundColor: 'var(--panel)',
         backgroundImage:
           'linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px)',
         backgroundSize: '32px 32px',
@@ -703,26 +703,28 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
             on Home and says what the product is. Repeating any of it here would be
             Home saying the same sentence twice, a hundred pixels apart, so all that
             is left is the label that names the section. */}
-        <div
+        <h2
           style={{
             ...MONO,
-            fontSize: 9.5,
-            color: 'var(--hot-ink)',
-            letterSpacing: '0.15em',
-            marginBottom: 26,
+            fontSize: 'clamp(20px, 2.4vw, 28px)',
+            fontWeight: 700,
+            color: 'var(--ink)',
+            letterSpacing: '-0.02em',
+            margin: 0,
+            marginBottom: 30,
             opacity: v(1) ? 1 : 0,
             transition: 'opacity 0.6s ease',
           }}
         >
-          HOW IT WORKS
-        </div>
+          How it works
+        </h2>
 
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
           <Node
             step="01"
             label="CODEBASE"
             title="Your Repository"
-            description="Every file, route, entry point, module boundary, and dependency — read once, pinned to the commit."
+            description="Every file, route, entry point, module boundary and dependency. Read once, pinned to the commit."
             icon={<RepoIcon />}
             visible={v(2)}
             active={active === 0}

@@ -54,7 +54,7 @@ export default function JobsPage() {
         sub={
           projectId
             ? `Every run for ${projectName ?? `project ${projectId}`}, newest first.`
-            : "Every run, newest first — analysis, composition and revision."
+            : "Every run, newest first: analysis, composition and revision."
         }
         right={
           <Button variant="ghost" onClick={reload}>
@@ -179,13 +179,13 @@ export default function JobsPage() {
             {doomed && !isTerminal(doomed.status) ? (
               <p>
                 This run is still <strong>{doomed.status}</strong>. It will be cancelled
-                first — the worker stops, then the record goes.
+                first: the worker stops, then the record goes.
               </p>
             ) : (
               <p>This removes the run and its logs.</p>
             )}
             <p className="mt-2">
-              Anything it wrote — documents and site pages — is kept. They record what
+              Anything it wrote (documents and site pages) is kept. They record what
               produced them, so the history survives without the job row.
             </p>
           </>

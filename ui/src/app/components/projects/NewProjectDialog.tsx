@@ -220,9 +220,9 @@ export default function NewProjectDialog({
             </div>
             <div className="grid grid-cols-2 gap-px bg-ok/15 sm:grid-cols-3">
               {[
-                ['files', probe.file_count?.toLocaleString() ?? '—'],
-                ['analysable', probe.analysable_files?.toLocaleString() ?? '—'],
-                ['languages', String(shares.length || '—')],
+                ['files', probe.file_count?.toLocaleString() ?? '-'],
+                ['analysable', probe.analysable_files?.toLocaleString() ?? '-'],
+                ['languages', String(shares.length || '-')],
               ].map(([k, v]) => (
                 <div key={k} className="bg-ok-wash px-2.5 py-2">
                   <div className="tag mb-1 text-ink-dim">{k}</div>

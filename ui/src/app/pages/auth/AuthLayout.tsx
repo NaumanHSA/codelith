@@ -31,7 +31,7 @@ export default function AuthLayout({
           </h1>
           <p className="font-sans text-[13.5px] leading-[1.7] text-ink-mid">
             Analyse a repository once, then write as many documents as you need from the same
-            evidence. Everything runs against a local model — no code leaves this machine.
+            evidence. Everything runs against a local model. No code leaves this machine.
           </p>
 
           <div className="mt-6 grid max-w-[380px] grid-cols-3 gap-px border border-rule bg-rule">

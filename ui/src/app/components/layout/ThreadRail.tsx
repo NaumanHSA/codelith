@@ -195,7 +195,7 @@ export default function ThreadRail() {
               {active && <span className="absolute top-0 left-0 h-full w-[3px] bg-hot" />}
               <button
                 onClick={() => navigate(`/app/chat?project=${t.project_id}&thread=${t.id}`)}
-                title={`${t.title} — ${t.project_name}`}
+                title={`${t.title} · ${t.project_name}`}
                 className="min-w-0 flex-1 py-[5px] text-left"
               >
                 <span

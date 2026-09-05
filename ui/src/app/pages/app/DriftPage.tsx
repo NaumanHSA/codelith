@@ -22,7 +22,7 @@ const CHANGE_TONE: Record<string, string> = {
 }
 
 function Delta({ n }: { n: number }) {
-  if (n === 0) return <span className="tag text-ink-dim">—</span>
+  if (n === 0) return <span className="tag text-ink-dim">-</span>
   return (
     <span className={`tag tabular-nums ${n > 0 ? 'text-ok' : 'text-[var(--bad)]'}`}>
       {n > 0 ? '+' : ''}
@@ -82,7 +82,7 @@ export default function DriftPage() {
         title="What changed"
         sub={
           d.comparable
-            ? `${d.from_commit?.slice(0, 7) ?? '—'} → ${d.to_commit?.slice(0, 7) ?? '—'}`
+            ? `${d.from_commit?.slice(0, 7) ?? '-'} → ${d.to_commit?.slice(0, 7) ?? '-'}`
             : 'Needs two readings'
         }
       />

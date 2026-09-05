@@ -298,15 +298,15 @@ export default function JobProgressPage() {
               action={kb ? <StatusBadge status={kb.knowledge_base.status} /> : null}
             >
               <div className="grid grid-cols-2 gap-px bg-rule sm:grid-cols-4">
-                <Stat k="modules" v={kb?.module_count ?? '—'} hot />
-                <Stat k="facts" v={kb?.entity_count ?? '—'} />
-                <Stat k="languages" v={kb?.languages?.length ?? '—'} />
+                <Stat k="modules" v={kb?.module_count ?? '-'} hot />
+                <Stat k="facts" v={kb?.entity_count ?? '-'} />
+                <Stat k="languages" v={kb?.languages?.length ?? '-'} />
                 <Stat k="commit" v={shortSha(kb?.knowledge_base.commit_sha)} />
               </div>
               <div className="px-3 py-2.5">
                 <p className="font-sans text-[12.5px] leading-relaxed text-ink-mid">
                   The repository has been read and stored. Nothing else has happened yet
-                  — the knowledge base is the product, and each app below reads it
+                  The knowledge base is the product, and each app below reads it
                   without the repository being opened again.
                 </p>
               </div>

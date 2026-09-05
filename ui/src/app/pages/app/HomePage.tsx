@@ -87,32 +87,17 @@ export default function HomePage() {
   const jobs = useAsync(sig => api.jobs(200, 0, null, sig), [])
 
   return (
-    <div className="mx-auto max-w-[1200px] p-5">
-      <header className="mb-5 flex items-end gap-4 border-b border-rule pb-3">
-        <span className="text-[34px] leading-[0.8] font-bold tracking-tighter text-rule select-none">
-          00
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[19px] leading-tight font-bold tracking-tight text-ink">Home</h1>
-          <p className="mt-0.5 text-[11.5px] text-ink-dim">
-            Cross-project activity ·{' '}
-            {new Date().toLocaleDateString(undefined, {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </p>
-        </div>
-      </header>
-
+    <div className="mx-auto max-w-[1200px]">
+      {/* The banner, the strip and the schematic stack flush, with no page padding
+          and nothing between them. A banner inset from the page edge is a panel, and
+          the strip only reads as the separator it is when it touches what it
+          separates. Everything below returns to the page's normal gutter. */}
       <HomeBanner projects={projects.data ?? null} />
-
-      {/* Between the claim and the schematic that shows the order they run in. */}
       <AgentTicker />
-
       <Pipeline features={features.data ?? null} />
 
-      <JobsTimeline jobs={jobs.data ?? null} loading={jobs.loading} />
+      <div className="p-5">
+        <JobsTimeline jobs={jobs.data ?? null} loading={jobs.loading} />
 
       {/* Two columns: the work on the left, what came out of it on the right.
           Documents span both rows rather than sitting under one of them —
@@ -195,6 +180,7 @@ export default function HomePage() {
             </div>
           )}
         </section>
+        </div>
       </div>
     </div>
   )

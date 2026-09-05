@@ -49,7 +49,7 @@ const TIERS: { id: Tier; index: string; label: string; blurb: string }[] = [
     index: '03',
     label: 'Embedding',
     blurb:
-      'Indexes the source for search. Changing it means re-analysing — a vector only means something to the model that made it.',
+      'Indexes the source for search. Changing it means re-analysing: a vector only means something to the model that made it.',
   },
 ]
 
@@ -106,7 +106,7 @@ function SelectedDetail({ model }: { model: ConfiguredModel }) {
       {model.context_window ? <span>context {model.context_window.toLocaleString()}</span> : null}
       {model.provider !== 'local' && (
         <span className={model.api_key_set ? '' : 'text-warn'}>
-          {model.api_key_set ? 'key stored' : 'no key — this will not work'}
+          {model.api_key_set ? 'key stored' : 'no key, this will not work'}
         </span>
       )}
       {t?.dimensions ? <span>{t.dimensions} dims</span> : null}
@@ -156,7 +156,7 @@ export default function SettingsPage() {
           <span className="mt-1 block size-[7px] shrink-0 rotate-45 bg-hot" />
           <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
             Add the endpoints you have and pick one per tier. Changes apply to the next
-            call — nothing needs restarting. A tier with nothing selected falls back to
+            call, and nothing needs restarting. A tier with nothing selected falls back to
             whatever <code className="text-hot-ink">.env</code> says, so an existing
             install keeps working until you choose otherwise.
           </p>
@@ -214,7 +214,7 @@ export default function SettingsPage() {
                         }
                         className="min-w-[240px] flex-1 border border-rule bg-panel px-2 py-1.5 font-mono text-[12px] text-ink focus:border-hot focus:outline-none"
                       >
-                        <option value="">— nothing selected —</option>
+                        <option value="">nothing selected</option>
                         {candidates.map(m => (
                           <option key={m.id} value={m.id}>
                             {m.label} ({m.model})

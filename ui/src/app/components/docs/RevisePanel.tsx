@@ -154,7 +154,7 @@ export default function RevisePanel({
         {turns.length === 0 && !live && (
           <p className="text-[11.5px] leading-relaxed text-ink-dim">
             Say what should change. The section is rewritten in place against the same
-            evidence it was written from — everything else on the page is left alone.
+            evidence it was written from. Everything else on the page is left alone.
           </p>
         )}
 
@@ -219,7 +219,7 @@ export default function RevisePanel({
               )}
             </div>
             <p className="mt-1 text-[11px] text-ink-mid">
-              {active ? `${agentLabel(active.name)} — ${describeStep(active) ?? 'working'}` : 'Starting…'}
+              {active ? `${agentLabel(active.name)} · ${describeStep(active) ?? 'working'}` : 'Starting…'}
             </p>
           </div>
         )}

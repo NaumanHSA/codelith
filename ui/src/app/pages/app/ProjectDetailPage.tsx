@@ -237,7 +237,7 @@ export default function ProjectDetailPage() {
         body={
           <>
             <p>
-              This removes the project and everything derived from it — its knowledge
+              This removes the project and everything derived from it: its knowledge
               base, every job, every document, and the whole documentation site with
               its pages and versions.
             </p>
@@ -309,7 +309,7 @@ export default function ProjectDetailPage() {
                 <div className="grid grid-cols-2 gap-px bg-rule sm:grid-cols-4">
                   <Stat k="modules" v={kb.data.module_count} hot />
                   <Stat k="entities" v={kb.data.entity_count} />
-                  <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '—'} />
+                  <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '-'} />
                   <Stat k="commit" v={shortSha(base.commit_sha)} />
                 </div>
                 <div className="border-t border-rule">

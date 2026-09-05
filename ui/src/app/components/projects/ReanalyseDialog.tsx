@@ -142,7 +142,7 @@ export default function ReanalyseDialog({
 
           {pointless && (
             <p className="px-1 font-sans text-[11.5px] leading-relaxed text-ink-mid">
-              Running it anyway is not harmful — it refreshes the existing reading and
+              Running it anyway is not harmful: it refreshes the existing reading and
               re-plans the documentation site. It just costs the same as a real analysis
               and leaves you with one reading rather than two.
             </p>

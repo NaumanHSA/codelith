@@ -42,7 +42,7 @@ const AGENTS = [
 
 export default function AgentTicker() {
   return (
-    <div className="mb-5 overflow-hidden border border-rule bg-term py-1.5">
+    <div className="overflow-hidden border-y border-rule bg-term py-1.5">
       {/* Listed twice. The strip is translated by exactly half its width, so the
           second copy is under the cursor at the moment the first runs out. */}
       <div

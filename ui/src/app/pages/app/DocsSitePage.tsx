@@ -417,7 +417,7 @@ ${body}
           <span className="tag text-ink-dim">reading version</span>
           <span className="text-[11.5px] font-semibold text-ink">{version}</span>
           <span className="text-[11px] text-ink-dim">
-            frozen — nothing here can be rewritten
+            frozen: nothing here can be rewritten
           </span>
           <button
             onClick={() => {

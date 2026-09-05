@@ -21,7 +21,7 @@ export const DOC_TYPES: Record<string, DocTypeMeta> = {
   architecture: {
     title: 'Architecture Guide',
     blurb:
-      'How the system is put together — the components, how a request moves through them, and where the boundaries are.',
+      'How the system is put together: the components, how a request moves through them, and where the boundaries are.',
     contains: ['System overview', 'Component map', 'Request lifecycle', 'Data model', 'Diagrams'],
     estMinutes: 6,
   },
@@ -35,7 +35,7 @@ export const DOC_TYPES: Record<string, DocTypeMeta> = {
   getting_started: {
     title: 'Getting Started',
     blurb:
-      'What a new developer needs on day one — prerequisites, install, configuration and the first successful run.',
+      'What a new developer needs on day one: prerequisites, install, configuration and the first successful run.',
     contains: ['Prerequisites', 'Installation', 'Configuration', 'First run', 'Troubleshooting'],
     estMinutes: 4,
   },
@@ -49,7 +49,7 @@ export const DOC_TYPES: Record<string, DocTypeMeta> = {
   modules: {
     title: 'Module Reference',
     blurb:
-      'A page per significant module — what it owns, what it depends on, and what calls it.',
+      'A page per significant module: what it owns, what it depends on, and what calls it.',
     contains: ['Per-module summaries', 'Responsibilities', 'Dependencies', 'Call graph'],
     estMinutes: 9,
   },

@@ -138,7 +138,7 @@ export default function PageProgress({
         {error
           ? error
           : active
-            ? `${agentLabel(active.name)} — ${describeStep(active) ?? 'working'}`
+            ? `${agentLabel(active.name)} · ${describeStep(active) ?? 'working'}`
             : 'Waiting for the worker to pick this up…'}
       </p>
     </section>

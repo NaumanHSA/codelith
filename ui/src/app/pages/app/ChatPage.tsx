@@ -251,7 +251,7 @@ export default function ChatPage() {
   if (!projects.length) {
     return (
       <Empty title="No projects yet">
-        Analyse a repository first — there is nothing to ask about until one has been
+        Analyse a repository first: there is nothing to ask about until one has been
         read. <Link to="/app/projects" className="text-hot-ink underline">Add a project</Link>.
       </Empty>
     )
@@ -282,7 +282,7 @@ export default function ChatPage() {
                     citations would still resolve, against a knowledge base nobody is
                     looking at. */}
                 <span className="max-w-[260px] truncate text-[12px] font-semibold text-ink">
-                  {project?.name ?? '—'}
+                  {project?.name ?? '-'}
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 pl-[52px] text-[10.5px] text-ink-dim">

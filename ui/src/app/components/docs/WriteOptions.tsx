@@ -29,7 +29,7 @@ export const DEPTHS: { id: Depth; label: string; blurb: string }[] = [
   {
     id: 'detailed',
     label: 'Detailed',
-    blurb: 'A reference to implement against — parameters, failures, examples.',
+    blurb: 'A reference to implement against: parameters, failures, examples.',
   },
 ]
 

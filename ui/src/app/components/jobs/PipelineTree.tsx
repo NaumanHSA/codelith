@@ -140,11 +140,11 @@ const NODE_STROKE: Record<RowStatus, string> = {
 
 /** The one line under the stage name, whatever state it is in. */
 function subtitle(r: Row): string {
-  if (r.status === 'disabled') return 'Switched off in configuration — this run skips it'
+  if (r.status === 'disabled') return 'Switched off in configuration, so this run skips it'
   if (r.status === 'skipped') return 'Never ran'
   if (r.detail) return r.detail
-  if (r.status === 'pending') return r.purpose ? `Queued — ${lower(r.purpose)}` : 'Queued'
-  return r.purpose ?? '—'
+  if (r.status === 'pending') return r.purpose ? `Queued · ${lower(r.purpose)}` : 'Queued'
+  return r.purpose ?? '-'
 }
 
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
@@ -323,7 +323,7 @@ export default function PipelineTree({
               onClick={isWriter ? () => setOpenWriter(o => !(o ?? writerRunning)) : undefined}
               // The purpose is on the row itself, so hovering anywhere explains the
               // stage rather than requiring a hit on the 9px node.
-              title={r.purpose ? `${r.label} — ${r.purpose}` : r.label}
+              title={r.purpose ? `${r.label} · ${r.purpose}` : r.label}
               style={{ height: ROW }}
               className={`flex items-center gap-3 px-3 transition-colors ${
                 r.status === 'running' ? 'bg-hot-wash/60' : 'hover:bg-sunk/50'

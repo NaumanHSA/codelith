@@ -55,7 +55,7 @@ export function Grounding({ page }: { page: SitePageDetail }) {
       {open && (
         <div className="mt-3 space-y-3">
           <p className="text-xs text-ink-dim">
-            Each paragraph is checked for identifiers — symbols, files, packages —
+            Each paragraph is checked for identifiers (symbols, files, packages)
             against what analysis found in the codebase. This proves a paragraph
             <em> refers</em> to things that exist; it does not prove what it says
             about them is right.

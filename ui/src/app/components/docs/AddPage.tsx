@@ -90,7 +90,7 @@ export default function AddPage({
           ))}
           {!made.key_files?.length && (
             <li className="text-[11px] text-warn">
-              Retrieval found nothing to anchor it on — the page would be written from
+              Retrieval found nothing to anchor it on: the page would be written from
               the narratives alone. Try describing it in the codebase's own words.
             </li>
           )}
@@ -135,7 +135,7 @@ export default function AddPage({
         value={title}
         onChange={e => setTitle(e.target.value)}
         disabled={busy}
-        placeholder="Title (optional — one is chosen for you)"
+        placeholder="Title (optional, one is chosen for you)"
         className="mt-1.5 w-full border border-rule bg-panel px-2.5 py-1.5 font-sans text-[11.5px] text-ink transition-colors placeholder:text-ink-dim focus:border-hot focus:outline-none disabled:opacity-60"
       />
 

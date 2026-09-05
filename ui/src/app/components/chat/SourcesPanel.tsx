@@ -66,7 +66,7 @@ function Body({ projectId, refText }: { projectId: number; refText: string }) {
     <div className="border-t border-rule bg-sunk/40">
       {body.partial && (
         <p className="border-b border-rule bg-warn-wash px-2.5 py-1 font-sans text-[10.5px] text-warn">
-          Those exact lines are no longer stored — this file has been re-analysed since.
+          Those exact lines are no longer stored. This file has been re-analysed since.
           Showing what is there now.
         </p>
       )}

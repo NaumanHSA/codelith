@@ -129,7 +129,7 @@ export default function ReviewGate({
           {busy === 'reject' ? 'discarding…' : 'Reject'}
         </Button>
         <span className="tag ml-auto text-ink-dim">
-          approving publishes the pages above — it does not rewrite them
+          approving publishes the pages above; it does not rewrite them
         </span>
       </footer>
     </Panel>

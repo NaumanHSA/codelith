@@ -93,7 +93,7 @@ export function agentLabel(name: string): string {
 
 /** 29.4 → "29.4s" · 141 → "2m 21s" · 0.4 → "412ms" */
 export function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null || Number.isNaN(seconds)) return '—'
+  if (seconds == null || Number.isNaN(seconds)) return '-'
   if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
   if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`
   const m = Math.floor(seconds / 60)
@@ -112,9 +112,9 @@ export function elapsedSeconds(from: string | null, to: string | null): number |
 }
 
 export function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return '—'
+  if (Number.isNaN(t)) return '-'
   const secs = Math.round((Date.now() - t) / 1000)
   if (secs < 45) return 'just now'
   if (secs < 90) return 'a minute ago'
@@ -128,9 +128,9 @@ export function relativeTime(iso: string | null | undefined): string {
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
+  if (Number.isNaN(d.getTime())) return '-'
   return d.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -139,7 +139,7 @@ export function formatDateTime(iso: string | null | undefined): string {
   })
 }
 
-export const shortSha = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : '—')
+export const shortSha = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : '-')
 
 /** Language byte/file counts → percentage shares, largest first. */
 export function languageShares(

@@ -93,7 +93,7 @@ export default function Preflight({ projectId }: { projectId: number }) {
     >
       <div className="px-3 py-2.5">
         <p className="font-sans text-[11.5px] leading-relaxed text-ink-mid">
-          Name a file or a function and see what depends on it — who imports it, what
+          Name a file or a function and see what depends on it: who imports it, what
           calls it, whether a test reaches it, and which written pages describe it. This
           is the answer a connected coding agent gets before it changes anything.
         </p>
@@ -183,7 +183,7 @@ export default function Preflight({ projectId }: { projectId: number }) {
                   hint="these will need re-writing"
                   items={result.documented_in.map(p => ({
                     key: p.address,
-                    left: `${p.address} — ${p.title}`,
+                    left: `${p.address} · ${p.title}`,
                   }))}
                 />
                 <List title="declares" items={result.facts.map(f => ({ key: f, left: f }))} />

@@ -76,7 +76,7 @@ const PURPOSE: Record<string, string> = {
   module_summarizer: 'Writing a summary for every module',
   architecture_synthesizer: 'Assembling components into an architecture',
   narrative_writer: 'Drafting narrative topics from the evidence',
-  site_planner: 'Planning the documentation site — sections and pages',
+  site_planner: 'Planning the documentation site: sections and pages',
   question_seeder: 'Writing the questions worth asking about this codebase',
   kb_persister: 'Committing the knowledge base',
   kb_loader: 'Loading the knowledge base for this commit',
@@ -140,7 +140,7 @@ const NARRATORS: Record<string, Narrator> = {
     const degraded = bool(o.degraded)
     if (s === undefined) return degraded ? 'Architecture partially synthesised' : null
     return degraded
-      ? `Mapped ${countLabel(s, 'component')} — partial`
+      ? `Mapped ${countLabel(s, 'component')} · partial`
       : `Mapped ${countLabel(s, 'component')}`
   },
 
@@ -190,7 +190,7 @@ const NARRATORS: Record<string, Narrator> = {
     const section = typeof o.section === 'string' ? o.section : null
     const words = num(o.words)
     if (!section) return null
-    return words === undefined ? `Revised “${section}”` : `Revised “${section}” — ${words} words`
+    return words === undefined ? `Revised “${section}”` : `Revised “${section}” · ${words} words`
   },
 
   linker: o => {

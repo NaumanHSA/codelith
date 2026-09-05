@@ -53,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
             This screen hit an error.
           </h1>
           <p className="mb-3 font-sans text-[13px] leading-relaxed text-ink-mid">
-            The rest of the studio is still running — you can go back and carry on. If it keeps
+            The rest of the studio is still running, and you can go back and carry on. If it keeps
             happening, the message below is the useful part.
           </p>
           <pre className="mb-4 max-h-40 overflow-auto border border-rule bg-sunk px-2.5 py-2 text-[11px] leading-relaxed whitespace-pre-wrap text-ink-mid">

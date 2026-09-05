@@ -149,7 +149,7 @@ export default function ModelForm({
         label="Model"
         help={
           local
-            ? 'Exactly as your server names it. Many local servers ignore this and answer with whatever they have loaded — the test will say so.'
+            ? 'Exactly as your server names it. Many local servers ignore this and answer with whatever they have loaded, and the test will say so.'
             : 'As the provider names it.'
         }
       >
@@ -163,7 +163,7 @@ export default function ModelForm({
 
       {hosted && (
         <Field
-          label={editing?.api_key_set ? 'API key — stored' : 'API key'}
+          label={editing?.api_key_set ? 'API key · stored' : 'API key'}
           help={
             editing?.api_key_set
               ? 'Leave blank to keep the stored key. Type a new one to replace it.'
@@ -195,7 +195,7 @@ export default function ModelForm({
           {tierHint !== 'embedding' && (
             <Field
               label="Context window"
-              help="Prompts are budgeted against it — it decides how much evidence fits."
+              help="Prompts are budgeted against it: it decides how much evidence fits."
             >
               <input
                 className={inputClass}
@@ -221,7 +221,7 @@ export default function ModelForm({
           <p className="mt-1 font-sans text-[11.5px] leading-relaxed text-ink">{test.detail}</p>
           {test.dimensions && (
             <p className="mt-1 font-sans text-[11px] text-ink-mid">
-              Vector width measured at {test.dimensions}. Nothing to configure — it is a
+              Vector width measured at {test.dimensions}. Nothing to configure: it is a
               property of the model.
             </p>
           )}

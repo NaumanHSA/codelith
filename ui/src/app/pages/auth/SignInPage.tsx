@@ -44,7 +44,7 @@ export default function SignInPage() {
         err instanceof ApiError
           ? rejected
             ? as === 'guest'
-              ? `No account for ${mail} — run \`make seed\` to create it.`
+              ? `No account for ${mail}. Run \`make seed\` to create it.`
               : 'That email and password do not match an account.'
             : err.message
           : 'Could not sign in.',

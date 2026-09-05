@@ -55,7 +55,7 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
   const cta = 'tag inline-flex items-center justify-center gap-1.5 border transition-colors'
 
   return (
-    <section className="bp-grid mb-5 border border-rule">
+    <section className="bp-grid border-b border-rule">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div className="border-rule px-5 py-10 lg:border-r lg:py-12">
           <div className="mb-5 flex flex-wrap gap-1.5">
@@ -78,17 +78,15 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
 
           <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
             Point Codelith at a repository. It walks every file and builds a structured
-            knowledge base — routes, entry points, module boundaries, dependencies, data
-            stores — pinned to the commit it read.
-          </p>
-          <p className="mb-4 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
-            That knowledge base is the product. Everything else is something you do with
-            it: <strong className="font-semibold text-ink">write documentation</strong>,{' '}
-            <strong className="font-semibold text-ink">ask the code questions</strong>, and
-            more as they land. None of them read the repository again.
+            knowledge base of routes, entry points, module boundaries and dependencies,
+            pinned to the commit it read.
           </p>
           <p className="mb-6 max-w-[52ch] font-sans text-[14px] leading-[1.7] text-ink-mid">
-            Everything runs on your machine against a local LLM.{' '}
+            That knowledge base is the product. Everything else reads it:{' '}
+            <strong className="font-semibold text-ink">write documentation</strong>,{' '}
+            <strong className="font-semibold text-ink">ask the code questions</strong>.
+            None of them open the repository again, and it all runs on your machine
+            against a local LLM.{' '}
             <strong className="font-semibold text-ink">No code leaves the box.</strong>
           </p>
 
@@ -123,7 +121,7 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
           <div className="border border-ink bg-term">
             <div className="tag flex items-center gap-2 border-b border-term-rule px-3 py-2 text-term-dim">
               <span className="size-[6px] rotate-45 bg-hot" />
-              example run — analysis
+              example run · analysis
               <span className="ml-auto">local</span>
             </div>
             <div className="px-3 py-2.5">

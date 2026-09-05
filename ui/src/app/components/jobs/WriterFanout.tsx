@@ -125,7 +125,7 @@ export default function WriterFanout({
                       ? 'font-semibold text-hot-ink'
                       : 'text-ink-mid'
                 }`}
-                title={multiPage ? `${s.page} — ${s.name}` : s.name}
+                title={multiPage ? `${s.page} · ${s.name}` : s.name}
               >
                 {s.name}
               </span>

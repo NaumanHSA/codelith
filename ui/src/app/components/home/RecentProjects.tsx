@@ -139,7 +139,7 @@ export default function RecentProjects({
         ) : !recent.length ? (
           <EmptyState
             title="No codebases yet"
-            body="Add a repository above — nothing else happens until one has been read."
+            body="Add a repository above. Nothing else happens until one has been read."
             compact
           />
         ) : (

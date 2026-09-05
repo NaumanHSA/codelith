@@ -157,7 +157,7 @@ export default function Coverage({
                       title={
                         isPending(page.status)
                           ? 'Write this page in the next run'
-                          : 'REPLACE this page — it is already written, and rewriting discards the current text'
+                          : 'REPLACE this page: it is already written, and rewriting discards the current text'
                       }
                     >
                       <input
@@ -216,7 +216,7 @@ export default function Coverage({
           <header className="flex items-center gap-2.5 border-b border-rule bg-sunk/60 px-3 py-2">
             <h3 className="text-[11.5px] font-semibold tracking-tight text-ink">Retired</h3>
             <span className="ml-auto text-[10.5px] text-ink-dim">
-              analysis no longer proposes these — kept, and still readable
+              analysis no longer proposes these, but they are kept and still readable
             </span>
           </header>
           <ul>

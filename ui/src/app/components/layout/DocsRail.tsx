@@ -51,7 +51,7 @@ export default function DocsRail() {
                     }${docs ? `${docs} doc${docs === 1 ? '' : 's'}` : ''}`
                   : 'nothing written yet'
               }
-              title={`Documentation — ${p.name}`}
+              title={`Documentation · ${p.name}`}
             />
           )
         })

@@ -82,7 +82,7 @@ function ProjectCard({
 
       <span className="grid grid-cols-4 gap-px border-t border-rule bg-rule">
         {[
-          ['files', probe?.file_count?.toLocaleString() ?? '—'],
+          ['files', probe?.file_count?.toLocaleString() ?? '-'],
           ['jobs', p.stats?.job_count ?? 0],
           ['docs', p.stats?.doc_count ?? 0],
           ['sha', shortSha(probe?.commit_sha)],
@@ -229,10 +229,10 @@ export default function ProjectsPage() {
                     <td className="tag px-2.5 py-2 text-ink-dim">{p.id}</td>
                     <td className="px-2.5 py-2 text-[12px] font-semibold text-ink">{p.name}</td>
                     <td className="max-w-[240px] truncate px-2.5 py-2 text-[11px] text-ink-dim">
-                      {p.sources?.[0]?.url_or_path ?? '—'}
+                      {p.sources?.[0]?.url_or_path ?? '-'}
                     </td>
                     <td className="px-2.5 py-2 text-[11.5px] tabular-nums text-ink-mid">
-                      {probe?.file_count?.toLocaleString() ?? '—'}
+                      {probe?.file_count?.toLocaleString() ?? '-'}
                     </td>
                     <td className="px-2.5 py-2 text-[11.5px] tabular-nums text-ink-mid">
                       {p.stats?.job_count ?? 0}
@@ -281,7 +281,7 @@ export default function ProjectsPage() {
         body={
           <>
             <p>
-              This removes the project and everything derived from it — its knowledge
+              This removes the project and everything derived from it: its knowledge
               base, every job, every document, and the whole documentation site with
               its pages and versions.
             </p>

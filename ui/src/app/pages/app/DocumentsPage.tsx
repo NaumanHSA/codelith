@@ -74,7 +74,7 @@ export default function DocumentsPage() {
       <PageHead
         index="03"
         title="Documents"
-        sub="Single documents, written before sites existed — across every project."
+        sub="Single documents, written before sites existed, across every project."
         back={{ label: 'back to projects', onClick: () => navigate('/app/projects') }}
       />
 
