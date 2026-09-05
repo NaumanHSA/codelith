@@ -35,6 +35,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.apps.documentation.formatters.site_tree import (
+    SiteMeta,
     ExportPage,
     ExportSection,
     SiteTree,
@@ -830,7 +831,54 @@ class SiteService:
             sections=sections,
             home_markdown=await self._home(site),
             version_label=version.label if version else None,
+            meta=await self._meta(project_id),
         )
+
+    async def _meta(self, project_id: int) -> SiteMeta:
+        """
+        What the codebase is, for the front page of an export.
+
+        Read from the newest usable knowledge base and the project's source, both of
+        which already know all of it. Never fatal: a project with no reading yet gets
+        an empty `SiteMeta` and a front page that says less, which is the right
+        outcome for a site nobody has analysed.
+        """
+        from codelith.db.repositories.knowledge.knowledge_base_repo import (
+            KnowledgeBaseRepository,
+        )
+        from codelith.db.repositories.project_repo import ProjectRepository
+
+        meta = SiteMeta()
+        try:
+            project = await ProjectRepository(self.db).get_by_id_with_sources(project_id)
+            source = (project.sources or [None])[0] if project else None
+            if source is not None and source.url_or_path:
+                url = source.url_or_path
+                # A clone URL is not a browsable one. Only http(s) is offered: a
+                # local folder path would be a dead link for everybody the site was
+                # shared with.
+                if url.startswith(("http://", "https://")):
+                    meta.repo_url = url[:-4] if url.endswith(".git") else url
+                probe = (source.config_json or {}).get("probe") or {}
+                meta.files = probe.get("file_count") or None
+
+            kb = await KnowledgeBaseRepository(self.db).get_latest_usable(project_id)
+            if kb is not None:
+                meta.commit_sha = kb.commit_sha
+                # Counted from the rows rather than read from `stats_json`, which is
+                # where the studio's own summary gets them and which older knowledge
+                # bases do not carry: reading the stats blob gave a front page with
+                # the file count and no modules on a project that plainly had 45.
+                from codelith.db.repositories.knowledge import KnowledgeRepositories
+
+                repos = KnowledgeRepositories.for_session(self.db)
+                modules = await repos.modules.list_by_kb(kb.id, limit=2000)
+                meta.modules = len(modules) or None
+                meta.entities = sum((await repos.entities.kind_breakdown(kb.id)).values()) or None
+                meta.languages = sorted({m.language for m in modules if m.language})[:6]
+        except Exception:  # noqa: BLE001 — a front-page detail must not fail an export
+            logger.warning("site_meta_unavailable", project_id=project_id)
+        return meta
 
     async def export(
         self, project_id: int, fmt: str, user: User, version_label: str | None = None

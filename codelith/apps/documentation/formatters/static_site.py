@@ -96,6 +96,7 @@ class StaticSiteFormatter:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("assets/theme.css", _CSS)
             zf.writestr("assets/theme.js", _JS)
+            zf.writestr("assets/search.json", _search_index(written))
 
             pages_html: list[tuple[str, str]] = []
             for i, page in enumerate(order):
@@ -211,6 +212,34 @@ class StaticSiteFormatter:
             f"{len(written)} section{'' if len(written) == 1 else 's'}.</p>"
         )
 
+        # What the codebase is, as opposed to what was written about it. Every figure
+        # comes from the reading, and a fact that is not known is simply not shown:
+        # a project never analysed prints nothing here rather than a row of zeroes.
+        meta = tree.meta
+        facts = [
+            ("modules", f"{meta.modules:,}" if meta.modules else None),
+            ("facts extracted", f"{meta.entities:,}" if meta.entities else None),
+            ("files", f"{meta.files:,}" if meta.files else None),
+            ("pages", f"{pages:,}"),
+            ("commit", meta.commit_sha[:7] if meta.commit_sha else None),
+            ("languages", ", ".join(meta.languages) if meta.languages else None),
+        ]
+        facts = [(k, v) for k, v in facts if v]
+        if facts:
+            parts.append('<div class="facts">')
+            for key, value in facts:
+                parts.append(
+                    f'<div><span class="fv">{html.escape(str(value))}</span>'
+                    f'<span class="fk">{html.escape(key)}</span></div>'
+                )
+            parts.append("</div>")
+            if meta.repo_url:
+                parts.append(
+                    f'<p class="repo">{_GITHUB} <a href="{html.escape(meta.repo_url)}" '
+                    f'target="_blank" rel="noreferrer noopener">'
+                    f"{html.escape(meta.repo_url)}</a></p>"
+                )
+
         if tree.home_markdown:
             body, _ = self._render(tree.home_markdown, assets=assets, depth=0)
             parts.append(body)
@@ -286,6 +315,15 @@ class StaticSiteFormatter:
             else ""
         )
 
+        # Only when the source is somewhere a reader could actually reach. A local
+        # folder path in an href is a dead link for everybody the site was shared with.
+        source_link = (
+            f'<a class="src" href="{html.escape(tree.meta.repo_url)}" target="_blank" '
+            f'rel="noreferrer noopener" title="Source repository">{_GITHUB}</a>'
+            if tree.meta.repo_url
+            else ""
+        )
+
         return (
             "<!doctype html>\n"
             '<html lang="en"><head><meta charset="utf-8">'
@@ -303,9 +341,14 @@ class StaticSiteFormatter:
             f'<span class="brand-name">code<i>·</i>lith</span></a>'
             f'<span class="sep"></span><span class="site">{html.escape(tree.title)}</span>'
             f"{version}"
+            '<div class="tools">'
+            '<div class="search"><input type="search" id="q" autocomplete="off" '
+            'placeholder="Search the docs" aria-label="Search the docs">'
+            '<div class="results" id="results" hidden></div></div>'
+            f"{source_link}"
             '<button class="theme" type="button" aria-label="Switch between light and dark">'
             f"{_SUN}{_MOON}</button>"
-            "</div></header>"
+            "</div></div></header>"
             f'<nav class="tabs"><div class="tabs-in">{"".join(tabs)}</div></nav>'
             '<div class="shell">'
             f'<aside class="left">{side}</aside>'
@@ -318,6 +361,7 @@ class StaticSiteFormatter:
             '<strong>Codelith</strong>. Nothing here left the machine that built it.'
             "</span>"
             "</div></footer>"
+            f'<script>window.CODELITH_BASE={up!r};</script>'
             f'<script src="{up}assets/theme.js"></script>'
             "</body></html>\n"
         )
@@ -328,6 +372,55 @@ class StaticSiteFormatter:
         if to.section_slug == from_page.section_slug:
             return name
         return f"../{slugify_filename(to.section_slug)}/{name}"
+
+
+def _search_index(written) -> str:
+    """
+    Everything the reader can search, as one JSON file.
+
+    Client-side and prebuilt, because the alternative is a search server, and this
+    site has to work from `file://` on a machine with no network. The prose is
+    stripped of its markdown and truncated: an index is for finding the page, and the
+    page itself is one click away.
+    """
+    import json
+
+    rows = []
+    for section, pages in written:
+        for page in pages:
+            text = _MD_NOISE.sub(" ", page.content_markdown)
+            text = re.sub(r"\s+", " ", text).strip()
+            rows.append(
+                {
+                    "t": page.title,
+                    "s": section.title,
+                    "u": f"{slugify_filename(page.section_slug)}/{slugify_filename(page.slug)}.html",
+                    "i": (page.intent or "")[:160],
+                    # Enough to hold a whole page of prose. The first cut at 1400
+                    # characters indexed roughly the opening third, so searching a
+                    # real page for a word two screens down found nothing — which is
+                    # indistinguishable from search being broken.
+                    "x": text[:_INDEX_CHARS],
+                }
+            )
+    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+
+
+#: How much of each page goes into the search index. Generous, because it is loaded
+#: on the first keystroke and never on a page view, so its size costs a reader who
+#: searches and nobody else.
+_INDEX_CHARS = 8000
+
+#: Markdown syntax the search index has no use for. Deliberately blunt: this feeds a
+#: substring match, not a renderer, and a stray backtick costs nothing.
+_MD_NOISE = re.compile(
+    r"!\[[^\]]*\]\([^)]*\)"          # images, data URIs and all
+    r"|\]\([^)]*\)"                    # the target half of a link
+    r"|```[a-z]*"                       # fence markers
+    r"|<[^>]+>"                         # raw html
+    r"|[#*_`>\[\]|]",                   # the rest of the punctuation
+    re.I,
+)
 
 
 def _extract(data_uri: str, assets: dict[str, bytes], depth: int) -> str:
@@ -370,6 +463,17 @@ _LOGO = (
     "</svg>"
 )
 
+_GITHUB = (
+    '<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'
+    '<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82'
+    "-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01"
+    "1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0"
+    "-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36"
+    ".09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87"
+    '3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 '
+    '8c0-4.42-3.58-8-8-8z"/></svg>'
+)
+
 _SUN = (
     '<svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
     'stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/>'
@@ -382,28 +486,133 @@ _MOON = (
     '<path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>'
 )
 
-#: Remembers the choice, and nothing else. No analytics, no beacons, no network.
+#: Three small jobs, no dependency and no network: remember the theme, search the
+#: prebuilt index, and copy a code block. The only thing it touches off the page is
+#: `localStorage`, and the only thing it fetches is a file sitting beside it.
 _JS = """(function () {
   var root = document.documentElement;
-  var key = 'codelith-theme';
-  function current() {
-    if (root.dataset.theme) return root.dataset.theme;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
-  }
+  var base = window.CODELITH_BASE || '';
+
+  /* ── Theme ───────────────────────────────────────────────────────────
+     Light is the default. The system preference is deliberately not
+     consulted: a published site is a document somebody was sent, and it
+     should look the way the person who sent it saw it. */
+  var KEY = 'codelith-theme';
   var button = document.querySelector('.theme');
-  if (!button) return;
-  button.addEventListener('click', function () {
-    var next = current() === 'dark' ? 'light' : 'dark';
-    root.dataset.theme = next;
-    try { localStorage.setItem(key, next); } catch (e) {}
+  if (button) {
+    button.addEventListener('click', function () {
+      var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ── Copy a code block ───────────────────────────────────────────── */
+  document.querySelectorAll('.doc pre').forEach(function (pre) {
+    var b = document.createElement('button');
+    b.className = 'copy';
+    b.type = 'button';
+    b.textContent = 'copy';
+    b.addEventListener('click', function () {
+      var text = pre.querySelector('code') ? pre.querySelector('code').innerText : pre.innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        b.textContent = 'copied';
+        setTimeout(function () { b.textContent = 'copy'; }, 1400);
+      }, function () {});
+    });
+    pre.appendChild(b);
+  });
+
+  /* ── Search ──────────────────────────────────────────────────────────
+     Prebuilt and client-side, because this site has to work from file://
+     on a machine with no network. Loaded on first keystroke rather than
+     on every page view: most readers never search, and the index is the
+     largest thing here. */
+  var input = document.getElementById('q');
+  var panel = document.getElementById('results');
+  if (!input || !panel) return;
+  var index = null;
+  var loading = false;
+
+  function load() {
+    if (index || loading) return;
+    loading = true;
+    fetch(base + 'assets/search.json')
+      .then(function (r) { return r.json(); })
+      .then(function (rows) { index = rows; loading = false; run(); })
+      .catch(function () { loading = false; });
+  }
+
+  function escape(t) {
+    return t.replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function snippet(text, q) {
+    var at = text.toLowerCase().indexOf(q);
+    if (at < 0) return text.slice(0, 110);
+    var from = Math.max(0, at - 40);
+    return (from ? '…' : '') + text.slice(from, from + 130);
+  }
+
+  function run() {
+    var q = input.value.trim().toLowerCase();
+    if (q.length < 2) { panel.hidden = true; panel.innerHTML = ''; return; }
+    if (!index) { load(); return; }
+
+    var hits = [];
+    for (var i = 0; i < index.length && hits.length < 8; i++) {
+      var row = index[i];
+      var inTitle = row.t.toLowerCase().indexOf(q) >= 0;
+      var body = (row.i + ' ' + row.x).toLowerCase();
+      if (inTitle || body.indexOf(q) >= 0) {
+        hits.push({ row: row, title: inTitle });
+      }
+    }
+    /* A title match is what the reader meant; a body match is a maybe. */
+    hits.sort(function (a, b) { return (b.title ? 1 : 0) - (a.title ? 1 : 0); });
+
+    if (!hits.length) {
+      panel.innerHTML = '<p class="none">Nothing matches that.</p>';
+      panel.hidden = false;
+      return;
+    }
+    panel.innerHTML = hits.map(function (h) {
+      return '<a href="' + base + h.row.u + '">' +
+        '<span class="r-sec">' + escape(h.row.s) + '</span>' +
+        '<span class="r-title">' + escape(h.row.t) + '</span>' +
+        '<span class="r-text">' + escape(snippet(h.row.i || h.row.x, q)) + '</span></a>';
+    }).join('');
+    panel.hidden = false;
+  }
+
+  input.addEventListener('focus', load);
+  input.addEventListener('input', run);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { input.value = ''; panel.hidden = true; input.blur(); }
+    if (e.key === 'Enter') {
+      var first = panel.querySelector('a');
+      if (first) window.location.href = first.getAttribute('href');
+    }
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== input) panel.hidden = true;
+  });
+  /* `/` focuses search, the shortcut every docs site has. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== input) {
+      e.preventDefault();
+      input.focus();
+    }
   });
 })();
 """
 
 _CSS = """/* Codelith published documentation.
-   Two palettes over one set of tokens, so the toggle swaps values rather than rules.
+   Light by default. Dark is opt-in through the toggle and stored per reader; the
+   system preference is deliberately not consulted, because a published site is a
+   document somebody was sent and should look the way they were shown it.
    No web font: the stacks below are what the reader already has. */
 :root {
   --bg: #f4f3ef;
@@ -435,27 +644,17 @@ _CSS = """/* Codelith published documentation.
   --code-bg: #211e1a;
   --shadow: none;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #14120f;
-    --panel: #1c1a16;
-    --sunk: #211e1a;
-    --ink: #f2efe9;
-    --ink-mid: #b8b1a6;
-    --ink-dim: #8a847c;
-    --rule: #322e28;
-    --hot: #ff7a49;
-    --hot-ink: #ff9166;
-    --hot-wash: #2a1d16;
-    --code-bg: #211e1a;
-    --shadow: none;
-  }
-}
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 108px; }
+html { scroll-behavior: smooth; scroll-padding-top: 116px; }
 body {
   margin: 0;
+  /* The footer sat wherever the content ended, leaving a band of page below it on
+     any page shorter than the window. A column that is at least the viewport tall,
+     with the middle allowed to grow, puts it where a footer belongs. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--sans);
@@ -468,25 +667,23 @@ a:hover { text-decoration: underline; }
 
 /* ── Top bar ─────────────────────────────────────────────────────────── */
 .topbar {
-  position: sticky; top: 0; z-index: 20;
-  background: var(--panel);
-  border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; z-index: 30;
+  background: var(--panel); border-bottom: 1px solid var(--rule);
 }
-.topbar-in {
-  max-width: 1440px; margin: 0 auto;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 24px;
-}
-.brand { display: flex; align-items: center; gap: 8px; color: var(--hot); }
+/* Full width rather than centred on the content: the mark is the one thing on the
+   page that says which application produced it, and it belongs in the corner. */
+.topbar-in { display: flex; align-items: center; gap: 12px; padding: 12px 22px; }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--hot); }
 .brand:hover { text-decoration: none; }
+.brand .mark { width: 26px; height: 26px; }
 .brand-name {
-  font-family: var(--mono); font-size: 14px; font-weight: 700;
-  letter-spacing: -0.03em; color: var(--ink);
+  font-family: var(--mono); font-size: 18px; font-weight: 700;
+  letter-spacing: -0.04em; color: var(--ink);
 }
 .brand-name i { color: var(--hot); font-style: normal; }
-.sep { width: 1px; height: 18px; background: var(--rule); }
+.sep { width: 1px; height: 20px; background: var(--rule); }
 .site {
-  font-family: var(--mono); font-size: 12.5px; color: var(--ink-mid);
+  font-family: var(--mono); font-size: 13px; color: var(--ink-mid);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .version {
@@ -494,8 +691,15 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase; color: var(--hot-ink);
   border: 1px solid var(--hot); border-radius: 3px; padding: 2px 6px;
 }
+.tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.src {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; color: var(--ink-mid);
+  border: 1px solid var(--rule); border-radius: 4px;
+}
+.src:hover { color: var(--ink); border-color: var(--ink-dim); text-decoration: none; }
 .theme {
-  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; cursor: pointer;
   background: transparent; color: var(--ink-mid);
   border: 1px solid var(--rule); border-radius: 4px;
@@ -504,14 +708,37 @@ a:hover { text-decoration: underline; }
 .theme .moon { display: none; }
 :root[data-theme='dark'] .theme .sun { display: none; }
 :root[data-theme='dark'] .theme .moon { display: inline; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .theme .sun { display: none; }
-  :root:not([data-theme='light']) .theme .moon { display: inline; }
+
+/* ── Search ──────────────────────────────────────────────────────────── */
+.search { position: relative; }
+.search input {
+  width: 190px; padding: 6px 10px;
+  font-family: var(--sans); font-size: 12.5px;
+  color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 4px;
 }
+.search input:focus { outline: none; border-color: var(--hot); width: 250px; }
+.search input::placeholder { color: var(--ink-dim); }
+.results {
+  position: absolute; top: calc(100% + 6px); right: 0; width: 380px; max-height: 60vh;
+  overflow-y: auto; z-index: 40;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 5px;
+  box-shadow: 0 12px 28px -12px rgba(20, 18, 15, 0.3);
+}
+.results a { display: block; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+.results a:last-child { border-bottom: 0; }
+.results a:hover { background: var(--hot-wash); text-decoration: none; }
+.r-sec {
+  display: block; font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim);
+}
+.r-title { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
+.r-text { display: block; font-size: 11.5px; color: var(--ink-dim); line-height: 1.5; }
+.results .none { margin: 0; padding: 12px; font-size: 12.5px; color: var(--ink-dim); }
 
 /* ── Section tabs ────────────────────────────────────────────────────── */
 .tabs {
-  position: sticky; top: 51px; z-index: 19;
+  position: sticky; top: 55px; z-index: 29;
   background: var(--panel); border-bottom: 1px solid var(--rule);
 }
 .tabs-in {
@@ -529,11 +756,12 @@ a:hover { text-decoration: underline; }
 
 /* ── Three columns ───────────────────────────────────────────────────── */
 .shell {
-  max-width: 1440px; margin: 0 auto; padding: 0 24px;
+  flex: 1;
+  width: 100%; max-width: 1440px; margin: 0 auto; padding: 0 24px;
   display: grid; grid-template-columns: 232px minmax(0, 1fr) 200px; gap: 40px;
   align-items: start;
 }
-.left, .right { position: sticky; top: 104px; padding: 26px 0; max-height: calc(100vh - 104px); overflow-y: auto; }
+.left, .right { position: sticky; top: 112px; padding: 26px 0; max-height: calc(100vh - 112px); overflow-y: auto; }
 .rail-head {
   margin: 0 0 10px; font-family: var(--mono); font-size: 10px;
   letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim);
@@ -589,10 +817,20 @@ main { min-width: 0; padding: 30px 0 56px; }
   padding: 1px 5px; color: var(--ink);
 }
 .doc pre {
+  position: relative;
   background: var(--code-bg); border: 1px solid var(--rule); border-radius: 5px;
   padding: 14px 16px; overflow-x: auto; margin: 0 0 18px;
 }
 .doc pre code { background: none; border: 0; padding: 0; font-size: 12.5px; line-height: 1.6; }
+.copy {
+  position: absolute; top: 7px; right: 7px; opacity: 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+  color: var(--ink-dim); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 3px; padding: 2px 7px; cursor: pointer;
+  transition: opacity .15s ease;
+}
+.doc pre:hover .copy, .copy:focus { opacity: 1; }
+.copy:hover { color: var(--hot-ink); border-color: var(--hot); }
 .doc img { max-width: 100%; height: auto; display: block; margin: 18px auto; }
 .doc table { width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 13.5px; }
 .doc th, .doc td { border: 1px solid var(--rule); padding: 7px 10px; text-align: left; }
@@ -603,6 +841,28 @@ main { min-width: 0; padding: 30px 0 56px; }
   border-radius: 0 4px 4px 0;
 }
 .doc hr { border: 0; border-top: 1px solid var(--rule); margin: 30px 0; }
+
+/* ── What the codebase is, on the front page ─────────────────────────── */
+.facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1px; background: var(--rule);
+  border: 1px solid var(--rule); border-radius: 5px; overflow: hidden;
+  margin: 0 0 12px;
+}
+.facts > div { background: var(--panel); padding: 11px 14px; }
+.fv {
+  display: block; font-family: var(--mono); font-size: 17px; font-weight: 700;
+  color: var(--ink); line-height: 1.2;
+}
+.fk {
+  display: block; font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); margin-top: 3px;
+}
+.repo {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 11.5px; margin: 0 0 24px !important;
+  color: var(--ink-dim) !important;
+}
 
 /* ── Section cards on the front page ─────────────────────────────────── */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
@@ -627,7 +887,7 @@ main { min-width: 0; padding: 30px 0 56px; }
 }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */
-footer { border-top: 1px solid var(--rule); background: var(--panel); margin-top: 20px; }
+footer { border-top: 1px solid var(--rule); background: var(--panel); }
 .footer-in {
   max-width: 1440px; margin: 0 auto; padding: 20px 24px;
   display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline;
@@ -639,12 +899,14 @@ footer { border-top: 1px solid var(--rule); background: var(--panel); margin-top
 @media (max-width: 1180px) {
   .shell { grid-template-columns: 220px minmax(0, 1fr); }
   .right { display: none; }
+  .search input { width: 150px; }
 }
 @media (max-width: 820px) {
   .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .left { position: static; max-height: none; padding: 18px 0 0; }
   .doc { padding: 22px 20px 26px; }
-  .site { display: none; }
+  .site, .sep { display: none; }
+  .results { width: min(90vw, 380px); }
 }
 """
 

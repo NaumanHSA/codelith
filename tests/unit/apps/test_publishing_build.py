@@ -368,3 +368,184 @@ class TestPublishedNavigation:
         html = self._page(tmp_path, "intro")
         head = html.split("</head>")[0]
         assert "localStorage.getItem('codelith-theme')" in head
+
+
+class TestPublishedExtras:
+    """Search, the source link, the facts, and where the footer sits."""
+
+    def _tree(self, meta=None):
+        from codelith.apps.documentation.formatters.site_tree import SiteMeta
+
+        return SiteTree(
+            title="Neurosurfer",
+            sections=[
+                ExportSection(slug="guides", title="Guides", pages=[
+                    ExportPage(
+                        section_slug="guides", slug="intro", title="Intro",
+                        content_markdown="## Encryption\n\nRSA keys are wrapped with AES.\n\n```js\nconst a = 1\n```\n",
+                        order_index=0, intent="How keys are wrapped.",
+                        commit_sha="4865c2f", source_files=["a.js"],
+                    )
+                ])
+            ],
+            home_markdown="# Neurosurfer",
+            version_label=None,
+            meta=meta or SiteMeta(),
+        )
+
+    def _build(self, tmp_path, meta=None):
+        BuiltinRenderer().build(self._tree(meta), tmp_path)
+        return tmp_path
+
+    def test_the_search_index_is_written(self, tmp_path):
+        import json
+
+        self._build(tmp_path)
+        rows = json.loads((tmp_path / "assets" / "search.json").read_text(encoding="utf-8"))
+        assert len(rows) == 1
+        assert rows[0]["t"] == "Intro" and rows[0]["s"] == "Guides"
+        assert rows[0]["u"] == "guides/intro.html"
+
+    def test_the_index_carries_prose_without_markdown_syntax(self, tmp_path):
+        import json
+
+        self._build(tmp_path)
+        text = json.loads((tmp_path / "assets" / "search.json").read_text(encoding="utf-8"))[0]["x"]
+        assert "RSA keys are wrapped" in text
+        assert "##" not in text and "```" not in text
+
+    def test_every_page_can_reach_the_index(self, tmp_path):
+        """
+        The index sits at the root and pages sit a directory down, so each one has to
+        say how to get back up. A single hardcoded path works on exactly one of them.
+        """
+        self._build(tmp_path)
+        page = (tmp_path / "guides" / "intro.html").read_text(encoding="utf-8")
+        assert "window.CODELITH_BASE='../'" in page
+        assert "window.CODELITH_BASE=''" in (tmp_path / "index.html").read_text(encoding="utf-8")
+
+    def test_search_is_offered(self, tmp_path):
+        page = (self._build(tmp_path) / "index.html").read_text(encoding="utf-8")
+        assert 'id="q"' in page and 'id="results"' in page
+
+    def test_light_is_the_default(self, tmp_path):
+        """
+        A published site is a document somebody was sent. It should look the way they
+        were shown it, not the way the reader's operating system is set.
+        """
+        css = (self._build(tmp_path) / "assets" / "theme.css").read_text(encoding="utf-8")
+        assert "prefers-color-scheme" not in css
+        assert ":root[data-theme='dark']" in css, "dark is still reachable, by choice"
+
+    def test_the_footer_is_pushed_to_the_bottom(self, tmp_path):
+        """It used to stop wherever the content did, leaving a band of page below it."""
+        css = (self._build(tmp_path) / "assets" / "theme.css").read_text(encoding="utf-8")
+        assert "min-height: 100vh" in css and "flex-direction: column" in css
+
+    def test_the_source_link_appears_when_it_is_reachable(self, tmp_path):
+        from codelith.apps.documentation.formatters.site_tree import SiteMeta
+
+        page = (
+            self._build(tmp_path, SiteMeta(repo_url="https://github.com/acme/neuro")) / "index.html"
+        ).read_text(encoding="utf-8")
+        assert 'class="src" href="https://github.com/acme/neuro"' in page
+
+    def test_a_local_folder_is_not_offered_as_a_link(self, tmp_path):
+        """A path on this disk is a dead link for everybody the site was shared with."""
+        from codelith.apps.documentation.formatters.site_tree import SiteMeta
+
+        page = (
+            self._build(tmp_path, SiteMeta(repo_url=None)) / "index.html"
+        ).read_text(encoding="utf-8")
+        assert 'class="src"' not in page
+
+    def test_the_facts_come_from_the_reading(self, tmp_path):
+        from codelith.apps.documentation.formatters.site_tree import SiteMeta
+
+        page = (
+            self._build(
+                tmp_path,
+                SiteMeta(modules=45, entities=77, files=111, commit_sha="4865c2fabc",
+                         languages=["JavaScript", "Python"]),
+            ) / "index.html"
+        ).read_text(encoding="utf-8")
+        assert ">45<" in page and ">77<" in page and ">111<" in page
+        assert ">4865c2f<" in page
+        assert "JavaScript, Python" in page
+
+    def test_facts_that_are_not_known_are_not_shown(self, tmp_path):
+        """A project never analysed prints nothing here, rather than a row of zeroes."""
+        page = (self._build(tmp_path) / "index.html").read_text(encoding="utf-8")
+        assert ">0<" not in page
+        assert "modules" not in page.split('class="cards"')[0]
+
+    def test_code_blocks_get_a_copy_button(self, tmp_path):
+        js = (self._build(tmp_path) / "assets" / "theme.js").read_text(encoding="utf-8")
+        assert "clipboard.writeText" in js and "'.doc pre'" in js
+
+
+class TestLinksVersusSubresources:
+    """
+    The line the first verifier did not draw, and which cost a real build.
+
+    A stylesheet, script, image or font is fetched the moment the page opens, with
+    nobody asked. That is what breaks "nothing leaves the machine", and it fails the
+    build. An `<a href>` fetches nothing until a reader clicks it, and a page that may
+    not cite a repository or an RFC is not documentation. The first version refused a
+    real site for linking to its own GitHub repo in a sentence.
+    """
+
+    def _site(self, root, body):
+        (root / "index.html").write_text(body, encoding="utf-8")
+        return root
+
+    def test_a_link_off_the_machine_is_allowed(self, tmp_path):
+        self._site(tmp_path, '<a href="https://github.com/acme/neuro">source</a>')
+        report = verify_build(tmp_path)
+        assert report.ok
+        assert report.offsite_links == 1, "counted, so the build record still shows it"
+
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            '<link href="https://fonts.googleapis.com/css2" rel="stylesheet">',
+            '<script src="https://cdn.example.com/x.js"></script>',
+            '<img src="https://cdn.example.com/logo.png">',
+            '<link href="//cdn.jsdelivr.net/thing.css" rel="stylesheet">',
+        ],
+    )
+    def test_a_subresource_off_the_machine_still_fails(self, tmp_path, tag):
+        self._site(tmp_path, tag)
+        assert not verify_build(tmp_path).ok
+
+    def test_a_dead_local_link_still_fails(self, tmp_path):
+        """Permitting offsite links must not stop internal ones being checked."""
+        self._site(tmp_path, '<a href="gone.html">go</a>')
+        assert not verify_build(tmp_path).ok
+
+    def test_an_element_beginning_with_a_is_not_an_anchor(self, tmp_path):
+        """`<article>` and `<aside>` start with the same two characters."""
+        self._site(tmp_path, '<article data-href="x"><img src="https://cdn.example.com/a.png"></article>')
+        assert not verify_build(tmp_path).ok, "the image inside must still be caught"
+
+    def test_the_site_we_actually_ship_passes(self, tmp_path):
+        """
+        The regression in one line: the built-in renderer puts a GitHub link in the
+        top bar, and that must not fail its own verification.
+        """
+        from codelith.apps.documentation.formatters.site_tree import SiteMeta
+
+        tree = SiteTree(
+            title="Site",
+            sections=[ExportSection(slug="g", title="G", pages=[
+                ExportPage(section_slug="g", slug="p", title="P",
+                           content_markdown="See [the repo](https://github.com/acme/neuro).",
+                           order_index=0, intent=None, commit_sha=None, source_files=[])])],
+            home_markdown="# Site",
+            version_label=None,
+            meta=SiteMeta(repo_url="https://github.com/acme/neuro"),
+        )
+        BuiltinRenderer().build(tree, tmp_path)
+        report = verify_build(tmp_path)
+        assert report.ok, f"external={report.external}"
+        assert report.offsite_links >= 2

@@ -162,9 +162,33 @@ async def _out(service: PublicationService, publication) -> PublicationOut:
     """
     out = PublicationOut.model_validate(publication)
     out.url = f"/published/{publication.slug}/"
-    out.project_name = publication.project.name if publication.project else ""
+    out.project_name = await _project_name(service, publication)
     out.latest_commit, out.is_current = await _staleness(service, publication)
     return out
+
+
+async def _project_name(service: PublicationService, publication) -> str:
+    """
+    The codebase a publication came from, without assuming the relationship is loaded.
+
+    The list endpoints eager-load it; a publication that has just been created by
+    `prepare` has not, and touching the relationship there is a lazy load, which an
+    async session raises on rather than performing. So the loaded case is used when
+    it is there and one scalar is fetched when it is not: correct in both places, and
+    no N+1 in the one that lists.
+    """
+    from sqlalchemy import inspect as sa_inspect, select
+
+    from codelith.models.project import Project
+
+    if "project" not in sa_inspect(publication).unloaded:
+        return publication.project.name if publication.project else ""
+
+    return (
+        await service.db.execute(
+            select(Project.name).where(Project.id == publication.project_id)
+        )
+    ).scalar_one_or_none() or ""
 
 
 async def _staleness(service: PublicationService, publication) -> tuple[str | None, bool | None]:

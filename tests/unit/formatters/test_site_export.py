@@ -185,9 +185,11 @@ class TestStaticHtml:
 
         assert files == {
             "assets/theme.css",
-            # One small script, for the light/dark toggle. Local, and the only thing
-            # it touches is localStorage.
+            # One small script for the toggle, the copy buttons and search. Local:
+            # the only thing off the page it touches is localStorage, and the only
+            # thing it fetches is the index sitting beside it.
             "assets/theme.js",
+            "assets/search.json",
             "index.html",
             "api/endpoints.html",
             "api/schemas.html",

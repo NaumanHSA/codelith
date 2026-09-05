@@ -11,11 +11,18 @@ than an export, because an export is obviously a snapshot and a site looks live.
 **Is every referenced asset present?** A stylesheet that 404s turns the site into
 unstyled markdown, and the reader has no way to tell that from it being broken.
 
-**Does anything reach outside this machine?** This is the one that is not a nicety.
-The product's whole claim is that nothing leaves the box, and a renderer that quietly
-pulls a font or an icon set from a CDN breaks that claim in the published output,
-where it is hardest to notice and most visible to whoever was sent the link. So it is
-asserted against the built HTML, every time, and it fails the build.
+**Does anything reach outside this machine on its own?** This is the one that is not
+a nicety. The product's whole claim is that nothing leaves the box, and a renderer
+that quietly pulls a font or an icon set from a CDN breaks that claim in the published
+output, where it is hardest to notice and most visible to whoever was sent the link.
+
+The distinction that matters is between a *subresource* and a *link*. A stylesheet, a
+script, an image or a font is fetched the moment the page opens, with no one asking:
+that is what breaks the claim, and it fails the build. An `<a href>` fetches nothing
+until a reader chooses to click it, and forbidding those would mean no published page
+could cite a repository, an RFC or a vendor's documentation — which is most of what
+technical writing does. The first version of this check did not draw that line, and
+refused a real site for linking to its own GitHub repository in a sentence.
 """
 
 from __future__ import annotations
@@ -25,10 +32,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-#: `href` and `src` on any element. Deliberately not an HTML parser: the check runs
-#: over our own output, and a regex that over-matches costs a false failure while a
-#: parser that under-matches costs a shipped external request.
-_REF = re.compile(r"""(?:href|src)\s*=\s*["']([^"']+)["']""", re.I)
+#: Anything the browser fetches without being asked: `src` on any element, and `href`
+#: on a `<link>`. These are what can leave the machine on their own.
+_SUBRESOURCE = re.compile(
+    r"""src\s*=\s*["']([^"']+)["']"""
+    r"""|<link\s[^>]*?href\s*=\s*["']([^"']+)["']""",
+    re.I,
+)
+
+#: Somewhere a reader can go. Checked for existence when it is local, and left alone
+#: when it is not: clicking is a decision, and a document that cannot cite a URL is
+#: not a document.
+_LINK = re.compile(r"""<a\s[^>]*?href\s*=\s*["']([^"']+)["']""", re.I)
 
 #: `url(...)` inside a stylesheet, which is where a web font hides.
 _CSS_URL = re.compile(r"""url\(\s*["']?([^"')]+)["']?\s*\)""", re.I)
@@ -41,6 +56,9 @@ _LOCAL_SCHEMES = {"", "data", "mailto", "tel"}
 class VerifyReport:
     links_checked: int = 0
     assets_checked: int = 0
+    #: Links pointing off the machine. Counted, not refused: reported so a reader of
+    #: the build record can see there are some.
+    offsite_links: int = 0
     broken: list[str] = field(default_factory=list)
     external: list[str] = field(default_factory=list)
 
@@ -52,6 +70,7 @@ class VerifyReport:
         return {
             "links": self.links_checked,
             "assets": self.assets_checked,
+            "offsite_links": self.offsite_links,
             # Capped: a systematically broken build would otherwise write thousands
             # of near-identical strings into a JSON column nobody reads past the top.
             "broken": self.broken[:50],
@@ -72,15 +91,19 @@ def verify_build(root: Path) -> VerifyReport:
         suffix = path.suffix.lower()
         if suffix in {".html", ".htm"}:
             text = path.read_text(encoding="utf-8", errors="replace")
-            _check(root, path, _REF.findall(text), report, is_asset=False)
+            subresources = [a or b for a, b in _SUBRESOURCE.findall(text)]
+            _check(root, path, subresources, report, kind="asset")
+            _check(root, path, _LINK.findall(text), report, kind="link")
         elif suffix == ".css":
             text = path.read_text(encoding="utf-8", errors="replace")
-            _check(root, path, _CSS_URL.findall(text), report, is_asset=True)
+            _check(root, path, _CSS_URL.findall(text), report, kind="asset")
 
     return report
 
 
-def _check(root: Path, source: Path, refs: list[str], report: VerifyReport, *, is_asset: bool) -> None:
+def _check(
+    root: Path, source: Path, refs: list[str], report: VerifyReport, *, kind: str
+) -> None:
     for raw in refs:
         ref = raw.strip()
         if not ref or ref.startswith("#"):
@@ -88,14 +111,16 @@ def _check(root: Path, source: Path, refs: list[str], report: VerifyReport, *, i
 
         parsed = urlparse(ref)
         scheme = parsed.scheme.lower()
+        offsite = scheme not in _LOCAL_SCHEMES or bool(parsed.netloc)
 
-        if scheme not in _LOCAL_SCHEMES:
-            # http, https, //cdn..., anything with a host. The claim, broken.
-            report.external.append(f"{source.relative_to(root).as_posix()} -> {ref}")
-            continue
-        if parsed.netloc:
-            # Protocol-relative: no scheme, but still a host.
-            report.external.append(f"{source.relative_to(root).as_posix()} -> {ref}")
+        if offsite:
+            if kind == "asset":
+                # Fetched the moment the page opens. The claim, broken.
+                report.external.append(f"{source.relative_to(root).as_posix()} -> {ref}")
+            else:
+                # A link. Nothing happens until somebody clicks it, and a page that
+                # may not cite a URL is not documentation.
+                report.offsite_links += 1
             continue
         if scheme:
             continue  # data:, mailto:, tel: — local, and nothing to resolve
@@ -107,7 +132,7 @@ def _check(root: Path, source: Path, refs: list[str], report: VerifyReport, *, i
         base = root if target.startswith("/") else source.parent
         resolved = (base / target.lstrip("/")).resolve()
 
-        if is_asset:
+        if kind == "asset":
             report.assets_checked += 1
         else:
             report.links_checked += 1

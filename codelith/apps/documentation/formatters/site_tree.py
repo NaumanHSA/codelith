@@ -57,6 +57,30 @@ class ExportSection:
 
 
 @dataclass(slots=True)
+class SiteMeta:
+    """
+    What the codebase is, as opposed to what was written about it.
+
+    A published site's front page should be able to say more than "here are some
+    pages": how big the thing is, what it is written in, where the source lives. All
+    of it is already in the knowledge base, and none of it was reaching an export.
+
+    Every field is optional. A project analysed once has all of it; one that has
+    never been analysed has none, and the front page simply says less rather than
+    printing zeroes.
+    """
+
+    repo_url: str | None = None
+    commit_sha: str | None = None
+    modules: int | None = None
+    entities: int | None = None
+    files: int | None = None
+    languages: list[str] = field(default_factory=list)
+    entrypoints: list[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class SiteTree:
     """One project's documentation site, as an export target sees it."""
 
@@ -64,6 +88,7 @@ class SiteTree:
     sections: list[ExportSection] = field(default_factory=list)
     home_markdown: str | None = None
     version_label: str | None = None
+    meta: SiteMeta = field(default_factory=lambda: SiteMeta())
 
     @property
     def pages(self) -> list[ExportPage]:
@@ -147,6 +172,7 @@ def slugify_filename(name: str) -> str:
 
 __all__ = [
     "ExportPage",
+    "SiteMeta",
     "ExportSection",
     "SiteTree",
     "rewrite_links",

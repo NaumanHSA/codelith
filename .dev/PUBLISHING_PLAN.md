@@ -221,6 +221,37 @@ been sent to somebody the question is "what is out there", which has no codebase
 `[x]` **Diagram source blocks are dropped from published pages.** They exist so an
 author can check what was drawn. A published site has readers.
 
+## Round three, from looking at it again
+
+`[x]` **The footer stops dangling.** It sat wherever the content ended, leaving a band
+of page below it on anything shorter than the window. The body is a column at least
+the viewport tall now, with the middle allowed to grow.
+
+`[x]` **The mark and the name lead, at the top left, and larger.** Full-bleed top bar
+rather than one centred on the content column: the mark is the one thing on the page
+that says what produced it and it belongs in the corner.
+
+`[x]` **The front page says what the codebase is.** Modules, facts extracted, files,
+pages, commit and languages, all read from the reading itself, plus the repository
+link. Counted from the rows rather than from `stats_json`, which older knowledge bases
+do not carry.
+
+`[x]` **The source repository is in the top bar**, when there is one that a reader can
+reach. A local folder path is not offered as a link, because it is a dead one for
+everybody the site was shared with.
+
+`[x]` **Light is the default.** The system preference is deliberately not consulted: a
+published site is a document somebody was sent, and it should look the way they were
+shown it. Dark stays one click away and is remembered.
+
+`[x]` **Search, and a copy button on every code block.**
+
+`[x]` **The verifier learned the difference between a link and a subresource.** It
+refused a real build for linking to its own GitHub repository in a sentence. A
+stylesheet or an image is fetched the moment the page opens and still fails the build;
+an `<a href>` fetches nothing until somebody clicks it, and a page that may not cite a
+URL is not documentation. Offsite links are counted rather than refused.
+
 ## Phase 6 — Maturity
 
 `[x]` **6.1** **Staleness.** A published build knows its commit; the project knows its
@@ -239,8 +270,9 @@ those open real code; in a published site they are dead text today. Emit a code 
 per cited file, or inline the excerpt. This is the largest quality gap between an
 export and a site somebody trusts.
 
-`[ ]` **6.5** **Search.** MkDocs gives it free; the builtin renderer needs a prebuilt
-index. A few KB of JSON and no network.
+`[x]` **6.5** **Search.** A prebuilt `assets/search.json`, fetched on the first
+keystroke and never on a page view, matched in the browser. `/` focuses it, Enter
+opens the first hit. No index server, because the site has to work from `file://`.
 
 ## Phase 7 — Beyond the default renderer
 
