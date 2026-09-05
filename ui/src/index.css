@@ -336,6 +336,41 @@ summary {
 /* Three of these run out of phase while retrieval is working. A single pulsing dot
    reads as a rendering artefact, and this stage can take several seconds before the
    first token — long enough that "is it working?" is a real question. */
+/* A published site that is answering right now.
+
+   The ring expands and fades rather than the dot blinking: a blink reads as a
+   warning light, and this is the opposite of a warning. Paired with a solid dot so
+   the state is still legible at the instant the ring is invisible, and under
+   reduced motion where it does not move at all. */
+@keyframes live-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+.live-dot {
+  position: relative;
+  display: inline-block;
+}
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: live-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot::after {
+    animation: none;
+  }
+}
+
 /* ── Home's "how it works" schematic ──────────────────────────────────────────
    The connectors are HTML rules painted with a repeating gradient rather than SVG
    strokes, so the dash marches by moving the gradient's background-position. One

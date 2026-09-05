@@ -48,6 +48,7 @@ function Card({
   const down = publication.status === 'unpublished'
   const url = absolute(publication.url)
   const build = publication.current_build
+  const verify = (build?.verify_json ?? {}) as Record<string, number>
 
   const copy = async () => {
     try {
@@ -60,76 +61,115 @@ function Card({
   }
 
   return (
-    <article className={`plate overflow-hidden ${down ? 'opacity-70' : ''}`}>
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule bg-sunk/60 px-3 py-2">
+    <article
+      className={`border bg-panel ${live ? 'border-ok/40' : down ? 'border-rule opacity-70' : 'border-rule'}`}
+    >
+      {/* The status band. A published site is a thing other people may be reading
+          right now, and the page should say which of them are without being read. */}
+      <header
+        className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 ${
+          live ? 'border-ok/30 bg-ok-wash' : 'border-rule bg-sunk/60'
+        }`}
+      >
+        {live ? (
+          <span className="flex items-center gap-2 text-ok">
+            <span className="live-dot block size-[7px] rounded-full bg-ok" />
+            <span className="tag">live</span>
+          </span>
+        ) : (
+          <span className={`tag ${publication.status === 'failed' ? 'text-bad' : 'text-ink-dim'}`}>
+            {down ? 'taken down' : publication.status}
+          </span>
+        )}
+
+        <span className="h-3 w-px bg-rule" />
+
         <Link
           to={`/app/projects/${publication.project_id}/docs`}
-          className="text-[11.5px] font-semibold tracking-tight text-ink hover:text-hot-ink"
+          className="text-[12.5px] font-semibold tracking-tight text-ink hover:text-hot-ink"
         >
           {publication.project_name || `Project ${publication.project_id}`}
         </Link>
         <span className="tag text-ink-dim">
           {publication.target === 'live' ? 'live site' : publication.target}
         </span>
-        <span
-          className={`tag ml-auto ${
-            live ? 'text-ok' : publication.status === 'failed' ? 'text-bad' : 'text-ink-dim'
-          }`}
-        >
-          {down ? 'taken down' : publication.status}
-        </span>
+
+        {live && publication.published_at && (
+          <span className="tag ml-auto text-ink-dim">
+            built {relativeTime(publication.published_at)}
+          </span>
+        )}
       </header>
 
-      <div className="p-3">
+      <div className="p-4">
         {live ? (
-          <div className="mb-2.5 flex flex-wrap items-center gap-2">
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-hot-ink hover:underline"
-            >
-              {url}
-            </a>
-            <button type="button" onClick={copy} className="tag text-ink-dim hover:text-ink">
-              {copied ? 'copied' : 'copy'}
-            </button>
-          </div>
+          <>
+            {/* The address gets the weight of the thing that was actually shared, and
+                Open reads as the action rather than as a link buried in a sentence. */}
+            <div className="mb-3 flex flex-wrap items-stretch gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 border border-rule bg-sunk/40 px-3 py-2">
+                <span className="block size-[6px] shrink-0 rotate-45 bg-hot" />
+                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">
+                  {url}
+                </span>
+                <button
+                  type="button"
+                  onClick={copy}
+                  className="tag shrink-0 text-ink-dim hover:text-hot-ink"
+                >
+                  {copied ? 'copied' : 'copy'}
+                </button>
+              </div>
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="tag inline-flex shrink-0 items-center gap-1.5 border border-hot bg-hot px-4 text-on-hot transition-colors hover:border-hot-press hover:bg-hot-press"
+              >
+                Open site →
+              </a>
+            </div>
+
+            {/* What was built, and what checking it found. The verification counts are
+                the nearest thing to a receipt: the links were resolved, and nothing on
+                the page reaches off this machine. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              {build && (
+                <span className="tag text-ink-dim">
+                  {build.page_count} page{build.page_count === 1 ? '' : 's'} ·{' '}
+                  {bytes(build.bytes_total)}
+                </span>
+              )}
+              {build?.commit_sha && (
+                <span className="tag text-ink-dim">from {shortSha(build.commit_sha)}</span>
+              )}
+              {publication.is_current === true && <span className="tag text-ok">current</span>}
+              {publication.is_current === false && (
+                <span className="tag text-warn">
+                  code has moved on
+                  {publication.latest_commit ? ` (${shortSha(publication.latest_commit)})` : ''}
+                </span>
+              )}
+              {typeof verify.links === 'number' && (
+                <span className="tag text-ink-dim">{verify.links} links checked, none broken</span>
+              )}
+              {verify.external_total === 0 && (
+                <span className="tag text-ok">nothing loads from the network</span>
+              )}
+            </div>
+          </>
         ) : (
-          <p className="mb-2.5 font-sans text-[11.5px] text-ink-dim">
+          <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
             {down
-              ? `Taken down ${publication.unpublished_at ? relativeTime(publication.unpublished_at) : ''}. The link no longer resolves.`
+              ? `Taken down ${publication.unpublished_at ? relativeTime(publication.unpublished_at) : ''}. The link no longer resolves and the files are gone.`
               : publication.status === 'failed'
                 ? build?.error || 'The last build did not finish.'
                 : 'Building.'}
           </p>
         )}
 
-        <div className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          {build && (
-            <span className="tag text-ink-dim">
-              {build.page_count} page{build.page_count === 1 ? '' : 's'} ·{' '}
-              {bytes(build.bytes_total)}
-            </span>
-          )}
-          {build?.commit_sha && (
-            <span className="tag text-ink-dim">from {shortSha(build.commit_sha)}</span>
-          )}
-          {/* The one question worth asking about a site somebody else is reading. */}
-          {publication.is_current === true && <span className="tag text-ok">current</span>}
-          {publication.is_current === false && (
-            <span className="tag text-warn">
-              code has moved on
-              {publication.latest_commit ? ` (${shortSha(publication.latest_commit)})` : ''}
-            </span>
-          )}
-          {publication.published_at && live && (
-            <span className="tag text-ink-dim">{relativeTime(publication.published_at)}</span>
-          )}
-        </div>
-
         {!down && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-rule pt-3">
             <Button variant="ghost" onClick={() => onAct('rebuild', publication)} disabled={!!busy}>
               {busy === `rebuild-${publication.id}` ? 'building…' : 'Rebuild'}
             </Button>
@@ -139,7 +179,12 @@ function Card({
             <Button variant="ghost" onClick={() => onAct('rotate', publication)} disabled={!!busy}>
               New link
             </Button>
-            <Button variant="ghost" onClick={() => onTakeDown(publication)} disabled={!!busy}>
+            <Button
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => onTakeDown(publication)}
+              disabled={!!busy}
+            >
               Take down
             </Button>
           </div>
@@ -209,7 +254,7 @@ export default function PublishedPage() {
     <div className="mx-auto max-w-[1200px] p-5">
       <header className="mb-5 flex flex-wrap items-end gap-4 border-b border-rule pb-3">
         <span className="text-[34px] leading-[0.8] font-bold tracking-tighter text-rule select-none">
-          05
+          04
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-[19px] leading-tight font-bold tracking-tight text-ink">Published</h1>
@@ -253,7 +298,7 @@ export default function PublishedPage() {
           body="Open a codebase, go to its documentation, and press Publish. You will get a URL you can send to somebody who does not have the studio."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="flex flex-col gap-3">
           {rows.map(p => (
             <Card
               key={p.id}
