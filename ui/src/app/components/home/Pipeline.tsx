@@ -61,8 +61,9 @@ const FLOW_Y: React.CSSProperties = {
   animation: 'pipe-dash-y 0.65s linear infinite',
 }
 
-/** The faint plotting grid inside a plate — cool on the reading side, warm on the
- *  writing side, which is the only cue that separates them at a glance. */
+/** The faint plotting grid inside a plate. Cool by default and warm only while the
+ *  plate is the one in focus, so the grid changes with the ground it sits on rather
+ *  than marking out a half of the diagram. */
 const INNER_GRID: React.CSSProperties = {
   backgroundImage:
     'linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px)',
@@ -237,8 +238,18 @@ function Body({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** A stage on the reading side. The knowledge base is the hub: warm ground, a hot
- *  cap along its top edge, and a slow glow while the pulse is elsewhere. */
+/**
+ * A stage on the reading side.
+ *
+ * White until the pulse arrives. Everything warm — the ground, the inner grid, the
+ * hot border — is the focus signal and nothing else, because a plate that is shaded
+ * all the time reads as the selected one before anything has been selected. That is
+ * what the knowledge base and all three apps were doing: four of six plates lit, and
+ * the highlight with nothing left to say.
+ *
+ * The hub keeps the cap along its top edge. It is a rule rather than a shade, so it
+ * names the plate the others feed without claiming to be the one in focus.
+ */
 function Node({
   step,
   label,
@@ -267,9 +278,9 @@ function Node({
         minHeight: NODE_MIN_H,
         display: 'flex',
         flexDirection: 'column',
-        border: `1.5px solid ${active || hub ? 'var(--hot)' : 'var(--ink)'}`,
-        backgroundColor: hub ? 'var(--hot-wash)' : 'var(--panel)',
-        ...(hub ? INNER_GRID_WARM : INNER_GRID),
+        border: `1.5px solid ${active ? 'var(--hot)' : 'var(--ink)'}`,
+        backgroundColor: active ? 'var(--hot-wash)' : 'var(--panel)',
+        ...(active ? INNER_GRID_WARM : INNER_GRID),
         padding: '20px 22px 18px',
         position: 'relative',
         opacity: visible ? 1 : 0,
@@ -298,7 +309,7 @@ function Node({
           }}
         />
       )}
-      <Eyebrow step={step} label={label} hot={!!hub} />
+      <Eyebrow step={step} label={label} hot={!!active} />
       <Title>{title}</Title>
       <Body>{description}</Body>
       <div
@@ -314,8 +325,14 @@ function Node({
   )
 }
 
-/** A plate on the writing side. Dashed until the pulse reaches it — these are things
- *  the reading makes possible, not stages it passes through. */
+/**
+ * A plate on the writing side.
+ *
+ * White like the rest until the pulse arrives; the dashed edge is what separates it
+ * from a stage on the reading side, and an edge is a line rather than a shade. All
+ * three used to be permanently washed, which read as three selected cards sitting
+ * under a highlight that was trying to select one of them.
+ */
 function Feature({
   step,
   label,
@@ -345,8 +362,8 @@ function Feature({
         display: 'flex',
         flexDirection: 'column',
         border: `1.5px ${active ? 'solid' : 'dashed'} var(--hot)`,
-        backgroundColor: 'var(--hot-wash)',
-        ...INNER_GRID_WARM,
+        backgroundColor: active ? 'var(--hot-wash)' : 'var(--panel)',
+        ...(active ? INNER_GRID_WARM : INNER_GRID),
         padding: '20px 22px 18px',
         position: 'relative',
         opacity: visible ? 1 : 0,
