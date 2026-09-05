@@ -106,7 +106,7 @@ export default function HomePage() {
 
       <HomeBanner projects={projects.data ?? null} />
 
-      <Pipeline features={features.data ?? null} projects={projects.data ?? null} />
+      <Pipeline features={features.data ?? null} />
 
       <JobsTimeline jobs={jobs.data ?? null} loading={jobs.loading} />
 
