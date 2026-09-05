@@ -256,6 +256,14 @@ export default function Pipeline({
   const writing = reached('apps', phase)
   const kbCx = COLS[2] + CARD_W / 2
 
+  // Ends of the bus: every app's column, plus the trunk's. Null when they coincide,
+  // so a lone app directly under the knowledge base gets no zero-length segment.
+  const stops = [kbCx, ...leaves.map(l => l.x + CARD_W / 2)]
+  const busSpan =
+    Math.min(...stops) === Math.max(...stops)
+      ? null
+      : ([Math.min(...stops), Math.max(...stops)] as const)
+
   return (
     <section className="mb-5">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b border-rule pb-3">
@@ -330,11 +338,16 @@ export default function Pipeline({
               not carry takes its own branch with it instead of leaving a line into
               blank paper. */}
           <Wire d={`M${kbCx} ${SPINE_Y + CARD_H} V${BUS_Y}`} live={writing} />
+          {/* The bus is drawn once across its full span, not once per app. Running a
+              branch the whole way from the trunk to its own column overlaps the others,
+              and the later branch's grey base then paints over the earlier one's hot
+              overlay — a diagram that reports the pulse reaching two of three apps. */}
+          {busSpan && <Wire d={`M${busSpan[0]} ${BUS_Y} H${busSpan[1]}`} live={writing} />}
           {leaves.map(leaf => {
             const cx = leaf.x + CARD_W / 2
             return (
               <g key={leaf.id}>
-                <Wire d={`M${kbCx} ${BUS_Y} H${cx} V${LEAF_Y - 6}`} live={writing} />
+                <Wire d={`M${cx} ${BUS_Y} V${LEAF_Y - 6}`} live={writing} />
                 <path
                   d={`M${cx - 4} ${LEAF_Y - 6} L${cx} ${LEAF_Y} L${cx + 4} ${LEAF_Y - 6}`}
                   fill="none"
