@@ -698,91 +698,23 @@ export default function Pipeline({ features }: { features: AppCatalogItem[] | nu
       }}
     >
       <div style={{ width: '100%' }}>
+        {/* The banner above already carries the identity strip, the offline pill,
+            the headline and this section's opening paragraph — it is the first thing
+            on Home and says what the product is. Repeating any of it here would be
+            Home saying the same sentence twice, a hundred pixels apart, so all that
+            is left is the label that names the section. */}
         <div
-          style={{ marginBottom: 26, opacity: v(1) ? 1 : 0, transition: 'opacity 0.6s ease' }}
+          style={{
+            ...MONO,
+            fontSize: 9.5,
+            color: 'var(--hot-ink)',
+            letterSpacing: '0.15em',
+            marginBottom: 26,
+            opacity: v(1) ? 1 : 0,
+            transition: 'opacity 0.6s ease',
+          }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              ...MONO,
-              fontSize: 10,
-              letterSpacing: '0.13em',
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                color: 'var(--hot-ink)',
-              }}
-            >
-              <span style={{ fontSize: 8 }}>◆</span>
-              <span>CODELITH — LOCAL-FIRST CODE INTELLIGENCE</span>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                color: 'var(--ink-mid)',
-              }}
-            >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--ok)',
-                  flexShrink: 0,
-                }}
-              />
-              <span>RUNS FULLY OFFLINE</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              ...MONO,
-              fontSize: 9.5,
-              color: 'var(--hot-ink)',
-              letterSpacing: '0.15em',
-              marginBottom: 10,
-            }}
-          >
-            HOW IT WORKS
-          </div>
-          <h2
-            style={{
-              ...MONO,
-              fontSize: 20,
-              fontWeight: 600,
-              color: 'var(--ink)',
-              margin: 0,
-              lineHeight: 1.35,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            Analyse once.{' '}
-            <span style={{ color: 'var(--hot-ink)' }}>Use it as many times as you need.</span>
-          </h2>
-          <p
-            style={{
-              marginTop: 10,
-              fontSize: 12.5,
-              color: 'var(--ink-mid)',
-              maxWidth: 500,
-              lineHeight: 1.7,
-            }}
-          >
-            Point Codelith at a repository. It reads every file and builds a structured
-            knowledge base of what is actually there —{' '}
-            <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>not a summary of it.</strong>{' '}
-            That knowledge base is the product.
-          </p>
+          HOW IT WORKS
         </div>
 
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
