@@ -93,9 +93,11 @@ export default function Preflight({ projectId }: { projectId: number }) {
     >
       <div className="px-3 py-2.5">
         <p className="font-sans text-[11.5px] leading-relaxed text-ink-mid">
-          Name a file or a function and see what depends on it: who imports it, what
-          calls it, whether a test reaches it, and which written pages describe it. This
-          is the answer a connected coding agent gets before it changes anything.
+          Name a file or a function and see both directions of the graph: what it
+          imports, who imports it, what calls it, whether a test reaches it, and which
+          written pages describe it. This is the answer a connected coding agent gets
+          before it changes anything. The same panel sits under every file in the
+          source viewer, asked for you.
         </p>
         <form
           className="mt-2.5 flex gap-2"
@@ -127,6 +129,14 @@ export default function Preflight({ projectId }: { projectId: number }) {
         <>
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-t border-rule px-3 py-2.5">
             <span className={`tag border px-1.5 py-0.5 ${risk.className}`}>{risk.label}</span>
+            {result.found && (
+              <span
+                className="tag tabular-nums text-ink-dim"
+                title="reach_weight: capped reach plus five per written page"
+              >
+                weight {result.weight}
+              </span>
+            )}
             <span className="text-[12px] font-semibold text-ink">
               {result.files[0] ?? result.target}
             </span>
@@ -162,6 +172,16 @@ export default function Preflight({ projectId }: { projectId: number }) {
                     key: `${c.file}:${c.symbol}`,
                     left: `${c.file} :: ${c.symbol}`,
                   }))}
+                />
+                <List
+                  title="depends on"
+                  hint="what it imports"
+                  items={result.imports.map(f => ({ key: f, left: f }))}
+                />
+                <List
+                  title="imported by"
+                  hint="directly"
+                  items={result.dependents.map(f => ({ key: f, left: f }))}
                 />
                 <List
                   title="breaks first"

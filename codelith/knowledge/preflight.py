@@ -110,6 +110,11 @@ class Preflight:
 
     callers: list[Caller] = field(default_factory=list)
     dependents: list[str] = field(default_factory=list)
+    #: What the target imports. The other three legs of the graph have always been
+    #: here; this one existed on the store and was reachable only through MCP, so
+    #: "what does this depend on" was the one question the pre-flight could not
+    #: answer about the file it was describing.
+    imports: list[str] = field(default_factory=list)
     reached: list[Reached] = field(default_factory=list)
     tests: list[str] = field(default_factory=list)
     documented_in: list[CitedBy] = field(default_factory=list)
@@ -210,6 +215,12 @@ class Preflight:
                 *(f"  {p.address} — {p.title}" for p in self.documented_in[:_SAMPLE]),
                 "",
             ]
+        if self.imports:
+            out += [
+                "Depends on:",
+                *(f"  {i}" for i in self.imports[:_SAMPLE]),
+                "",
+            ]
         if self.facts:
             out += ["Declares:", *(f"  {f}" for f in self.facts[:_SAMPLE]), ""]
 
@@ -275,7 +286,7 @@ class PreflightService:
     # ── the four lookups ──────────────────────────────────────────────────────
 
     async def _graph(self, report: Preflight) -> None:
-        """Callers, direct importers, transitive reach — and which of those are tests."""
+        """Callers, importers, imports, transitive reach — and which of those are tests."""
         try:
             async with get_graph_store(self.db) as graph:
                 if report.kind == "symbol":
@@ -283,9 +294,11 @@ class PreflightService:
                     report.callers = [Caller(r["file"], r["caller"]) for r in rows]
 
                 direct: set[str] = set()
+                uses: set[str] = set()
                 reached: dict[str, int] = {}
                 for path in report.files:
                     direct.update(await graph.get_dependents(self.project_id, path))
+                    uses.update(await graph.get_imports(self.project_id, path))
                     for row in await graph.get_blast_radius(self.project_id, path, depth=_DEPTH):
                         hit, distance = row["file"], row["distance"]
                         if hit not in reached or distance < reached[hit]:
@@ -298,6 +311,9 @@ class PreflightService:
         # and for a symbol spanning two files it would report each as breaking the other.
         own = set(report.files)
         report.dependents = sorted(direct - own)
+        # Same subtraction, same reason: a symbol spanning two files would otherwise
+        # report each as importing the other.
+        report.imports = sorted(uses - own)
         report.reached = [
             Reached(path, distance, _is_test(path))
             for path, distance in sorted(reached.items(), key=lambda kv: (kv[1], kv[0]))

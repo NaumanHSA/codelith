@@ -563,11 +563,18 @@ export interface Preflight {
   files: string[]
   defined_at: string[]
   callers: PreflightCaller[]
+  /** Who imports the target. */
   dependents: string[]
+  /** What the target imports. The one leg of the graph that used to be reachable
+   *  only through MCP. */
+  imports: string[]
   reached: PreflightReached[]
   tests: string[]
   documented_in: PreflightCitedBy[]
   facts: string[]
+  /** `reach_weight`: capped reach plus five per written page. The ranking every
+   *  caller is meant to sort on. */
+  weight: number
 }
 
 /** How much detail a written page goes into. Mirrors `apps/documentation/depth.py`;

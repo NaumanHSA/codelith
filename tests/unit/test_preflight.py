@@ -179,3 +179,50 @@ class TestTestDetectionIsTheLanguagesJob:
     )
     def test_paths(self, path: str, expected: bool) -> None:
         assert _is_test(path) is expected
+
+
+class TestWhatTheFileDependsOn:
+    """
+    The fourth leg of the graph.
+
+    Callers, importers and transitive reach have always been here: they all answer
+    "who would notice if this changed". What the file itself leans on was on the
+    graph store and reachable only through MCP, so a pre-flight could describe
+    everything around a file except what it stands on.
+    """
+
+    def test_it_appears_in_the_brief(self) -> None:
+        p = Preflight(
+            target="x", files=["pkg/x.py"], kind="file", imports=["pkg/a.py", "pkg/b.py"]
+        )
+        brief = p.brief()
+        assert "Depends on:" in brief
+        assert "pkg/a.py" in brief and "pkg/b.py" in brief
+
+    def test_it_is_omitted_when_there_is_nothing_to_report(self) -> None:
+        """Same rule as every other section: a brief padded with zeroes teaches its
+        reader to skim, and the line that mattered is in the part they skimmed."""
+        assert "Depends on" not in Preflight(
+            target="x", files=["pkg/x.py"], kind="file"
+        ).brief()
+
+    def test_it_does_not_change_the_risk(self) -> None:
+        """
+        Deliberate. Risk is about what an edit breaks, and what a file imports is not
+        that: a module importing forty others is not dangerous to change, it is
+        merely well connected. Folding it in would make every leaf with a long import
+        list look like a hazard.
+        """
+        leaf = Preflight(target="x", files=["pkg/x.py"], kind="file", tests=["t.py"])
+        loaded = Preflight(
+            target="x",
+            files=["pkg/x.py"],
+            kind="file",
+            tests=["t.py"],
+            imports=[f"pkg/dep{i}.py" for i in range(40)],
+        )
+        assert leaf.risk == loaded.risk
+
+    def test_it_does_not_change_the_weight(self) -> None:
+        p = Preflight(target="x", files=["pkg/x.py"], kind="file", imports=["a.py"] * 30)
+        assert p.weight == 0

@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import { PageHead, Panel } from '../../components/ui'
 import FileTree from '../../components/projects/FileTree'
 import CodeView from '../../components/projects/CodeView'
+import FileGraph from '../../components/projects/FileGraph'
 import type { SymbolEntry } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
@@ -56,6 +57,13 @@ export default function CodePage() {
   const tree = useAsync(sig => api.files(id, sig), [id])
   const file = useAsync(
     sig => (path ? api.file(id, path, sig) : Promise.resolve(null)),
+    [id, path],
+  )
+  // Asked automatically about the file on screen. The panel on the codebase page
+  // makes you type a path first, which is the same failure as putting a check
+  // behind its own page: a question you have to phrase is one nobody asks.
+  const graph = useAsync(
+    sig => (path ? api.preflight(id, path, sig) : Promise.resolve(null)),
     [id, path],
   )
 
@@ -183,6 +191,24 @@ export default function CodePage() {
           >
             <Outline symbols={file.data?.symbols ?? []} active={range} onPick={pickLine} />
           </Panel>
+
+          {/* Under the outline rather than beside it: the outline is about this
+              file, and this is about everything else. Spans the tree column too,
+              because a graph in a 210px rail is a list of truncated paths. */}
+          <div className="lg:col-span-3">
+            <Panel
+              title="Connected to"
+              action={
+                <span className="tag text-ink-dim">
+                  same answer as mcp: before_edit
+                </span>
+              }
+            >
+              {graph.loading && <SkeletonPanel rows={3} />}
+              {graph.error && <ErrorState message={graph.error} />}
+              {graph.data && <FileGraph data={graph.data} projectId={id} />}
+            </Panel>
+          </div>
         </div>
       )}
     </div>

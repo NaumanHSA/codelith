@@ -184,12 +184,34 @@ with a sentence each is the thing somebody actually wants.
 
 `[x]` **4.3** A module opens its files in the Phase 3 viewer.
 
-## Phase 5 — The graph, browsable
+## Phase 5 — The graph, browsable — **done**
 
-`[ ]` **5.1** Who imports this file, what it imports, who calls this symbol. All three
+*Less new machinery than expected and more plumbing. `PreflightService` already
+assembled callers, direct importers, transitive reach with distance, tests, cited
+pages and risk. Three things were missing and all three were visibility, not
+capability:*
+
+* **`imports` was never computed.** `get_imports` sat on the graph store, reachable
+  only through MCP, so a pre-flight could describe everything around a file except
+  what it stands on. Now computed in the same graph pass and printed in the brief, so
+  `before_edit` gained it too.
+* **`dependents` was computed and never rendered.** It has been in `PreflightOut`
+  since the endpoint was written, and no screen read it.
+* **`weight` never left the process.** `reach_weight` is documented as the ranking
+  every caller should sort on and was not on the wire at all.
+
+*And the panel made you type a path first. A question you have to phrase is one
+nobody asks, which is the same failure as putting a check behind its own page, so the
+graph now sits under whatever file the source viewer has open, asked automatically,
+with every path a link back into the viewer. Verified on real data: the graph is
+symmetric (A imports B exactly when B is imported by A), and `server/main.py` scores
+15 on nothing but the three written pages describing it, which is what `reach_weight`
+was for.*
+
+`[x]` **5.1** Who imports this file, what it imports, who calls this symbol. All three
 already exist on the graph store and are reachable only through MCP.
 
-`[ ]` **5.2** Reach and `reach_weight` from `knowledge/preflight.py`, so "what breaks
+`[x]` **5.2** Reach and `reach_weight` from `knowledge/preflight.py`, so "what breaks
 if I change this" is answerable in the studio and not only by an agent.
 
 ## Phase 6 — Joining it up

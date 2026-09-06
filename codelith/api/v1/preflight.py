@@ -54,6 +54,10 @@ class PreflightOut(BaseModel):
     defined_at: list[str] = Field(default_factory=list)
     callers: list[CallerOut] = Field(default_factory=list)
     dependents: list[str] = Field(default_factory=list)
+    imports: list[str] = Field(default_factory=list)
+    #: `reach_weight`: capped reach plus five per written page. The ranking every
+    #: caller is supposed to sort on, and the studio could not read it.
+    weight: int = 0
     reached: list[ReachedOut] = Field(default_factory=list)
     tests: list[str] = Field(default_factory=list)
     documented_in: list[CitedByOut] = Field(default_factory=list)
@@ -103,6 +107,8 @@ async def preflight(
         defined_at=report.defined_at,
         callers=[CallerOut(file=c.file, symbol=c.symbol) for c in report.callers],
         dependents=report.dependents,
+        imports=report.imports,
+        weight=report.weight,
         reached=[
             ReachedOut(path=r.path, distance=r.distance, is_test=r.is_test) for r in report.reached
         ],
