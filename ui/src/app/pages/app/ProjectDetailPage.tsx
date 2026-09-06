@@ -286,7 +286,11 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_320px]">
+      {/* One column, not two. The rail used to take 320px off the widest thing
+          on the page, and the widest thing on the page is now a graph that
+          wants every pixel of it. Source, jobs and documents are reference
+          material: they read fine as a row underneath. */}
+      <div className="flex flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-3">
           {kb.loading && <SkeletonPanel rows={5} />}
 
@@ -519,8 +523,9 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        {/* rail */}
-        <div className="flex flex-col gap-3">
+        {/* Was the rail. Three panels of context, now side by side below the
+            work rather than beside it. */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <SourcePanel project={p} />
 
           <Panel
