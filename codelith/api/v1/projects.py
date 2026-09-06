@@ -12,6 +12,7 @@ from codelith.apps.documentation.services.revision_service import RevisionServic
 from codelith.apps.documentation.services.site_service import SiteService
 from codelith.config import get_settings
 from codelith.dependencies import CurrentUser, DbSession, ManagerUser, ReviewerUser
+from codelith.schemas.architecture import ArchitectureOut
 from codelith.schemas.job import (
     JobApproveRequest,
     JobCreate,
@@ -46,6 +47,7 @@ from codelith.schemas.site import (
 )
 from codelith.services.audit_service import AuditService
 from codelith.services.job_service import JobService
+from codelith.services.architecture_service import ArchitectureService
 from codelith.services.knowledge_service import KnowledgeService
 from codelith.services.project_service import ProjectService
 from codelith.services.source_service import SourceService
@@ -265,6 +267,22 @@ async def get_knowledge_base(project_id: int, db: DbSession, user: CurrentUser):
     action instead of a document-type picker.
     """
     return await KnowledgeService(db).get_summary(project_id, user)
+
+
+@router.get("/{project_id}/architecture", response_model=ArchitectureOut)
+async def get_architecture(project_id: int, db: DbSession, user: CurrentUser):
+    """
+    The shape of the system, as analysis saw it.
+
+    Services, the relations between them with the verb naming each one, the layers
+    they group into, the patterns recognised and the stack. All of it has been stored
+    on every analysis since the architecture agent landed and read by nothing.
+
+    Never 404s for a project with no map. One analysed before this column existed, or
+    one where the call produced nothing usable, gets `available: false` and the page
+    says so instead of looking broken.
+    """
+    return await ArchitectureService(db).get(project_id, user)
 
 
 @router.get("/{project_id}/apps", response_model=list[AppOut])

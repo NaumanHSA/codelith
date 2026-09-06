@@ -703,3 +703,50 @@ export interface RendererInfo {
   available: boolean
   reason: string
 }
+
+
+/* ------------------------------------------------------------------ *
+ * The architecture, as analysis saw it.
+ *
+ * Every field is optional in practice: this comes from a column written
+ * by a model, and the server coerces it before it gets here. `available`
+ * is false for a project analysed before the column existed.
+ * ------------------------------------------------------------------ */
+
+export interface ArchService {
+  name: string
+  /** `service`, `api`, `cli`, `utility` — whatever analysis called it. */
+  type: string
+  description: string
+  modules: string[]
+}
+
+export interface ArchRelation {
+  source: string
+  target: string
+  /** `calls`, `configures`, `feeds`, `reads`, `uses`. Drawn on the edge. */
+  kind: string
+}
+
+export interface ArchLayer {
+  name: string
+  modules: string[]
+}
+
+export interface Architecture {
+  available: boolean
+  commit_sha: string | null
+  services: ArchService[]
+  relations: ArchRelation[]
+  layers: ArchLayer[]
+  patterns: string[]
+  entry_points: string[]
+  tech_stack: {
+    language: string
+    frameworks: string[]
+    databases: string[]
+    infra: string[]
+  }
+  /** Edges naming a service that does not exist. Not drawable, so reported. */
+  dangling_relations: number
+}

@@ -13,7 +13,7 @@ import type {
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
   ModelRegistry, ModelDraft, ModelTest, Tier, EvidenceBody,
-  Publication, PublishAccepted, RendererInfo,
+  Publication, PublishAccepted, RendererInfo, Architecture,
 } from './types'
 
 export const API_BASE =
@@ -496,6 +496,14 @@ export const api = {
 
   appCatalog: (signal?: AbortSignal) =>
     request<AppCatalogItem[]>('/apps', { signal }),
+
+  /**
+   * The shape of the system: services, the relations between them, layers,
+   * patterns and the stack. Stored on every analysis and, until now, read by
+   * nothing.
+   */
+  architecture: (projectId: number, signal?: AbortSignal) =>
+    request<Architecture>(`/projects/${projectId}/architecture`, { signal }),
 
   /** What this codebase unlocks, and what it does not yet. */
   projectApps: (projectId: number, signal?: AbortSignal) =>

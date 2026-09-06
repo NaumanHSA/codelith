@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Preflight from '../../components/projects/Preflight'
 import ReanalyseDialog from '../../components/projects/ReanalyseDialog'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
+import ArchitectureMap from '../../components/projects/ArchitectureMap'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import AppGrid from '../../components/projects/AppGrid'
 import { coverage, describeJobScope } from '../../lib/site'
@@ -128,6 +129,25 @@ function DocumentationProgress({ projectId }: { projectId: number }) {
   )
 }
 
+/** A labelled row of short facts. Used for layers, patterns and the stack. */
+function Facts({ label, items, hot }: { label: string; items: string[]; hot?: boolean }) {
+  return (
+    <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 last:mb-0">
+      <span className="tag w-[74px] shrink-0 text-ink-dim">{label}</span>
+      {items.map(item => (
+        <span
+          key={item}
+          className={`border px-1.5 py-[2px] text-[10.5px] ${
+            hot ? 'border-hot-edge bg-hot-wash text-hot-ink' : 'border-rule text-ink-mid'
+          }`}
+        >
+          {item}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function ProjectDetailPage() {
   const { projectId } = useParams()
   const id = Number(projectId)
@@ -136,6 +156,7 @@ export default function ProjectDetailPage() {
   const { track } = useRunningJobs()
 
   const project = useAsync(() => api.project(id), [id])
+  const arch = useAsync(sig => api.architecture(id, sig), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
   const features = useAsync(sig => api.projectApps(id, sig), [id])
@@ -316,6 +337,47 @@ export default function ProjectDetailPage() {
                   <KnowledgeMap kb={kb.data} />
                 </div>
               </Panel>
+
+              {/* Above the counters and the role plot, because it is the only thing
+                  here that answers "what is this project" rather than "how big is
+                  it". Analysis has written this on every run and nothing has ever
+                  read it. */}
+              {arch.data?.available && (
+                <Panel
+                  title="Architecture"
+                  action={
+                    <span className="tag text-ink-dim">
+                      as analysed at {shortSha(arch.data.commit_sha)}
+                    </span>
+                  }
+                >
+                  <ArchitectureMap arch={arch.data} />
+
+                  {(arch.data.tech_stack.frameworks.length > 0 ||
+                    arch.data.patterns.length > 0 ||
+                    arch.data.layers.length > 0) && (
+                    <div className="border-t border-rule px-3 py-2.5">
+                      {/* Single-word facts that each cost a quality-tier call to
+                          derive and reached nobody until now. */}
+                      {arch.data.layers.length > 0 && (
+                        <Facts label="layers" items={arch.data.layers.map(l => l.name)} />
+                      )}
+                      {arch.data.patterns.length > 0 && (
+                        <Facts label="patterns" items={arch.data.patterns} hot />
+                      )}
+                      {arch.data.tech_stack.frameworks.length > 0 && (
+                        <Facts label="frameworks" items={arch.data.tech_stack.frameworks} />
+                      )}
+                      {arch.data.tech_stack.infra.length > 0 && (
+                        <Facts label="infra" items={arch.data.tech_stack.infra} />
+                      )}
+                      {arch.data.tech_stack.databases.length > 0 && (
+                        <Facts label="data stores" items={arch.data.tech_stack.databases} />
+                      )}
+                    </div>
+                  )}
+                </Panel>
+              )}
 
               {/* Directly under the knowledge base, because it is the one thing
                   on this page you ask *before* doing something rather than
