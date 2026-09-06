@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import type { FileEntry, FileTree, ModuleEntry, Modules, SymbolEntry } from '../../lib/types'
 
@@ -10,7 +10,7 @@ import type { FileEntry, FileTree, ModuleEntry, Modules, SymbolEntry } from '../
  * way. A wheel apportioned by leaf count puts a parent nowhere near its
  * children the moment one branch dominates - SERVICE holds fourteen of
  * twenty modules here - and re-centring to fix that threw the rest of
- * the graph away, so three levels in you were looking at two nodes and
+ * the graph away, so three levels in you were looking at two cards and
  * an edge with no idea where you were.
  *
  * The answer to both is to stop deciding where things go. Nodes repel,
@@ -19,12 +19,20 @@ import type { FileEntry, FileTree, ModuleEntry, Modules, SymbolEntry } from '../
  * looking at; nothing is replaced, and the path back to the project is
  * always drawn on screen.
  *
- * Edges are straight because these are containment links between cards
- * a few centimetres apart, and a curve on a short straight run is
- * decoration pretending to be information.
+ * **A level is legible before it is read.** Shape says what kind of
+ * thing a node is - the project is a slab, a role is a pill, a module
+ * is a card with a spine, a file is a dog-eared page - and colour says
+ * which family of role it belongs to. Between them you can read the
+ * structure of a screenful without reading a word of it.
+ *
+ * **Symbols are a table, not a cloud.** A file's functions and
+ * variables cannot be expanded further, and scattering twenty
+ * unopenable cards across the canvas buys nothing but distance. They
+ * arrive as one block with a row each, which is also the shape they
+ * have in the file.
  * ------------------------------------------------------------------ */
 
-type Kind = 'root' | 'role' | 'module' | 'file' | 'symbol'
+type Kind = 'root' | 'role' | 'module' | 'file' | 'symbols'
 
 type Node = {
   id: string
@@ -40,21 +48,71 @@ type Node = {
   module?: ModuleEntry
   file?: FileEntry
   path?: string
-  symbol?: SymbolEntry
+  /** Only on a `symbols` node: the rows it draws. */
+  rows?: SymbolEntry[]
 }
 
 type Body = { x: number; y: number; vx: number; vy: number; pinned?: boolean }
 
+/* ── Colour ───────────────────────────────────────────────────────── */
+
+/**
+ * A hue per family of role, in fixed order and never cycled.
+ *
+ * Grouped rather than one-per-role because there are thirteen roles and six
+ * validated hues, and a seventh generated hue is a colour nobody can name. The
+ * families are what a reader actually distinguishes: what a caller touches, what
+ * does work, what holds data, what is shared, how it runs, and how it is tested.
+ * Anything outside them takes the neutral ink, which is the honest "other".
+ */
+const FAMILY: Record<string, string> = {
+  api: 'var(--cat-1)',
+  ui: 'var(--cat-1)',
+  service: 'var(--cat-2)',
+  worker: 'var(--cat-2)',
+  data_access: 'var(--cat-3)',
+  model: 'var(--cat-3)',
+  schema: 'var(--cat-3)',
+  utility: 'var(--cat-4)',
+  config: 'var(--cat-5)',
+  infra: 'var(--cat-5)',
+  cli: 'var(--cat-5)',
+  test: 'var(--cat-6)',
+}
+const familyInk = (role: string) => FAMILY[role.toLowerCase()] ?? 'var(--ink-dim)'
+
+/** What the legend lists, so the six hues are named rather than guessed at. */
+const LEGEND: [string, string][] = [
+  ['api, ui', 'var(--cat-1)'],
+  ['service, worker', 'var(--cat-2)'],
+  ['data, model, schema', 'var(--cat-3)'],
+  ['utility', 'var(--cat-4)'],
+  ['config, infra, cli', 'var(--cat-5)'],
+  ['test', 'var(--cat-6)'],
+]
+
 /* ── Sizes ────────────────────────────────────────────────────────── */
 
-const SIZE: Record<Kind, { w: number; h: number }> = {
-  root: { w: 196, h: 42 },
-  role: { w: 136, h: 38 },
-  module: { w: 152, h: 38 },
-  file: { w: 146, h: 38 },
-  // Two lines like every other card. Name on one row and kind on the other used
-  // less height and collided the moment a symbol was called `sessionOpts`.
-  symbol: { w: 124, h: 34 },
+const SIZE: Record<Exclude<Kind, 'symbols'>, { w: number; h: number }> = {
+  root: { w: 208, h: 50 },
+  role: { w: 146, h: 38 },
+  module: { w: 158, h: 40 },
+  file: { w: 150, h: 40 },
+}
+
+/** A row in the symbol table, and the header above it. */
+const ROW_H = 15
+const TABLE_HEAD = 20
+const TABLE_W = 198
+
+/** Past this the block is taller than the graph it sits in. The rest are in the
+ *  detail panel, which lists every one of them with a link into the source. */
+const MAX_ROWS = 14
+
+function sizeOf(node: Node) {
+  if (node.kind !== 'symbols') return SIZE[node.kind]
+  const rows = Math.min(node.rows?.length ?? 0, MAX_ROWS)
+  return { w: TABLE_W, h: TABLE_HEAD + rows * ROW_H + 6 }
 }
 
 /* ── Forces ───────────────────────────────────────────────────────── */
@@ -84,10 +142,7 @@ const DAMPING = 0.86
  * The simulation cools rather than running forever. Expanding reheats it.
  *
  * Tuned down from a gentler decay that took seven seconds to settle, which
- * meant clicking a card you could see was clicking where it used to be. The
- * separation pass is a hard constraint and runs at every temperature, so
- * cooling this fast costs the last few pixels of spring relaxation and nothing
- * that matters.
+ * meant clicking a card you could see was clicking where it used to be.
  */
 const ALPHA_DECAY = 0.955
 const ALPHA_MIN = 0.01
@@ -104,27 +159,11 @@ const ALPHA_MIN = 0.01
 const restLength = (kids: number, childWidth: number) =>
   Math.max(112, (kids * (childWidth + 16)) / (2 * Math.PI))
 
-const ROLE_INK: Record<string, string> = {
-  api: 'var(--hot)',
-  service: 'var(--ink)',
-  worker: 'var(--ink)',
-  cli: 'var(--warn)',
-  config: 'var(--ink-dim)',
-  utility: 'var(--ink-dim)',
-  schema: 'var(--ink-mid)',
-  model: 'var(--ink-mid)',
-  data_access: 'var(--ink-mid)',
-  infra: 'var(--warn)',
-  ui: 'var(--hot)',
-  test: 'var(--ok)',
-}
-const roleInk = (role: string) => ROLE_INK[role.toLowerCase()] ?? 'var(--ink-mid)'
-
 const trim = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text)
 
 /** A card's second line has about twenty-three characters. "javascript" spends
- *  eight of them saying what "js" says, and the line counts and file counts it
- *  crowds out are the part nobody can infer from the name. */
+ *  eight of them saying what "js" says, and the counts it crowds out are the
+ *  part nobody can infer from the name. */
 const SHORT_LANGUAGE: Record<string, string> = {
   javascript: 'js',
   typescript: 'ts',
@@ -182,9 +221,7 @@ function buildTree(
           shortLanguage(m.language || 'mixed'),
           `${m.loc.toLocaleString()} loc`,
           `${m.file_count} files`,
-        ].join(
-          ' · ',
-        ),
+        ].join(' · '),
         full: m.path,
         parent: roleNode.id,
         children: [],
@@ -213,18 +250,21 @@ function buildTree(
           path,
           file: entry,
         }
-        for (const s of symbols.get(path) ?? []) {
+        // One table rather than a symbol per card. Nothing under a symbol can be
+        // opened, so scattering twenty of them buys distance and no information.
+        const rows = symbols.get(path)
+        if (rows?.length) {
           fileNode.children.push({
-            id: `sym:${path}:${s.qname || s.name}:${s.line}`,
-            kind: 'symbol',
-            label: s.name,
-            meta: `${s.kind || 'symbol'} · L${s.line}`,
-            full: s.qname || s.name,
+            id: `syms:${path}`,
+            kind: 'symbols',
+            label: `${rows.length} symbols`,
+            meta: path,
+            full: path,
             parent: fileNode.id,
             children: [],
             role,
             path,
-            symbol: s,
+            rows,
           })
         }
         moduleNode.children.push(fileNode)
@@ -261,20 +301,24 @@ export default function KnowledgeGraph({
   modules,
   files,
   projectId,
+  fullscreen = false,
 }: {
   title: string
   modules: Modules
   files: FileTree | undefined
   projectId: number
+  /** On its own page the canvas takes the viewport instead of a panel's worth. */
+  fullscreen?: boolean
 }) {
+  const navigate = useNavigate()
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['root']))
   const [selected, setSelected] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [symbols, setSymbols] = useState<Map<string, SymbolEntry[]>>(new Map())
   const [loading, setLoading] = useState<Set<string>>(new Set())
   const [view, setView] = useState({ k: 1, x: 0, y: 0 })
-  /** The view follows the graph until the reader takes hold of it. */
   const [steered, setSteered] = useState(false)
+  const [showLegend, setShowLegend] = useState(true)
   const steeredRef = useRef(false)
   steeredRef.current = steered
 
@@ -295,6 +339,29 @@ export default function KnowledgeGraph({
     return out
   }, [root, expanded])
 
+  const focus = byId.get(hovered ?? selected ?? '') ?? null
+
+  /**
+   * The chain from the project down to whatever is in focus.
+   *
+   * Everything off it is dimmed rather than hidden. A graph of forty cards can
+   * show you where something sits or how much there is, and dimming lets it do
+   * both: the path reads at a glance and the rest stays as context.
+   */
+  const litPath = useMemo(() => {
+    if (!focus) return null
+    const chain = new Set<string>()
+    let node: Node | undefined = focus
+    while (node) {
+      chain.add(node.id)
+      node = node.parent ? byId.get(node.parent) : undefined
+    }
+    // The focused node's own children too, so opening something shows what came
+    // out of it rather than dimming it.
+    for (const child of focus.children) chain.add(child.id)
+    return chain
+  }, [focus, byId])
+
   /* ── Simulation ─────────────────────────────────────────────── */
 
   const bodies = useRef(new Map<string, Body>())
@@ -302,8 +369,6 @@ export default function KnowledgeGraph({
   const frame = useRef(0)
   const [, redraw] = useState(0)
 
-  // New nodes start on their parent, offset away from the centre, so a fan opens
-  // outward instead of unfolding back through the graph it came from.
   useEffect(() => {
     const map = bodies.current
     const live = new Set(visible.map(n => n.id))
@@ -316,6 +381,8 @@ export default function KnowledgeGraph({
         map.set(node.id, { x: 0, y: 0, vx: 0, vy: 0, pinned: node.kind === 'root' })
         return
       }
+      // New nodes start on their parent, offset away from the centre, so a fan
+      // opens outward instead of unfolding back through the graph it came from.
       const away = Math.atan2(parent.y, parent.x) || 0
       const spread = ((i % 7) - 3) * 0.42
       const d = 30 + Math.random() * 12
@@ -333,7 +400,7 @@ export default function KnowledgeGraph({
     const step = () => {
       const map = bodies.current
       const list = visible
-        .map(n => ({ node: n, body: map.get(n.id)! }))
+        .map(n => ({ node: n, body: map.get(n.id)!, size: sizeOf(n) }))
         .filter(entry => entry.body)
 
       for (const { body } of list) {
@@ -349,8 +416,6 @@ export default function KnowledgeGraph({
           let dy = b.y - a.y
           let d2 = dx * dx + dy * dy
           if (d2 > REPULSION_RANGE * REPULSION_RANGE) continue
-          // Two nodes on exactly the same point have no direction to separate
-          // along, so give them one rather than dividing by zero.
           if (d2 < 1) {
             dx = Math.random() - 0.5
             dy = Math.random() - 0.5
@@ -367,14 +432,11 @@ export default function KnowledgeGraph({
         }
       }
 
-      for (const { node, body } of list) {
+      for (const { node, body, size } of list) {
         if (!node.parent) continue
         const parent = map.get(node.parent)
         if (!parent) continue
-        const rest = restLength(
-          byId.get(node.parent)?.children.length ?? 1,
-          SIZE[node.kind].w,
-        )
+        const rest = restLength(byId.get(node.parent)?.children.length ?? 1, size.w)
         const dx = body.x - parent.x
         const dy = body.y - parent.y
         const d = Math.hypot(dx, dy) || 1
@@ -407,10 +469,8 @@ export default function KnowledgeGraph({
           for (let j = i + 1; j < list.length; j++) {
             const a = list[i]
             const b = list[j]
-            const sa = SIZE[a.node.kind]
-            const sb = SIZE[b.node.kind]
-            const minX = (sa.w + sb.w) / 2 + 14
-            const minY = (sa.h + sb.h) / 2 + 12
+            const minX = (a.size.w + b.size.w) / 2 + 14
+            const minY = (a.size.h + b.size.h) / 2 + 12
             const dx = b.body.x - a.body.x
             const dy = b.body.y - a.body.y
             const ox = minX - Math.abs(dx)
@@ -430,20 +490,18 @@ export default function KnowledgeGraph({
       }
 
       // Frame the whole graph, every frame, while the reader has not taken the
-      // view. A settling simulation grows past any fixed viewBox - forty-two
-      // cards ran off all four edges - and asking somebody to hunt for what they
-      // just opened is worse than the wheel this replaced.
+      // view. A settling simulation grows past any fixed viewBox, and asking
+      // somebody to hunt for what they just opened is its own failure.
       if (!steeredRef.current && list.length) {
         let minX = Infinity
         let minY = Infinity
         let maxX = -Infinity
         let maxY = -Infinity
-        for (const { node, body } of list) {
-          const { w, h } = SIZE[node.kind]
-          minX = Math.min(minX, body.x - w / 2)
-          maxX = Math.max(maxX, body.x + w / 2)
-          minY = Math.min(minY, body.y - h / 2)
-          maxY = Math.max(maxY, body.y + h / 2)
+        for (const { body, size } of list) {
+          minX = Math.min(minX, body.x - size.w / 2)
+          maxX = Math.max(maxX, body.x + size.w / 2)
+          minY = Math.min(minY, body.y - size.h / 2)
+          maxY = Math.max(maxY, body.y + size.h / 2)
         }
         // Floored, not just capped. Squeezing forty cards into the frame at any
         // cost produces a picture of a graph rather than a graph; below this the
@@ -454,8 +512,6 @@ export default function KnowledgeGraph({
         )
         const cx = (minX + maxX) / 2
         const cy = (minY + maxY) / 2
-        // Eased rather than snapped, so the frame drifts with the layout instead
-        // of jumping on every tick.
         setView(v => ({
           k: v.k + (k - v.k) * 0.14,
           x: v.x + (-cx * k - v.x) * 0.14,
@@ -497,13 +553,11 @@ export default function KnowledgeGraph({
   const toggle = useCallback(
     (node: Node) => {
       setSelected(node.id)
-      if (node.kind === 'symbol') return
+      if (node.kind === 'symbols') return
       if (node.path) void loadSymbols(node.path)
       setExpanded(current => {
         const next = new Set(current)
         if (next.has(node.id)) {
-          // Closing takes everything under it, so re-opening does not restore a
-          // shape the reader has forgotten choosing.
           const drop = (n: Node) => {
             next.delete(n.id)
             n.children.forEach(drop)
@@ -570,7 +624,6 @@ export default function KnowledgeGraph({
         body.y = p.y
         body.vx = 0
         body.vy = 0
-        // Reheat, so the neighbours get out of the way of where you put it.
         alpha.current = Math.max(alpha.current, 0.5)
       }
       moved.current = true
@@ -586,8 +639,6 @@ export default function KnowledgeGraph({
   }
   const endGesture = () => {
     if (dragged.current) {
-      // Dropped where you put it. A card that springs back the moment you let go
-      // makes the layout feel like it is arguing with you.
       const body = bodies.current.get(dragged.current)
       if (body && moved.current) body.pinned = true
       dragged.current = null
@@ -600,9 +651,6 @@ export default function KnowledgeGraph({
     setSteered(true)
     setView(v => ({ ...v, k: Math.min(2.6, Math.max(0.22, v.k * factor)) }))
   }
-
-  /** Hands the automatic framing back, so the button is "stop steering" as much
-   *  as it is "fit now". The next frame does the actual fitting. */
   const fit = useCallback(() => {
     setSteered(false)
     alpha.current = Math.max(alpha.current, ALPHA_MIN * 2)
@@ -617,7 +665,10 @@ export default function KnowledgeGraph({
     if (rootBody) rootBody.pinned = true
   }
 
-  const detail = byId.get(hovered ?? selected ?? '') ?? null
+  const openCode = (path: string, line?: number) =>
+    navigate(
+      `/app/projects/${projectId}/code?file=${encodeURIComponent(path)}${line ? `#L${line}` : ''}`,
+    )
 
   return (
     <div>
@@ -631,6 +682,21 @@ export default function KnowledgeGraph({
         <button type="button" onClick={collapseAll} className="tag text-ink-dim hover:text-ink">
           collapse
         </button>
+        <button
+          type="button"
+          onClick={() => setShowLegend(v => !v)}
+          className="tag text-ink-dim hover:text-ink"
+        >
+          {showLegend ? 'hide key' : 'show key'}
+        </button>
+        {!fullscreen && (
+          <Link
+            to={`/app/projects/${projectId}/graph`}
+            className="tag text-hot-ink hover:underline"
+          >
+            full screen ⤢
+          </Link>
+        )}
         <span className="ml-auto font-sans text-[10.5px] text-ink-dim">
           Click a card to open it · drag a card to place it · drag the canvas to move
         </span>
@@ -640,7 +706,9 @@ export default function KnowledgeGraph({
         <svg
           ref={svgRef}
           viewBox="-420 -320 840 640"
-          className={`kb-canvas h-[520px] w-full lg:h-[640px] ${panning ? 'dragging' : ''}`}
+          className={`kb-canvas w-full ${
+            fullscreen ? 'h-[calc(100vh-190px)]' : 'h-[520px] lg:h-[640px]'
+          } ${panning ? 'dragging' : ''}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endGesture}
@@ -655,9 +723,11 @@ export default function KnowledgeGraph({
               const b = bodies.current.get(node.id)
               const pa = byId.get(node.parent)
               if (!a || !b || !pa) return null
-              const from = border(a.x, a.y, SIZE[pa.kind].w, SIZE[pa.kind].h, b.x, b.y)
-              const to = border(b.x, b.y, SIZE[node.kind].w, SIZE[node.kind].h, a.x, a.y)
-              const lit = detail?.id === node.id || detail?.id === node.parent
+              const sa = sizeOf(pa)
+              const sb = sizeOf(node)
+              const from = border(a.x, a.y, sa.w, sa.h, b.x, b.y)
+              const to = border(b.x, b.y, sb.w, sb.h, a.x, a.y)
+              const onPath = !litPath || (litPath.has(node.id) && litPath.has(node.parent))
               return (
                 <line
                   key={`e-${node.id}`}
@@ -665,8 +735,9 @@ export default function KnowledgeGraph({
                   y1={from.y}
                   x2={to.x}
                   y2={to.y}
-                  stroke={lit ? 'var(--hot)' : 'var(--rule)'}
-                  strokeWidth={lit ? 1.6 : 1}
+                  stroke={litPath && onPath ? 'var(--hot)' : 'var(--rule)'}
+                  strokeWidth={litPath && onPath ? 1.8 : 1}
+                  opacity={onPath ? 1 : 0.25}
                 />
               )
             })}
@@ -674,20 +745,14 @@ export default function KnowledgeGraph({
             {visible.map(node => {
               const body = bodies.current.get(node.id)
               if (!body) return null
-              const { w, h } = SIZE[node.kind]
-              const open = expanded.has(node.id)
-              const on = detail?.id === node.id
-              const ink = node.kind === 'root' ? 'var(--hot)' : roleInk(node.role ?? '')
-              const busy = node.path ? loading.has(node.path) : false
-              const more =
-                node.children.length > 0 ||
-                (node.kind === 'file' && !!node.path && !symbols.has(node.path))
-
+              const size = sizeOf(node)
+              const dim = !!litPath && !litPath.has(node.id)
               return (
                 <g
                   key={node.id}
                   className="kb-node"
-                  transform={`translate(${body.x - w / 2} ${body.y - h / 2})`}
+                  transform={`translate(${body.x - size.w / 2} ${body.y - size.h / 2})`}
+                  opacity={dim ? 0.28 : 1}
                   onPointerDown={e => {
                     e.stopPropagation()
                     dragged.current = node.id
@@ -701,56 +766,26 @@ export default function KnowledgeGraph({
                   onPointerLeave={() => setHovered(null)}
                 >
                   <title>{node.full}</title>
-                  <rect
-                    width={w}
-                    height={h}
-                    rx="8"
-                    fill={on ? 'var(--hot-wash)' : 'var(--panel)'}
-                    stroke={on ? 'var(--hot)' : body.pinned ? 'var(--ink-dim)' : 'var(--rule)'}
-                    strokeWidth={on ? 1.8 : 1.1}
-                  />
-                  <rect
-                    className={busy ? 'kb-loading' : undefined}
-                    x="6"
-                    y="8"
-                    width="3"
-                    height={h - 16}
-                    rx="1.5"
-                    fill={on ? 'var(--hot)' : ink}
-                  />
-                  <text
-                    x="16"
-                    y={h / 2 - 2}
-                    fontSize={node.kind === 'root' ? 12 : 10.5}
-                    fontWeight={node.kind === 'root' || node.kind === 'role' ? 700 : 500}
-                    letterSpacing={node.kind === 'role' ? '0.06em' : '0'}
-                    fontFamily="var(--font-mono)"
-                    fill="var(--ink)"
-                  >
-                    {trim(node.label, node.kind === 'root' ? 21 : 17)}
-                  </text>
-                  <text
-                    x="16"
-                    y={h / 2 + 11}
-                    fontSize="8.5"
-                    fontFamily="var(--font-mono)"
-                    fill="var(--ink-dim)"
-                  >
-                    {trim(node.meta, 23)}
-                  </text>
-                  {node.kind !== 'symbol' && more && (
-                    // Says whether clicking again will do anything, which the
-                    // card alone cannot.
-                    <text
-                      x={w - 9}
-                      y={h / 2 + 4}
-                      textAnchor="end"
-                      fontSize="13"
-                      fontFamily="var(--font-mono)"
-                      fill={open ? 'var(--hot-ink)' : 'var(--ink-dim)'}
-                    >
-                      {open ? '−' : '+'}
-                    </text>
+                  {node.kind === 'symbols' ? (
+                    <SymbolTable
+                      node={node}
+                      size={size}
+                      on={focus?.id === node.id}
+                      onOpen={openCode}
+                    />
+                  ) : (
+                    <Card
+                      node={node}
+                      size={size}
+                      on={focus?.id === node.id}
+                      open={expanded.has(node.id)}
+                      busy={node.path ? loading.has(node.path) : false}
+                      pinned={!!body.pinned}
+                      hasMore={
+                        node.children.length > 0 ||
+                        (node.kind === 'file' && !!node.path && !symbols.has(node.path))
+                      }
+                    />
                   )}
                 </g>
               )
@@ -776,7 +811,339 @@ export default function KnowledgeGraph({
           ))}
         </div>
 
-        {detail && <Card node={detail} projectId={projectId} pinned={detail.id === selected} />}
+        {showLegend && <Key />}
+        {focus && (
+          <Detail
+            node={focus}
+            projectId={projectId}
+            selected={focus.id === selected}
+            onOpen={openCode}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Marks ────────────────────────────────────────────────────────── */
+
+/**
+ * One card, shaped by what it is.
+ *
+ * The shape is the point. Colour alone would put the whole burden of "what am I
+ * looking at" on six hues that also have to say which family a role belongs to,
+ * and a reader scanning forty cards should not have to read one to know whether
+ * it is a module or a file.
+ */
+function Card({
+  node,
+  size,
+  on,
+  open,
+  busy,
+  pinned,
+  hasMore,
+}: {
+  node: Node
+  size: { w: number; h: number }
+  on: boolean
+  open: boolean
+  busy: boolean
+  pinned: boolean
+  hasMore: boolean
+}) {
+  const { w, h } = size
+  const ink = node.kind === 'root' ? 'var(--hot)' : familyInk(node.role ?? '')
+  const fill = on ? 'var(--hot-wash)' : 'var(--panel)'
+  const stroke = on ? 'var(--hot)' : pinned ? 'var(--ink-dim)' : 'var(--rule)'
+  const strokeWidth = on ? 1.8 : 1.1
+
+  return (
+    <>
+      {node.kind === 'root' && (
+        // A slab: squared off, and the only node drawn on the ink rather than
+        // beside it. There is exactly one project and it should look like it.
+        <>
+          <rect
+            width={w}
+            height={h}
+            rx="4"
+            fill={on ? 'var(--hot-wash)' : 'var(--ink)'}
+            stroke={on ? 'var(--hot)' : 'var(--ink)'}
+            strokeWidth="1.5"
+          />
+          <rect x="0" y="0" width="4" height={h} fill="var(--hot)" />
+        </>
+      )}
+
+      {node.kind === 'role' && (
+        // A pill, filled with its family's hue at a wash. Roles are the one
+        // level where colour carries meaning on its own.
+        <>
+          <rect
+            width={w}
+            height={h}
+            rx={h / 2}
+            fill={fill}
+            stroke={on ? 'var(--hot)' : ink}
+            strokeWidth={on ? 1.8 : 1.4}
+          />
+          <circle cx={15} cy={h / 2} r="4.5" fill={ink} />
+        </>
+      )}
+
+      {node.kind === 'module' && (
+        // A card with a spine down its left edge, in the family hue.
+        <>
+          <rect
+            width={w}
+            height={h}
+            rx="3"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+          />
+          <rect className={busy ? 'kb-loading' : undefined} width="5" height={h} fill={ink} />
+        </>
+      )}
+
+      {node.kind === 'file' && (
+        // A dog-eared page. The corner is the whole tell, and it costs one path.
+        <>
+          <path
+            d={`M0 3 A3 3 0 0 1 3 0 H${w - 11} L${w} 11 V${h - 3} A3 3 0 0 1 ${w - 3} ${h} H3 A3 3 0 0 1 0 ${h - 3} Z`}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+          />
+          <path
+            d={`M${w - 11} 0 L${w} 11 H${w - 11} Z`}
+            fill="var(--sunk)"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+          />
+          <rect
+            className={busy ? 'kb-loading' : undefined}
+            x="5"
+            y="8"
+            width="3"
+            height={h - 16}
+            rx="1.5"
+            fill={ink}
+          />
+        </>
+      )}
+
+      <text
+        x={node.kind === 'module' ? 14 : node.kind === 'role' ? 26 : 14}
+        y={h / 2 - 2}
+        fontSize={node.kind === 'root' ? 12.5 : 10.5}
+        fontWeight={node.kind === 'root' || node.kind === 'role' ? 700 : 500}
+        letterSpacing={node.kind === 'role' ? '0.06em' : '0'}
+        fontFamily="var(--font-mono)"
+        fill={node.kind === 'root' && !on ? 'var(--on-ink)' : 'var(--ink)'}
+      >
+        {trim(node.label, node.kind === 'root' ? 21 : 17)}
+      </text>
+      <text
+        x={node.kind === 'module' ? 14 : node.kind === 'role' ? 26 : 14}
+        y={h / 2 + 11}
+        fontSize="8.5"
+        fontFamily="var(--font-mono)"
+        fill={node.kind === 'root' && !on ? 'var(--term-dim)' : 'var(--ink-dim)'}
+      >
+        {trim(node.meta, 23)}
+      </text>
+      {hasMore && (
+        <text
+          x={w - 9}
+          y={h / 2 + 4}
+          textAnchor="end"
+          fontSize="13"
+          fontFamily="var(--font-mono)"
+          fill={open ? 'var(--hot-ink)' : node.kind === 'root' ? 'var(--term-dim)' : 'var(--ink-dim)'}
+        >
+          {open ? '−' : '+'}
+        </text>
+      )}
+    </>
+  )
+}
+
+/**
+ * A file's symbols, as a table.
+ *
+ * Every other node on the canvas is something you can open. These are not, and a
+ * cloud of twenty unopenable cards is twenty times the space for none of the
+ * information. A row is still a destination: it goes to the line.
+ */
+function SymbolTable({
+  node,
+  size,
+  on,
+  onOpen,
+}: {
+  node: Node
+  size: { w: number; h: number }
+  on: boolean
+  onOpen: (path: string, line?: number) => void
+}) {
+  const rows = node.rows ?? []
+  const shown = rows.slice(0, MAX_ROWS)
+  const ink = familyInk(node.role ?? '')
+
+  return (
+    <>
+      <rect
+        width={size.w}
+        height={size.h}
+        rx="3"
+        fill="var(--panel)"
+        stroke={on ? 'var(--hot)' : 'var(--rule)'}
+        strokeWidth={on ? 1.8 : 1.1}
+      />
+      <rect width={size.w} height={TABLE_HEAD} fill="var(--sunk)" />
+      <rect width="4" height={size.h} fill={ink} />
+      <text
+        x="12"
+        y={TABLE_HEAD / 2 + 3.5}
+        fontSize="9"
+        fontWeight="700"
+        letterSpacing="0.06em"
+        fontFamily="var(--font-mono)"
+        fill="var(--ink)"
+      >
+        {rows.length} SYMBOLS
+      </text>
+
+      {shown.map((symbol, i) => {
+        const y = TABLE_HEAD + i * ROW_H
+        return (
+          <g
+            key={`${symbol.qname || symbol.name}:${symbol.line}`}
+            className="kb-row"
+            // Deliberately not stopping propagation: this event still has to
+            // reach the canvas to end the drag gesture, and the card's own
+            // handler above does nothing for a symbols node anyway.
+            onPointerUp={() => {
+              if (node.path) onOpen(node.path, symbol.line)
+            }}
+          >
+            <title>{`${symbol.qname || symbol.name} · ${symbol.kind || 'symbol'} · line ${symbol.line}`}</title>
+            <rect x="4" y={y} width={size.w - 4} height={ROW_H} fill="transparent" />
+            <text
+              x="12"
+              y={y + 11}
+              fontSize="9"
+              fontFamily="var(--font-mono)"
+              fill="var(--ink-mid)"
+            >
+              {trim(symbol.name, 16)}
+            </text>
+            <text
+              x={size.w - 38}
+              y={y + 11}
+              textAnchor="end"
+              fontSize="7.5"
+              fontFamily="var(--font-mono)"
+              fill="var(--ink-dim)"
+            >
+              {trim(symbol.kind || 'symbol', 9)}
+            </text>
+            <text
+              x={size.w - 8}
+              y={y + 11}
+              textAnchor="end"
+              fontSize="7.5"
+              fontFamily="var(--font-mono)"
+              fill="var(--ink-dim)"
+            >
+              L{symbol.line}
+            </text>
+          </g>
+        )
+      })}
+
+      {rows.length > MAX_ROWS && (
+        <text
+          x={size.w / 2}
+          y={size.h - 2}
+          textAnchor="middle"
+          fontSize="7.5"
+          fontFamily="var(--font-mono)"
+          fill="var(--ink-dim)"
+        >
+          +{rows.length - MAX_ROWS} more in the panel
+        </text>
+      )}
+    </>
+  )
+}
+
+/** What a shape and a colour mean, so neither has to be guessed at. */
+function Key() {
+  return (
+    <div className="absolute bottom-2 right-2 border border-rule bg-panel/95 px-2.5 py-2 backdrop-blur">
+      <div className="flex flex-col gap-[3px]">
+        {(
+          [
+            ['project', <rect key="s" width="16" height="9" y="2" rx="1.5" fill="var(--ink)" />],
+            [
+              'role',
+              <rect
+                key="s"
+                width="16"
+                height="9"
+                y="2"
+                rx="4.5"
+                fill="var(--panel)"
+                stroke="var(--ink-mid)"
+              />,
+            ],
+            [
+              'module',
+              <g key="s">
+                <rect
+                  width="16"
+                  height="9"
+                  y="2"
+                  rx="1"
+                  fill="var(--panel)"
+                  stroke="var(--rule)"
+                />
+                <rect width="2.5" height="9" y="2" fill="var(--ink-mid)" />
+              </g>,
+            ],
+            [
+              'file',
+              <path
+                key="s"
+                d="M0 2 H11 L16 6 V11 H0 Z"
+                fill="var(--panel)"
+                stroke="var(--rule)"
+              />,
+            ],
+          ] as [string, React.ReactNode][]
+        ).map(([label, mark]) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <svg width="16" height="13" className="shrink-0">
+              {mark}
+            </svg>
+            <span className="tag text-ink-dim">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-1.5 flex flex-col gap-[2px] border-t border-rule pt-1.5">
+        {LEGEND.map(([label, ink]) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span
+              className="h-[7px] w-[7px] shrink-0 rounded-full"
+              style={{ background: ink }}
+            />
+            <span className="tag text-ink-dim">{label}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -790,18 +1157,28 @@ export default function KnowledgeGraph({
  * Hovering peeks; clicking pins, and clicking also opens the node, so the panel
  * outlives the hover that summoned it.
  */
-function Card({ node, projectId, pinned }: { node: Node; projectId: number; pinned: boolean }) {
+function Detail({
+  node,
+  projectId,
+  selected,
+  onOpen,
+}: {
+  node: Node
+  projectId: number
+  selected: boolean
+  onOpen: (path: string, line?: number) => void
+}) {
   const code = (path: string, line?: number) =>
     `/app/projects/${projectId}/code?file=${encodeURIComponent(path)}${line ? `#L${line}` : ''}`
 
   return (
-    <div className="absolute bottom-2 left-2 max-h-[62%] w-[300px] overflow-y-auto border border-rule bg-panel/95 shadow-[0_2px_14px_rgba(20,18,15,0.10)] backdrop-blur">
+    <div className="absolute bottom-2 left-2 max-h-[70%] w-[310px] overflow-y-auto border border-rule bg-panel/95 shadow-[0_2px_14px_rgba(20,18,15,0.10)] backdrop-blur">
       <div className="flex items-baseline gap-2 border-b border-rule bg-sunk/60 px-2.5 py-1.5">
         <span className="tag text-ink-dim">{node.kind}</span>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-ink">
           {node.label}
         </span>
-        {pinned && <span className="tag text-hot-ink">selected</span>}
+        {selected && <span className="tag text-hot-ink">selected</span>}
       </div>
 
       <div className="px-2.5 py-2">
@@ -839,6 +1216,25 @@ function Card({ node, projectId, pinned }: { node: Node; projectId: number; pinn
                   ? 'Test modules are not summarised.'
                   : 'No summary was written for this module.')}
             </p>
+            {/* A module is not a file, so it has no single destination. Its files
+                are the destinations, and every one of them is one click away. */}
+            {node.module.files.length > 0 && (
+              <div className="mt-2 border-t border-rule pt-1.5">
+                <span className="tag text-ink-dim">open in source</span>
+                <ul className="mt-1">
+                  {node.module.files.slice(0, 8).map(path => (
+                    <li key={path}>
+                      <Link
+                        to={code(path)}
+                        className="block truncate font-mono text-[10.5px] text-hot-ink hover:underline"
+                      >
+                        {path}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
 
@@ -856,32 +1252,41 @@ function Card({ node, projectId, pinned }: { node: Node; projectId: number; pinn
             />
             <Link
               to={code(node.path)}
-              className="mt-1.5 inline-block font-mono text-[11px] text-hot-ink hover:underline"
+              className="mt-2 inline-block border border-hot-edge bg-hot-wash px-2 py-1 font-mono text-[10.5px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
             >
-              open in source
+              open in source →
             </Link>
           </>
         )}
 
-        {node.kind === 'symbol' && node.symbol && node.path && (
+        {node.kind === 'symbols' && node.path && (
           <>
-            <Rows
-              rows={[
-                ['kind', node.symbol.kind || 'symbol'],
-                ['line', node.symbol.line],
-                ...(node.symbol.end_line
-                  ? ([['ends', node.symbol.end_line]] as [string, number][])
-                  : []),
-                ...(node.symbol.visibility
-                  ? ([['visibility', node.symbol.visibility]] as [string, string][])
-                  : []),
-              ]}
-            />
+            {/* Every row, including the ones the block on the canvas had no
+                height for. Each goes to its own line. */}
+            <ul>
+              {(node.rows ?? []).map(symbol => (
+                <li key={`${symbol.qname || symbol.name}:${symbol.line}`}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(node.path!, symbol.line)}
+                    className="flex w-full items-baseline gap-2 py-[2px] text-left font-mono text-[10.5px] text-ink-mid hover:text-hot-ink"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{symbol.name}</span>
+                    <span className="shrink-0 text-[9px] text-ink-dim">
+                      {symbol.kind || 'symbol'}
+                    </span>
+                    <span className="shrink-0 text-[9px] tabular-nums text-ink-dim">
+                      L{symbol.line}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
             <Link
-              to={code(node.path, node.symbol.line)}
-              className="mt-1.5 inline-block font-mono text-[11px] text-hot-ink hover:underline"
+              to={code(node.path)}
+              className="mt-2 inline-block border border-hot-edge bg-hot-wash px-2 py-1 font-mono text-[10.5px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
             >
-              open at line {node.symbol.line}
+              open the whole file →
             </Link>
           </>
         )}

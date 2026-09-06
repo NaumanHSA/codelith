@@ -14,6 +14,7 @@ import HomePage from './pages/app/HomePage'
 import ProjectsPage from './pages/app/ProjectsPage'
 import ProjectDetailPage from './pages/app/ProjectDetailPage'
 import JobProgressPage from './pages/app/JobProgressPage'
+import GraphPage from './pages/app/GraphPage'
 import CodePage from './pages/app/CodePage'
 import DriftPage from './pages/app/DriftPage'
 import DocumentsPage from './pages/app/DocumentsPage'
@@ -111,6 +112,7 @@ export default function App() {
                   element={<ComposeRedirect />}
                 />
                 <Route path="projects/:projectId/code" element={<CodePage />} />
+                <Route path="projects/:projectId/graph" element={<GraphPage />} />
                 <Route path="projects/:projectId/drift" element={<DriftPage />} />
                 <Route path="projects/:projectId/jobs/:jobId" element={<JobProgressPage />} />
                 <Route path="jobs" element={<JobsPage />} />

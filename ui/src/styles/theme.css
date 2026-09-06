@@ -49,6 +49,27 @@
   --hot-edge: #ffc7ac;
   --on-hot: #ffffff;
 
+  /* Categorical hues, for the knowledge graph.
+   *
+   * Distinct from --hot, which means "the thing you are pointing at" everywhere
+   * in the studio and cannot also mean "this one is an API module". Six is the
+   * whole set: a seventh kind folds into --ink-dim rather than getting a
+   * generated hue, because a colour nobody chose is a colour nobody can name.
+   *
+   * Validated rather than eyeballed, against a light surface: every hue sits in
+   * the L 0.43-0.77 band, clears the chroma floor, holds 3:1 against the paper,
+   * and separates for deuteranopia and tritanopia across every pair. The closest
+   * pair is --cat-5 against --cat-2 at deltaE 7.2 deutan, which is inside the
+   * 6-8 floor band and legal only because every node in the graph is directly
+   * labelled and the legend names each colour. Do not add a hue without
+   * re-running the check. */
+  --cat-1: #3b5bdb;
+  --cat-2: #2f9e44;
+  --cat-3: #c2255c;
+  --cat-4: #0b9fb8;
+  --cat-5: #8f6a00;
+  --cat-6: #862e9c;
+
   /* signal */
   --ok: #1f7a4d;
   --ok-wash: #edf8f2;

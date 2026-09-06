@@ -776,3 +776,15 @@ summary {
     animation: none;
   }
 }
+
+/* A symbol row in the graph's table node. Its own rule because the row is a
+   destination - it goes to a line of source - and nothing about a `<g>` says so. */
+.kb-row {
+  cursor: pointer;
+}
+.kb-row:hover rect {
+  fill: var(--hot-wash);
+}
+.kb-row:hover text {
+  fill: var(--hot-ink);
+}
