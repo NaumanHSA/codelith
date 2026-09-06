@@ -31,9 +31,13 @@ type Props = {
   /** From the URL hash, so a citation can point at lines. */
   range: [number, number] | null
   onPickLine: (line: number, extend: boolean) => void
+  /** Take the height offered instead of capping at a share of the viewport.
+   *  The side panel is already a fixed-height column; capping inside it leaves
+   *  the code stopping halfway down an otherwise empty pane. */
+  fill?: boolean
 }
 
-export default function CodeView({ file, range, onPickLine }: Props) {
+export default function CodeView({ file, range, onPickLine, fill = false }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const anchor = useRef<HTMLDivElement>(null)
 
@@ -85,7 +89,11 @@ export default function CodeView({ file, range, onPickLine }: Props) {
   let seen = 0
 
   return (
-    <div ref={scroller} className="max-h-[70vh] overflow-auto">
+    <div
+      ref={scroller}
+      className={`overflow-auto ${fill ? 'h-full' : 'max-h-[70vh]'}`}
+      style={{ background: 'var(--code-bg)', color: 'var(--code-text)' }}
+    >
       <div className="min-w-full font-mono text-[11.5px] leading-[1.55]">
         {file.segments.map((segment, index) =>
           segment.kind === 'gap' ? (
@@ -102,20 +110,27 @@ export default function CodeView({ file, range, onPickLine }: Props) {
                     key={line}
                     ref={first ? anchor : undefined}
                     id={`L${line}`}
-                    className={`flex ${on ? 'bg-hot-wash' : ''}`}
+                    className="flex"
+                    style={on ? { background: 'color-mix(in srgb, var(--hot) 22%, transparent)' } : undefined}
                   >
                     <button
                       type="button"
                       onClick={e => onPickLine(line, e.shiftKey)}
                       title="Link to this line. Shift-click to extend."
-                      className={`w-[52px] shrink-0 select-none border-r border-rule px-2 text-right tabular-nums ${
-                        on ? 'bg-hot-wash text-hot-ink' : 'bg-sunk/40 text-ink-dim'
-                      } hover:text-hot-ink`}
+                      className="w-[52px] shrink-0 select-none border-r px-2 text-right tabular-nums hover:!text-[var(--hot)]"
+                      style={{
+                        borderColor: 'var(--code-rule)',
+                        background: on
+                          ? 'color-mix(in srgb, var(--hot) 26%, transparent)'
+                          : 'color-mix(in srgb, var(--code-rule) 45%, transparent)',
+                        color: on ? 'var(--hot)' : 'var(--code-gutter)',
+                      }}
                     >
                       {line}
                     </button>
                     <code
-                      className="whitespace-pre px-3 text-ink"
+                      className="whitespace-pre px-3"
+                      style={{ color: 'var(--code-text)' }}
                       dangerouslySetInnerHTML={{ __html: html }}
                     />
                   </div>
@@ -139,11 +154,23 @@ export default function CodeView({ file, range, onPickLine }: Props) {
 function Gap({ segment }: { segment: CodeSegment }) {
   const n = segment.end - segment.start + 1
   return (
-    <div className="flex items-center gap-2 border-y border-dashed border-rule bg-sunk/30 py-[3px]">
-      <span className="w-[52px] shrink-0 select-none border-r border-rule px-2 text-right text-ink-dim">
+    <div
+      className="flex items-center gap-2 border-y border-dashed py-[3px]"
+      style={{
+        borderColor: 'var(--code-rule)',
+        background: 'color-mix(in srgb, var(--code-rule) 30%, transparent)',
+      }}
+    >
+      <span
+        className="w-[52px] shrink-0 select-none border-r px-2 text-right"
+        style={{ borderColor: 'var(--code-rule)', color: 'var(--code-gutter)' }}
+      >
         ⋯
       </span>
-      <span className="px-1 text-[10.5px] tracking-wide text-ink-dim">
+      <span
+        className="px-1 text-[10.5px] tracking-wide"
+        style={{ color: 'var(--code-gutter)' }}
+      >
         {n === 1 ? `line ${segment.start}` : `lines ${segment.start}-${segment.end}`} not
         indexed
       </span>
@@ -162,18 +189,35 @@ function Footnote({
   linked: number
 }) {
   return (
-    <div className="sticky bottom-0 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-rule bg-panel/95 px-3 py-1.5 backdrop-blur">
-      <span className="tag text-ink-dim">
+    <div
+      className="sticky bottom-0 flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-3 py-1.5 backdrop-blur"
+      style={{ borderColor: 'var(--code-rule)', background: 'color-mix(in srgb, var(--code-bg) 92%, transparent)' }}
+    >
+      {/* The page's inks are picked to read on paper. This strip is pinned
+          inside the code pane, which is not paper. */}
+      <span className="tag" style={{ color: 'var(--code-gutter)' }}>
         {file.lines_indexed.toLocaleString()} lines from {file.chunks} chunk
         {file.chunks === 1 ? '' : 's'}
       </span>
       {file.lines_missing > 0 && (
-        <span className="tag text-warn">{file.lines_missing} not indexed</span>
+        <span className="tag" style={{ color: 'var(--code-number)' }}>
+          {file.lines_missing} not indexed
+        </span>
       )}
-      {linked > 0 && <span className="tag text-hot-ink">{linked} linked</span>}
-      {!highlighted && <span className="tag text-ink-dim">too large to highlight</span>}
+      {linked > 0 && (
+        <span className="tag" style={{ color: 'var(--hot)' }}>
+          {linked} linked
+        </span>
+      )}
+      {!highlighted && (
+        <span className="tag" style={{ color: 'var(--code-gutter)' }}>
+          too large to highlight
+        </span>
+      )}
       {file.commit_sha && (
-        <span className="tag text-ink-dim">as read at {file.commit_sha.slice(0, 7)}</span>
+        <span className="tag" style={{ color: 'var(--code-gutter)' }}>
+          as read at {file.commit_sha.slice(0, 7)}
+        </span>
       )}
     </div>
   )

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import type { FileEntry, FileTree, ModuleEntry, Modules, SymbolEntry } from '../../lib/types'
+import SourcePeek from './SourcePeek'
 
 /* ------------------------------------------------------------------ *
  * The knowledge base as one growing graph.
@@ -310,7 +311,6 @@ export default function KnowledgeGraph({
   /** On its own page the canvas takes the viewport instead of a panel's worth. */
   fullscreen?: boolean
 }) {
-  const navigate = useNavigate()
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['root']))
   const [selected, setSelected] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -319,6 +319,10 @@ export default function KnowledgeGraph({
   const [view, setView] = useState({ k: 1, x: 0, y: 0 })
   const [steered, setSteered] = useState(false)
   const [showLegend, setShowLegend] = useState(true)
+  /** The file being read over the top of the graph, if any. */
+  const [peek, setPeek] = useState<{ path: string; line?: number; origin?: string } | null>(
+    null,
+  )
   const steeredRef = useRef(false)
   steeredRef.current = steered
 
@@ -665,10 +669,26 @@ export default function KnowledgeGraph({
     if (rootBody) rootBody.pinned = true
   }
 
-  const openCode = (path: string, line?: number) =>
-    navigate(
-      `/app/projects/${projectId}/code?file=${encodeURIComponent(path)}${line ? `#L${line}` : ''}`,
-    )
+  /**
+   * Open a file beside the graph rather than navigating to it.
+   *
+   * The code page is a different route, so following a reference used to cost
+   * every branch you had opened. The origin travels with it because the graph
+   * already knew the answer to "where is this from" and the panel should not
+   * make you go back and look.
+   */
+  const openCode = useCallback(
+    (path: string, line?: number) => {
+      const owner = byId.get(`file:${path}`)
+      const module = owner?.parent ? byId.get(owner.parent) : undefined
+      setPeek({
+        path,
+        line,
+        origin: module ? `${module.label}${owner?.role ? ` · ${owner.role}` : ''}` : undefined,
+      })
+    },
+    [byId],
+  )
 
   return (
     <div>
@@ -813,14 +833,19 @@ export default function KnowledgeGraph({
 
         {showLegend && <Key />}
         {focus && (
-          <Detail
-            node={focus}
-            projectId={projectId}
-            selected={focus.id === selected}
-            onOpen={openCode}
-          />
+          <Detail node={focus} selected={focus.id === selected} onOpen={openCode} />
         )}
       </div>
+
+      {peek && (
+        <SourcePeek
+          projectId={projectId}
+          path={peek.path}
+          line={peek.line}
+          origin={peek.origin}
+          onClose={() => setPeek(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1159,18 +1184,13 @@ function Key() {
  */
 function Detail({
   node,
-  projectId,
   selected,
   onOpen,
 }: {
   node: Node
-  projectId: number
   selected: boolean
   onOpen: (path: string, line?: number) => void
 }) {
-  const code = (path: string, line?: number) =>
-    `/app/projects/${projectId}/code?file=${encodeURIComponent(path)}${line ? `#L${line}` : ''}`
-
   return (
     <div className="absolute bottom-2 left-2 max-h-[70%] w-[310px] overflow-y-auto border border-rule bg-panel/95 shadow-[0_2px_14px_rgba(20,18,15,0.10)] backdrop-blur">
       <div className="flex items-baseline gap-2 border-b border-rule bg-sunk/60 px-2.5 py-1.5">
@@ -1224,12 +1244,13 @@ function Detail({
                 <ul className="mt-1">
                   {node.module.files.slice(0, 8).map(path => (
                     <li key={path}>
-                      <Link
-                        to={code(path)}
-                        className="block truncate font-mono text-[10.5px] text-hot-ink hover:underline"
+                      <button
+                        type="button"
+                        onClick={() => onOpen(path)}
+                        className="block w-full truncate text-left font-mono text-[10.5px] text-hot-ink hover:underline"
                       >
                         {path}
-                      </Link>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -1250,12 +1271,13 @@ function Detail({
                   : []),
               ]}
             />
-            <Link
-              to={code(node.path)}
+            <button
+              type="button"
+              onClick={() => onOpen(node.path!)}
               className="mt-2 inline-block border border-hot-edge bg-hot-wash px-2 py-1 font-mono text-[10.5px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
             >
               open in source →
-            </Link>
+            </button>
           </>
         )}
 
@@ -1282,12 +1304,13 @@ function Detail({
                 </li>
               ))}
             </ul>
-            <Link
-              to={code(node.path)}
+            <button
+              type="button"
+              onClick={() => onOpen(node.path!)}
               className="mt-2 inline-block border border-hot-edge bg-hot-wash px-2 py-1 font-mono text-[10.5px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
             >
               open the whole file →
-            </Link>
+            </button>
           </>
         )}
       </div>
