@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Preflight from '../../components/projects/Preflight'
 import ReanalyseDialog from '../../components/projects/ReanalyseDialog'
 import ModuleExplorer from '../../components/projects/ModuleExplorer'
+import KnowledgeGraph from '../../components/projects/KnowledgeGraph'
 import ArchitectureMap from '../../components/projects/ArchitectureMap'
 import NarrativeReader from '../../components/projects/NarrativeReader'
 import ConfirmDelete from '../../components/ConfirmDelete'
@@ -159,6 +160,10 @@ export default function ProjectDetailPage() {
   const project = useAsync(() => api.project(id), [id])
   const arch = useAsync(sig => api.architecture(id, sig), [id])
   const modules = useAsync(sig => api.modules(id, sig), [id])
+  // For the graph's file ring: language, size and symbol counts per file.
+  // Not fatal if it fails - the ring still draws from the module's own list.
+  const fileTree = useAsync(sig => api.files(id, sig), [id])
+  const [kbView, setKbView] = useState<'map' | 'list'>('map')
   const narratives = useAsync(sig => api.narratives(id, sig), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
@@ -330,6 +335,24 @@ export default function ProjectDetailPage() {
                 title="Knowledge base"
                 action={
                   <span className="flex items-center gap-2">
+                    {modules.data?.available && (
+                      <span className="flex items-center gap-1">
+                        {(['map', 'list'] as const).map(option => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => setKbView(option)}
+                            className={`tag px-1.5 py-[2px] ${
+                              kbView === option
+                                ? 'text-hot-ink underline'
+                                : 'text-ink-dim hover:text-ink'
+                            }`}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </span>
+                    )}
                     {/* The counters above say how much was read. This is the only
                         way to see any of it, and until it existed the product
                         asked to be taken on faith. */}
@@ -349,14 +372,23 @@ export default function ProjectDetailPage() {
                   <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '-'} />
                   <Stat k="commit" v={shortSha(base.commit_sha)} />
                 </div>
-                {/* Where the role radar was. It plotted five numbers and looked
-                    like understanding; beneath it sat twenty modules with a
-                    written paragraph each, none of which had ever been on
-                    screen. The role chips below carry the same distribution and
-                    the rows carry the prose. */}
+                {/* The map is the default because the shape of a codebase is the
+                    thing you cannot get from a list: which roles carry the
+                    weight, and what sits under them. The list is still here
+                    because a graph is for exploring and a list is for finding,
+                    and those are different jobs. */}
                 {modules.data?.available && (
                   <div className="border-t border-rule">
-                    <ModuleExplorer data={modules.data} projectId={id} />
+                    {kbView === 'map' ? (
+                      <KnowledgeGraph
+                        title={p.name}
+                        modules={modules.data}
+                        files={fileTree.data}
+                        projectId={id}
+                      />
+                    ) : (
+                      <ModuleExplorer data={modules.data} projectId={id} />
+                    )}
                   </div>
                 )}
               </Panel>

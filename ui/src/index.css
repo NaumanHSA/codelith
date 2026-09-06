@@ -712,3 +712,67 @@ summary {
     transform: none;
   }
 }
+
+/* ── The knowledge graph ──────────────────────────────────────────────────────
+   A radial drill-down: the project at the centre, roles on the first ring,
+   then modules, then files, then the symbols in a file.
+
+   Positions are tweened in JavaScript rather than by CSS, because the whole
+   wheel re-apportions itself on every expansion: a node's angle depends on how
+   many leaves its siblings currently have. Transitioning `transform` per node
+   would move the nodes and leave the edges snapping between frames, and an edge
+   that arrives before the node it points at reads as a glitch. So the layout is
+   interpolated and everything is drawn from the same interpolated positions. */
+@keyframes kb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes kb-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.kb-canvas {
+  touch-action: none;
+  cursor: grab;
+  background-color: var(--panel);
+  /* The blueprint field, so the graph reads as something drawn on a surface
+     rather than floating on nothing. */
+  background-image: radial-gradient(var(--rule) 0.9px, transparent 0.9px);
+  background-size: 18px 18px;
+}
+.kb-canvas.dragging {
+  cursor: grabbing;
+}
+.kb-node {
+  cursor: pointer;
+}
+/* Selectable text inside a draggable canvas turns every pan into a highlight,
+   so selection is off - but the label stays clickable, because clicking the
+   word SERVICE is the obvious gesture and it was inert while this said
+   `pointer-events: none`. */
+.kb-label {
+  user-select: none;
+}
+.kb-enter {
+  animation: kb-fade-in 0.35s ease-out backwards;
+}
+.kb-loading {
+  animation: kb-pulse 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-enter,
+  .kb-loading {
+    animation: none;
+  }
+}
