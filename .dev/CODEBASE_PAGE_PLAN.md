@@ -35,6 +35,17 @@ copy of any source. A file viewer can only show what was indexed.
 across them — concatenating chunk 3 onto chunk 2 would render code in an order that
 does not exist in the file, which is worse than admitting a gap.
 
+*Building it found the other half of that: chunks also **overlap**.*
+`src/loop/livenessLoop.js` is 252 lines whose chunks cover 423, and `server/main.py`
+is 158 covered by 236. Concatenation would therefore have doubled code as well as
+reordered it. Reconstruction is line-addressed: each chunk writes its own lines into
+a map, first writer wins, and every overlap measured agrees exactly.
+
+*And `docstring` chunks must be excluded.* One carries the span of the **symbol** it
+describes while holding a two-line summary of it, so writing its text at its declared
+start line puts a summary where a function body should be. Eight conflicting lines on
+`server/main.py`; zero once only `code` chunks are used.
+
 `[-]` **Storing a second copy of the source** to make the viewer complete. It doubles
 what a project costs on disk to fix a cosmetic gap, and the honest label is cheaper.
 
@@ -110,24 +121,44 @@ open the 3 000 words behind them.
 `[x]` **2.3** Provenance per narrative, the same as a published page: which commit,
 which files it was anchored on.
 
-## Phase 3 — The code, at last
+## Phase 3 — The code, at last — **done**
 
 The credibility gap. A product whose claim is that it read the code has never shown
 any.
 
-`[ ]` **3.1** `GET /projects/{id}/files` — the indexed tree from `graph_files`, with
+*Built, at `/app/projects/:id/code`. Verified against every file in both knowledge
+bases: 60 files rebuilt, every segment contiguous, correctly sized and in order, with
+no line appearing twice. The gaps are real and almost always the blank line between
+two declarations, which is not a thing worth guessing on a reader's behalf.*
+
+*The tree is the union of `graph_files` and the chunk table, because they disagree:
+`graph_files` has language, size and symbols but only for files a provider parsed,
+while the chunk table has content for those and for the markdown no parser looked at.
+`README.md` exists in one and not the other.*
+
+*Two bugs worth remembering.* The verifier that checks highlight.js output before it
+reaches `dangerouslySetInnerHTML` was written as `^(?:<span …>|</span>|[^<>]*)*$` — a
+group that can match empty under a `*`, which backtracks exponentially on input that
+fails. It did not throw and it did not render wrongly: it pinned the browser's main
+thread hard enough that Playwright could not screenshot the page, and it took a
+request trace to find. And highlight.js itself takes **24 seconds** on a 360 KB
+minified bundle, so the size guard now lives in `highlight.ts` rather than in the one
+component that knew about it. `ui/scripts/check-highlight.mjs` runs in the build and
+is a clock as well as a correctness test, because a correctness test passed on both.
+
+`[x]` **3.1** `GET /projects/{id}/files` — the indexed tree from `graph_files`, with
 language and symbol counts.
 
-`[ ]` **3.2** `GET /projects/{id}/files/{path}` — the chunks of one file in order,
+`[x]` **3.2** `GET /projects/{id}/files/{path}` — the chunks of one file in order,
 each with its span, **and the gaps between them named**. See the constraint above.
 
-`[ ]` **3.3** A viewer: tree on the left, code in the middle with real line numbers,
+`[x]` **3.3** A viewer: tree on the left, code in the middle with real line numbers,
 symbols in that file on the right.
 
-`[ ]` **3.4** Deep-linkable — `?file=src/x.js#L12-L30` — so Ask-the-code citations and
+`[x]` **3.4** Deep-linkable — `?file=src/x.js#L12-L30` — so Ask-the-code citations and
 published pages can point into it.
 
-`[ ]` **3.5** Say plainly what is not there: files the analysis skipped, and lines no
+`[x]` **3.5** Say plainly what is not there: files the analysis skipped, and lines no
 chunk covered.
 
 ## Phase 4 — Modules, as an explorer rather than a radar

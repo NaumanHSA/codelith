@@ -20,6 +20,7 @@ from codelith.schemas.job import (
     ReviewOut,
     ReviewPageOut,
 )
+from codelith.schemas.code import FileOut, FileTreeOut
 from codelith.schemas.narrative import NarrativesOut
 from codelith.schemas.knowledge import (
     AddPageRequest,
@@ -49,6 +50,7 @@ from codelith.schemas.site import (
 from codelith.services.audit_service import AuditService
 from codelith.services.job_service import JobService
 from codelith.services.architecture_service import ArchitectureService
+from codelith.services.code_service import CodeService
 from codelith.services.knowledge_service import KnowledgeService
 from codelith.services.narrative_service import NarrativeService
 from codelith.services.project_service import ProjectService
@@ -302,6 +304,44 @@ async def get_narratives(project_id: int, db: DbSession, user: CurrentUser):
     could check.
     """
     return await NarrativeService(db).list_for_project(project_id, user)
+
+
+@router.get("/{project_id}/files", response_model=FileTreeOut)
+async def get_files(project_id: int, db: DbSession, user: CurrentUser):
+    """
+    Every file the reading covered.
+
+    The union of two disagreeing sources. `graph_files` knows language, size and
+    symbol counts, but only for files a language provider parsed; the chunk table
+    holds content for those and for the markdown no parser looked at. Either alone
+    is missing something a reader would go looking for.
+
+    Files with nothing readable behind them are listed anyway, with
+    `has_source: false`. A file that silently vanishes from the tree looks like a
+    file that was never there, which is a different and worse claim.
+    """
+    return await CodeService(db).tree(project_id, user)
+
+
+@router.get("/{project_id}/files/{path:path}", response_model=FileOut)
+async def get_file(project_id: int, path: str, db: DbSession, user: CurrentUser):
+    """
+    One file, rebuilt from the chunks that outlived the clone.
+
+    Analysis discards the checkout, so there is no file to open: what comes back is
+    a reconstruction from stored chunks, which overlap in places and leave holes in
+    others. Hence `segments` rather than a string. A hole is a segment of its own
+    naming the lines it spans, because splicing the next chunk onto the last would
+    render code in an order that does not exist in the file.
+
+    404 only when the project has no usable reading. A path that was seen but kept
+    nothing comes back with `indexed: false`, since "we read this and have nothing
+    to show" and "no such file" are different answers.
+    """
+    result = await CodeService(db).file(project_id, path, user)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No analysed reading for this project")
+    return result
 
 
 @router.get("/{project_id}/apps", response_model=list[AppOut])

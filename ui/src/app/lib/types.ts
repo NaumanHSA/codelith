@@ -778,3 +778,58 @@ export interface Narratives {
   /** In reading order from the API: overview first, not alphabetical. */
   narratives: Narrative[]
 }
+
+/* --- The source, as the knowledge base kept it --------------------- *
+ * Analysis discards the clone, so a file arrives as a reconstruction
+ * from stored chunks rather than a string read off disk. The chunks
+ * overlap in places and leave holes in others, which is why a file is a
+ * list of segments and a hole is a segment of its own.
+ * ------------------------------------------------------------------- */
+
+export interface FileEntry {
+  path: string
+  language: string
+  loc: number
+  symbols: number
+  lines_indexed: number
+  /** False means analysis saw the file and kept nothing showable of it. */
+  has_source: boolean
+}
+
+export interface FileTree {
+  available: boolean
+  commit_sha: string | null
+  files: FileEntry[]
+  without_source: number
+  total_loc: number
+}
+
+export interface CodeSegment {
+  kind: 'code' | 'gap'
+  start: number
+  end: number
+  /** Empty for a gap. There is nothing to show, which is the point of it. */
+  text: string
+}
+
+export interface SymbolEntry {
+  name: string
+  qname: string
+  kind: string
+  line: number
+  end_line: number | null
+  visibility: string
+}
+
+export interface SourceFile {
+  path: string
+  language: string
+  loc: number
+  commit_sha: string | null
+  segments: CodeSegment[]
+  symbols: SymbolEntry[]
+  lines_indexed: number
+  lines_missing: number
+  chunks: number
+  indexed: boolean
+}

@@ -317,6 +317,76 @@ class SqlGraphStore:
         )
         return [{"path": p, "module_key": m} for p, m in await self.db.execute(stmt)]
 
+    async def file_inventory(self, project_id: int, kb_id: int) -> list[dict]:
+        """
+        Every file analysis parsed, with what it learned about each.
+
+        Broader than `get_files`, which answers "what belongs to which module" for the
+        diagram builder. This is the reading surface: language and size are what a
+        person scans a tree by, and the symbol count is the honest signal of whether
+        a file was understood or merely seen.
+        """
+        counts = (
+            select(GraphSymbol.path, func.count().label("n"))
+            .where(GraphSymbol.project_id == project_id, GraphSymbol.kb_id == kb_id)
+            .group_by(GraphSymbol.path)
+            .subquery()
+        )
+        stmt = (
+            select(
+                GraphFile.path,
+                GraphFile.language,
+                GraphFile.loc,
+                GraphFile.module_key,
+                func.coalesce(counts.c.n, 0),
+            )
+            .outerjoin(counts, counts.c.path == GraphFile.path)
+            .where(GraphFile.project_id == project_id, GraphFile.kb_id == kb_id)
+            .order_by(GraphFile.path)
+        )
+        return [
+            {
+                "path": path,
+                "language": language,
+                "loc": loc,
+                "module_key": module_key,
+                "symbols": int(symbols or 0),
+            }
+            for path, language, loc, module_key, symbols in await self.db.execute(stmt)
+        ]
+
+    async def symbols_in_file(self, project_id: int, path: str) -> list[dict]:
+        """
+        Every symbol declared in one file, in the order they appear.
+
+        Uncapped, unlike `get_symbols`, whose hundred-row limit exists because it
+        feeds a prompt. A file's own outline has to be complete or it is not an
+        outline, and no single file has enough symbols for the limit to matter.
+        """
+        stmt = (
+            select(
+                GraphSymbol.name,
+                GraphSymbol.qname,
+                GraphSymbol.kind,
+                GraphSymbol.line,
+                GraphSymbol.end_line,
+                GraphSymbol.visibility,
+            )
+            .where(GraphSymbol.project_id == project_id, GraphSymbol.path == path)
+            .order_by(GraphSymbol.line, GraphSymbol.qname)
+        )
+        return [
+            {
+                "name": name,
+                "qname": qname,
+                "kind": kind,
+                "line": line,
+                "end_line": end_line,
+                "visibility": visibility,
+            }
+            for name, qname, kind, line, end_line, visibility in await self.db.execute(stmt)
+        ]
+
     async def get_import_edges(self, project_id: int, kb_id: int) -> list[dict]:
         stmt = select(GraphImport.src, GraphImport.dst).where(
             GraphImport.project_id == project_id, GraphImport.kb_id == kb_id

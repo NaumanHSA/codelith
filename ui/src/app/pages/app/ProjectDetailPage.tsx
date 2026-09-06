@@ -327,7 +327,20 @@ export default function ProjectDetailPage() {
 
               <Panel
                 title="Knowledge base"
-                action={<StatusBadge status={base.status} />}
+                action={
+                  <span className="flex items-center gap-2">
+                    {/* The counters above say how much was read. This is the only
+                        way to see any of it, and until it existed the product
+                        asked to be taken on faith. */}
+                    <Link
+                      to={`/app/projects/${id}/code`}
+                      className="tag text-hot-ink hover:underline"
+                    >
+                      read the source
+                    </Link>
+                    <StatusBadge status={base.status} />
+                  </span>
+                }
               >
                 <div className="grid grid-cols-2 gap-px bg-rule sm:grid-cols-4">
                   <Stat k="modules" v={kb.data.module_count} hot />

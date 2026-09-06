@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.knowledge import embedding_guard
@@ -190,3 +190,54 @@ class VectorStore:
             select(CodeChunk).where(CodeChunk.project_id == project_id)
         )
         return len(result.scalars().all())
+
+    # ── Reading the source back ───────────────────────────────────────────────
+    #
+    # The clone is discarded when analysis finishes, so these chunks are the only
+    # copy of the repository anything downstream can reach. `get_by_paths` above
+    # caps per file because a writer wants a sample; these two do not, because a
+    # reader wants the file.
+
+    async def indexed_paths(self, kb_id: int) -> list[tuple[str, str | None, int, int]]:
+        """
+        Every path with retained content: path, language, chunk count, code chunks.
+
+        The last two differ. A markdown file has chunks but no `code` chunks, and only
+        `code` chunks carry a literal slice of the file — see `chunks_for_file`.
+        """
+        stmt = (
+            select(
+                CodeChunk.source_path,
+                func.min(CodeChunk.language),
+                func.count(CodeChunk.id),
+                func.sum(case((CodeChunk.chunk_type == "code", 1), else_=0)),
+            )
+            .where(CodeChunk.kb_id == kb_id)
+            .group_by(CodeChunk.source_path)
+            .order_by(CodeChunk.source_path)
+        )
+        return [
+            (path, language, int(total or 0), int(code or 0))
+            for path, language, total, code in await self.session.execute(stmt)
+        ]
+
+    async def chunks_for_file(self, kb_id: int, path: str) -> list[CodeChunk]:
+        """
+        Every `code` chunk of one file, in line order.
+
+        **Only `code`.** A `docstring` chunk records the span of the *symbol* it
+        describes while holding a two-line summary, so writing its text at its
+        declared start line puts a summary where the function body should be. Measured
+        on `server/main.py`: eight lines of conflict from three docstring chunks, and
+        none at all once they are excluded.
+        """
+        result = await self.session.execute(
+            select(CodeChunk)
+            .where(
+                CodeChunk.kb_id == kb_id,
+                CodeChunk.source_path == path,
+                CodeChunk.chunk_type == "code",
+            )
+            .order_by(CodeChunk.start_line, CodeChunk.id)
+        )
+        return list(result.scalars().all())

@@ -8,11 +8,12 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && node scripts/check-markdown.mjs && vite build",
+    "build": "tsc --noEmit && node scripts/check-markdown.mjs && node scripts/check-highlight.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "format": "oxfmt",
-    "check:markdown": "node scripts/check-markdown.mjs"
+    "check:markdown": "node scripts/check-markdown.mjs",
+    "check:highlight": "node scripts/check-highlight.mjs"
   },
   "dependencies": {
     "highlight.js": "^11.11.1",

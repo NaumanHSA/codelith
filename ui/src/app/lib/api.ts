@@ -14,6 +14,7 @@ import type {
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
   ModelRegistry, ModelDraft, ModelTest, Tier, EvidenceBody,
   Publication, PublishAccepted, RendererInfo, Architecture, Narratives,
+  FileTree, SourceFile,
 } from './types'
 
 export const API_BASE =
@@ -507,6 +508,18 @@ export const api = {
 
   narratives: (projectId: number, signal?: AbortSignal) =>
     request<Narratives>(`/projects/${projectId}/narratives`, { signal }),
+
+  files: (projectId: number, signal?: AbortSignal) =>
+    request<FileTree>(`/projects/${projectId}/files`, { signal }),
+
+  /** A path has slashes in it, and each segment needs encoding while the
+   *  separators do not - `encodeURIComponent` on the whole thing would turn
+   *  `src/a.js` into one unmatchable segment. */
+  file: (projectId: number, path: string, signal?: AbortSignal) =>
+    request<SourceFile>(
+      `/projects/${projectId}/files/${path.split('/').map(encodeURIComponent).join('/')}`,
+      { signal },
+    ),
 
   /** What this codebase unlocks, and what it does not yet. */
   projectApps: (projectId: number, signal?: AbortSignal) =>
