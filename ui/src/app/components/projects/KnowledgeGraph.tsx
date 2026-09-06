@@ -202,9 +202,11 @@ function layout(focus: Node): {
   const each = children.length ? (Math.PI * 2) / children.length : 0
 
   children.forEach((child, i) => {
-    // Starting at -90 degrees puts the first child at the top, and the tree is
-    // already ordered by weight, so the wheel reads clockwise from the heaviest.
-    const angle = -Math.PI / 2 + each * i
+    // Starting at 3 o'clock rather than 12. The order is the same either way -
+    // the tree is sorted by weight, so the wheel still reads clockwise from the
+    // heaviest - but a radial label at the top or bottom of the circle is set
+    // vertically, and a module with two files put both of its labels there.
+    const angle = each * i
     places.set(child.id, { r: RING_R, a: angle })
     arcs.set(child.id, each * RING_R)
     visible.push(child)
