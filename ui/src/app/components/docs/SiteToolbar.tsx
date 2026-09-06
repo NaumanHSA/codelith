@@ -16,11 +16,54 @@ const FORMATS: { value: string; label: string; note: string }[] = [
   { value: 'html', label: 'Static HTML', note: 'This theme, as files. No build step, no network.' },
   { value: 'markdown', label: 'Markdown', note: 'The page tree as stored.' },
   { value: 'mkdocs', label: 'MkDocs', note: 'A buildable MkDocs project with a generated nav.' },
-  { value: 'docusaurus', label: 'Docusaurus', note: 'A Docusaurus docs directory and sidebar.' },
+  { value: 'docusaurus', label: 'Docusaurus', note: 'A whole project. npm install, npm run start.' },
   // One file, not a zip: DOCX is what you ask for when the docs need sending,
   // reviewing with tracked changes, or printing.
   { value: 'docx', label: 'Word (.docx)', note: 'The whole site as one document, in reading order.' },
 ]
+
+/** A shutter, for freezing the site as it stands. */
+function CameraIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="shrink-0"
+    >
+      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  )
+}
+
+/** An arrow into a tray: the archive lands on your disk. */
+function DownloadIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="shrink-0"
+    >
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
 
 export default function SiteToolbar({
   site,
@@ -101,17 +144,32 @@ export default function SiteToolbar({
         <button
           onClick={() => setMenu(m => (m === 'snapshot' ? 'none' : 'snapshot'))}
           title="Freeze the site as it stands, under a label"
-          className="tag border border-rule bg-panel px-1.5 py-[4px] text-ink-dim transition-colors hover:border-ink hover:text-ink"
+          className={`tag inline-flex items-center gap-1.5 border px-3 py-[7px] transition-colors ${
+            menu === 'snapshot'
+              ? 'border-ink bg-ink text-paper'
+              : 'border-ink bg-panel text-ink hover:border-hot hover:text-hot-ink'
+          }`}
         >
-          snapshot
+          <CameraIcon />
+          Snapshot
         </button>
       )}
 
+      {/* The one that leaves with something. Filled rather than outlined, because
+          these two were 9.5px labels in a hairline box beside a `select`, and read as
+          part of the version picker rather than as the two things you can do to a
+          finished site. */}
       <button
         onClick={() => setMenu(m => (m === 'export' ? 'none' : 'export'))}
-        className="tag border border-rule bg-panel px-1.5 py-[4px] text-ink-dim transition-colors hover:border-ink hover:text-ink"
+        title="Download the site as MkDocs, Docusaurus, HTML, Markdown or DOCX"
+        className={`tag inline-flex items-center gap-1.5 border px-3 py-[7px] transition-colors ${
+          menu === 'export'
+            ? 'border-hot-press bg-hot-press text-on-hot'
+            : 'border-hot bg-hot text-on-hot hover:border-hot-press hover:bg-hot-press'
+        }`}
       >
-        ↓ export
+        <DownloadIcon />
+        Export
       </button>
 
       {menu !== 'none' && (

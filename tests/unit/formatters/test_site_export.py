@@ -168,15 +168,85 @@ class TestDocusaurus:
         assert sidebar[1]["label"] == "API Reference"
         assert sidebar[1]["items"] == ["api/endpoints", "api/schemas"]
 
-    def test_pages_are_mdx_with_frontmatter(self, tree) -> None:
-        body = read(DocusaurusFormatter().format_site_tree(tree), "docs/api/endpoints.mdx")
+    def test_pages_are_markdown_with_frontmatter(self, tree) -> None:
+        """
+        `.md`, not `.mdx`. MDX reads `{` as an expression and `<` as a component, and
+        prose written from source code is full of both, so a build fails on the first
+        `{config}` in a sentence.
+        """
+        body = read(DocusaurusFormatter().format_site_tree(tree), "docs/api/endpoints.md")
 
         assert body.startswith("---\ntitle: \"Endpoints\"")
         assert "sidebar_position: 1" in body
 
     def test_links_drop_the_extension(self, tree) -> None:
-        body = read(DocusaurusFormatter().format_site_tree(tree), "docs/api/endpoints.mdx")
+        body = read(DocusaurusFormatter().format_site_tree(tree), "docs/api/endpoints.md")
         assert "(schemas)" in body and "(../guides/setup#install)" in body
+
+
+class TestDocusaurusRuns:
+    """
+    The export is a project, not a docs folder.
+
+    What it produced before had no `package.json`, so `npm install` had nothing to
+    read and `npm run start` did not exist. Every assertion here is something whose
+    absence stops the site running, which is not a difference anybody spots in a file
+    listing.
+    """
+
+    def _files(self, tree):
+        return names(DocusaurusFormatter().format_site_tree(tree))
+
+    def test_it_carries_a_package_json(self, tree) -> None:
+        assert "package.json" in self._files(tree)
+
+    def test_the_scripts_are_the_ones_the_readme_names(self, tree) -> None:
+        import json as _json
+
+        pkg = _json.loads(read(DocusaurusFormatter().format_site_tree(tree), "package.json"))
+        assert {"start", "build", "serve"} <= set(pkg["scripts"])
+        assert "@docusaurus/core" in pkg["dependencies"]
+        assert "@docusaurus/preset-classic" in pkg["dependencies"]
+        assert pkg["dependencies"]["react"].startswith("^19")
+
+    def test_the_stylesheet_the_config_points_at_exists(self, tree) -> None:
+        """`theme.customCss` naming a file that is not there fails the build."""
+        config = read(DocusaurusFormatter().format_site_tree(tree), "docusaurus.config.js")
+        assert "./src/css/custom.css" in config
+        assert "src/css/custom.css" in self._files(tree)
+
+    def test_the_blog_is_off(self, tree) -> None:
+        """The classic preset enables it and then fails looking for `blog/`."""
+        config = read(DocusaurusFormatter().format_site_tree(tree), "docusaurus.config.js")
+        assert "blog: false" in config
+
+    def test_the_docs_are_the_site(self, tree) -> None:
+        """Without this the root is a landing page that was never written: a 404."""
+        data = DocusaurusFormatter().format_site_tree(tree)
+        assert "routeBasePath: '/'" in read(data, "docusaurus.config.js")
+        assert "slug: /" in read(data, "docs/intro.md")
+
+    def test_markdown_is_parsed_as_commonmark(self, tree) -> None:
+        config = read(DocusaurusFormatter().format_site_tree(tree), "docusaurus.config.js")
+        assert "format: 'detect'" in config
+
+    def test_it_says_how_to_run_it(self, tree) -> None:
+        readme = read(DocusaurusFormatter().format_site_tree(tree), "README.md")
+        assert "npm install" in readme and "npm run start" in readme
+
+    def test_node_modules_and_build_are_ignored(self, tree) -> None:
+        ignore = read(DocusaurusFormatter().format_site_tree(tree), ".gitignore")
+        assert "/node_modules" in ignore and "/build" in ignore
+
+    def test_the_single_document_export_is_a_project_too(self) -> None:
+        """Both entry points, or one of them ships something that cannot be run."""
+        from codelith.models.document import Document
+
+        doc = Document(
+            title="Architecture", doc_type="architecture", content_markdown="# A"
+        )
+        files = names(DocusaurusFormatter().format_site([doc], "Demo"))
+        assert {"package.json", "README.md", "src/css/custom.css"} <= files
 
 
 class TestStaticHtml:
