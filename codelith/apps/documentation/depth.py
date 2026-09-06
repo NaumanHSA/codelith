@@ -93,7 +93,7 @@ _PROFILES: dict[Depth, DepthProfile] = {
             "restated at greater length."
         ),
         label="Detailed",
-        blurb="A reference to implement against — parameters, failures, examples.",
+        blurb="A reference to implement against: parameters, failures, examples.",
     ),
 }
 

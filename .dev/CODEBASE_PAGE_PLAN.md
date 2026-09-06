@@ -161,15 +161,28 @@ published pages can point into it.
 `[x]` **3.5** Say plainly what is not there: files the analysis skipped, and lines no
 chunk covered.
 
-## Phase 4 — Modules, as an explorer rather than a radar
+## Phase 4 — Modules, as an explorer rather than a radar — **done**
 
-`[ ]` **4.1** Replace the role radar with a module table: path, role, LOC, and the
+*Built. `GET /projects/{id}/modules` returns all twenty with their prose, and
+`KnowledgeMap.tsx` is deleted rather than demoted: keeping a plot of five role counts
+above a list that shows the same distribution in its filter chips would be two
+answers to one question.*
+
+*Test modules are returned and flagged.* `list_by_kb` excludes them by default
+because its callers build prompts, and a documentation writer should not spend
+context on the test suite. A person browsing a codebase is in the opposite position:
+"five files, 591 lines" is one of the more useful rows on the page, and dropping it
+would be a claim about the project rather than a display choice. The unwritten
+summary on a test module is not counted as a gap, because not summarising them is a
+decision and reporting a decision as a defect is noise.
+
+`[x]` **4.1** Replace the role radar with a module table: path, role, LOC, and the
 summary that was written for each one. The radar shows five numbers; twenty modules
 with a sentence each is the thing somebody actually wants.
 
-`[ ]` **4.2** Filter by role and language; sort by size.
+`[x]` **4.2** Filter by role and language; sort by size.
 
-`[ ]` **4.3** A module opens its files in the Phase 3 viewer.
+`[x]` **4.3** A module opens its files in the Phase 3 viewer.
 
 ## Phase 5 — The graph, browsable
 

@@ -164,7 +164,7 @@ class ReviseRequest(BaseModel):
     instructions: str = Field(
         ...,
         min_length=1,
-        description="What should change. Free text — this is what the reader typed.",
+        description="What should change. Free text: this is what the reader typed.",
     )
     anchor: str | None = Field(
         default=None,

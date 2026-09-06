@@ -69,7 +69,7 @@ APPS: tuple[App, ...] = (
         id="documentation",
         label="Documentation",
         blurb=(
-            "Structured documents written from the analysis — Markdown, DOCX, MkDocs "
+            "Structured documents written from the analysis: Markdown, DOCX, MkDocs "
             "or Docusaurus. Document types are offered from what the code actually "
             "contains, so a project with no HTTP routes is never offered an API "
             "reference."
@@ -98,13 +98,13 @@ APPS: tuple[App, ...] = (
         id="drift",
         label="What changed",
         blurb=(
-            "Compare two readings of the same repository and see what moved — modules "
+            "Compare two readings of the same repository and see what moved: modules "
             "added or rewritten, routes that came and went, and which written pages "
             "now describe code that is no longer there. Needs the codebase analysed "
             "twice; one reading is a photograph, two are a difference."
         ),
         short=(
-            "What moved between two readings — and which written pages now describe code that is no longer there."
+            "What moved between two readings, and which written pages now describe code that is no longer there."
         ),
         needs=("modules", "entities", "written pages"),
         route="/app/projects/{id}/drift",

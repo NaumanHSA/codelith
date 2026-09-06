@@ -10,7 +10,7 @@ import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../compone
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Preflight from '../../components/projects/Preflight'
 import ReanalyseDialog from '../../components/projects/ReanalyseDialog'
-import KnowledgeMap from '../../components/projects/KnowledgeMap'
+import ModuleExplorer from '../../components/projects/ModuleExplorer'
 import ArchitectureMap from '../../components/projects/ArchitectureMap'
 import NarrativeReader from '../../components/projects/NarrativeReader'
 import ConfirmDelete from '../../components/ConfirmDelete'
@@ -158,6 +158,7 @@ export default function ProjectDetailPage() {
 
   const project = useAsync(() => api.project(id), [id])
   const arch = useAsync(sig => api.architecture(id, sig), [id])
+  const modules = useAsync(sig => api.modules(id, sig), [id])
   const narratives = useAsync(sig => api.narratives(id, sig), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
@@ -348,9 +349,16 @@ export default function ProjectDetailPage() {
                   <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '-'} />
                   <Stat k="commit" v={shortSha(base.commit_sha)} />
                 </div>
-                <div className="border-t border-rule">
-                  <KnowledgeMap kb={kb.data} />
-                </div>
+                {/* Where the role radar was. It plotted five numbers and looked
+                    like understanding; beneath it sat twenty modules with a
+                    written paragraph each, none of which had ever been on
+                    screen. The role chips below carry the same distribution and
+                    the rows carry the prose. */}
+                {modules.data?.available && (
+                  <div className="border-t border-rule">
+                    <ModuleExplorer data={modules.data} projectId={id} />
+                  </div>
+                )}
               </Panel>
 
               {/* Above the counters and the role plot, because it is the only thing

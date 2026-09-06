@@ -14,7 +14,7 @@ import type {
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
   ModelRegistry, ModelDraft, ModelTest, Tier, EvidenceBody,
   Publication, PublishAccepted, RendererInfo, Architecture, Narratives,
-  FileTree, SourceFile,
+  FileTree, SourceFile, Modules,
 } from './types'
 
 export const API_BASE =
@@ -508,6 +508,9 @@ export const api = {
 
   narratives: (projectId: number, signal?: AbortSignal) =>
     request<Narratives>(`/projects/${projectId}/narratives`, { signal }),
+
+  modules: (projectId: number, signal?: AbortSignal) =>
+    request<Modules>(`/projects/${projectId}/modules`, { signal }),
 
   files: (projectId: number, signal?: AbortSignal) =>
     request<FileTree>(`/projects/${projectId}/files`, { signal }),

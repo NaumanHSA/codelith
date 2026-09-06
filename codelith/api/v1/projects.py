@@ -21,6 +21,7 @@ from codelith.schemas.job import (
     ReviewPageOut,
 )
 from codelith.schemas.code import FileOut, FileTreeOut
+from codelith.schemas.module import ModulesOut
 from codelith.schemas.narrative import NarrativesOut
 from codelith.schemas.knowledge import (
     AddPageRequest,
@@ -52,6 +53,7 @@ from codelith.services.job_service import JobService
 from codelith.services.architecture_service import ArchitectureService
 from codelith.services.code_service import CodeService
 from codelith.services.knowledge_service import KnowledgeService
+from codelith.services.module_service import ModuleService
 from codelith.services.narrative_service import NarrativeService
 from codelith.services.project_service import ProjectService
 from codelith.services.source_service import SourceService
@@ -304,6 +306,23 @@ async def get_narratives(project_id: int, db: DbSession, user: CurrentUser):
     could check.
     """
     return await NarrativeService(db).list_for_project(project_id, user)
+
+
+@router.get("/{project_id}/modules", response_model=ModulesOut)
+async def get_modules(project_id: int, db: DbSession, user: CurrentUser):
+    """
+    Every module, with the prose written for it.
+
+    The codebase page has shown a radar of role counts since it was built: five
+    numbers standing in for twenty modules, each of which has a paragraph that cost
+    a call to produce and has never been on screen.
+
+    Test modules are included and flagged. `list_by_kb` excludes them by default
+    because its callers build prompts, and a documentation writer should not spend
+    context on the test suite; a person browsing a codebase wants the opposite, and
+    "five test files, 591 lines" is one of the more useful things on the page.
+    """
+    return await ModuleService(db).list_for_project(project_id, user)
 
 
 @router.get("/{project_id}/files", response_model=FileTreeOut)

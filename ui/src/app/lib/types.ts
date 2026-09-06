@@ -833,3 +833,33 @@ export interface SourceFile {
   chunks: number
   indexed: boolean
 }
+
+/* --- Modules -------------------------------------------------------- *
+ * Each one carries the paragraph analysis wrote for it and the files it
+ * is made of, so a module can be opened rather than only read about.
+ * Test modules are included and flagged: their absence would be a claim
+ * about the project.
+ * -------------------------------------------------------------------- */
+
+export interface ModuleEntry {
+  path: string
+  name: string
+  kind: string
+  role: string
+  language: string
+  file_count: number
+  loc: number
+  is_test: boolean
+  summary: string
+  files: string[]
+  symbols: number
+}
+
+export interface Modules {
+  available: boolean
+  commit_sha: string | null
+  /** Largest first. */
+  modules: ModuleEntry[]
+  without_summary: number
+  total_loc: number
+}
