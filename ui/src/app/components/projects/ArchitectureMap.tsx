@@ -5,10 +5,10 @@ import type { Architecture, ArchService } from '../../lib/types'
  * The shape of the system, drawn.
  *
  * Analysis has written this on every run since the architecture agent
- * landed — services, the relations between them with the verb naming
- * each one, the layers they group into — and nothing has ever read it.
- * It is the one thing on this page that answers "what is this project?"
- * in a glance rather than in a table of counts.
+ * landed: services, the relations between them with the verb naming
+ * each one, the layers they group into. Nothing has ever read it. It is
+ * the one thing on this page that answers "what is this project?" in a
+ * glance rather than in a table of counts.
  *
  * **Laid out from the data, not placed by hand.** How many services a
  * repository has is not knowable in advance: this one has ten, the next
@@ -19,8 +19,13 @@ import type { Architecture, ArchService } from '../../lib/types'
  *
  * **Cycles are expected.** Real systems call back. The depth pass caps
  * its iterations rather than assuming a DAG, and an edge that runs
- * upward is drawn as one — it is a fact about the code, not a defect in
- * the drawing.
+ * upward is drawn as one: a fact about the code, not a defect in the
+ * drawing.
+ *
+ * **Direction is animated, not decorated.** An arrowhead is six pixels
+ * of geometry doing the most important job in the diagram. On hover the
+ * edge itself marches from source to target, which says which way the
+ * call goes at a size a reader can actually see.
  *
  * Above a size where a diagram stops being readable it stops being a
  * diagram. Sixty overlapping boxes joined by two hundred lines is not
@@ -31,13 +36,50 @@ import type { Architecture, ArchService } from '../../lib/types'
 /** Past this many services the drawing is a hairball, and a list is more use. */
 const MAX_DRAWN = 24
 
-const NODE_W = 132
-const NODE_H = 42
-const ROW_GAP = 78
-const COL_GAP = 22
-const PAD = 16
+const NODE_W = 156
+const NODE_H = 52
+const NODE_R = 13
+const ROW_GAP = 88
+const COL_GAP = 26
+const PAD = 20
+
+/** Space left between the end of an edge and the box it points at. An arrowhead
+ *  touching the border reads as a smudge on the box rather than as an arrow. */
+const ARROW_GAP = 8
+
+/** One row lands, then the next. Slow enough to read as an order being built up,
+ *  fast enough that the map is settled before anyone reaches for the mouse. */
+const ROW_DELAY = 0.11
+const EDGE_DELAY = 0.34
 
 type Placed = ArchService & { x: number; y: number; row: number }
+
+/**
+ * A colour per kind of service.
+ *
+ * Not decoration: what a component *is* is the second question after what it is
+ * called, and the type text is eight pixels tall. Anything the writer invents that
+ * is not in this table gets the neutral ink, which is the honest answer.
+ */
+const TYPE_INK: Record<string, string> = {
+  api: 'var(--hot)',
+  gateway: 'var(--hot)',
+  entrypoint: 'var(--hot)',
+  frontend: 'var(--hot)',
+  service: 'var(--ink)',
+  worker: 'var(--ink)',
+  cli: 'var(--warn)',
+  database: 'var(--ok)',
+  store: 'var(--ok)',
+  cache: 'var(--ok)',
+  utility: 'var(--ink-dim)',
+  library: 'var(--ink-dim)',
+  config: 'var(--ink-dim)',
+}
+
+function typeInk(type: string): string {
+  return TYPE_INK[type.toLowerCase().trim()] ?? 'var(--ink-mid)'
+}
 
 /**
  * Depth per service: one more than the deepest thing that reaches it.
@@ -104,46 +146,67 @@ function layout(arch: Architecture): { nodes: Placed[]; rows: number; width: num
   return { nodes, rows: rows.length, width }
 }
 
-/** Where an edge leaves and arrives, given which way it runs. */
-function anchors(from: Placed, to: Placed) {
-  const down = to.y > from.y
+type Point = { x: number; y: number }
+type Curve = { p0: Point; c1: Point; c2: Point; p3: Point }
+
+/**
+ * The curve between two boxes, and the control points it was drawn with.
+ *
+ * Both come back together on purpose. The verb that labels an edge has to sit *on*
+ * the line, and a label placed from the straight-line midpoint of a curved path
+ * floats beside it, which is how the first version of this looked.
+ */
+function edgePath(from: Placed, to: Placed): Curve {
   const level = Math.abs(to.y - from.y) < 1
+
   if (level) {
     // Side to side, so a same-row edge does not disappear behind the boxes.
     const rightwards = to.x > from.x
+    const p0 = { x: from.x + (rightwards ? NODE_W : 0), y: from.y + NODE_H / 2 }
+    const p3 = {
+      x: to.x + (rightwards ? -ARROW_GAP : NODE_W + ARROW_GAP),
+      y: to.y + NODE_H / 2,
+    }
+    const bow = Math.min(Math.abs(p3.x - p0.x) * 0.3, 46)
     return {
-      x1: from.x + (rightwards ? NODE_W : 0),
-      y1: from.y + NODE_H / 2,
-      x2: to.x + (rightwards ? 0 : NODE_W),
-      y2: to.y + NODE_H / 2,
+      p0,
+      c1: { x: p0.x + (rightwards ? bow : -bow), y: p0.y - bow * 0.55 },
+      c2: { x: p3.x + (rightwards ? -bow : bow), y: p3.y - bow * 0.55 },
+      p3,
     }
   }
+
+  const down = to.y > from.y
+  const p0 = { x: from.x + NODE_W / 2, y: from.y + (down ? NODE_H : 0) }
+  const p3 = {
+    x: to.x + NODE_W / 2,
+    y: to.y + (down ? -ARROW_GAP : NODE_H + ARROW_GAP),
+  }
+  // Control points pulled a fixed fraction of the vertical run, which keeps the
+  // curve's shoulders in the same place whether the rows are near or far apart.
+  const lift = Math.abs(p3.y - p0.y) * 0.46
   return {
-    x1: from.x + NODE_W / 2,
-    y1: from.y + (down ? NODE_H : 0),
-    x2: to.x + NODE_W / 2,
-    y2: to.y + (down ? 0 : NODE_H),
+    p0,
+    c1: { x: p0.x, y: p0.y + (down ? lift : -lift) },
+    c2: { x: p3.x, y: p3.y + (down ? -lift : lift) },
+    p3,
   }
 }
 
-/**
- * A point along the edge's own curve.
- *
- * The verb used to sit at the straight-line midpoint of every edge, and two edges
- * running between the same two rows have the same midpoint — so "calls" and "uses"
- * printed on top of each other and read as neither. Walking each edge's actual
- * Bezier, at a fraction that alternates, separates them: the curves differ even when
- * the endpoints nearly do.
- */
-function along(
-  x1: number, y1: number, x2: number, y2: number, my: number, t: number,
-) {
+function d({ p0, c1, c2, p3 }: Curve): string {
+  return `M${p0.x} ${p0.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`
+}
+
+/** A point on the cubic itself, so the verb lands on the line it names. */
+function at({ p0, c1, c2, p3 }: Curve, t: number): Point {
   const u = 1 - t
-  // Cubic through P0(x1,y1) C1(x1,my) C2(x2,my) P3(x2,y2) — the same control points
-  // the path below is drawn with, or the label would sit off the line.
+  const a = u * u * u
+  const b = 3 * u * u * t
+  const c = 3 * u * t * t
+  const e = t * t * t
   return {
-    x: u * u * u * x1 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x2,
-    y: u * u * u * y1 + 3 * u * u * t * my + 3 * u * t * t * my + t * t * t * y2,
+    x: a * p0.x + b * c1.x + c * c2.x + e * p3.x,
+    y: a * p0.y + b * c1.y + c * c2.y + e * p3.y,
   }
 }
 
@@ -196,65 +259,149 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
           aria-label={`Architecture: ${arch.services.length} services and ${arch.relations.length} relations between them.`}
         >
           <defs>
-            <marker
-              id="arch-arrow"
-              viewBox="0 0 8 8"
-              refX="7"
-              refY="4"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
+            {/* The ground. Every other surface in the studio sits on a ruled or
+                hatched field, and the one place actually drawing a plan was on
+                blank paper. Faint enough to read as texture, not as data. */}
+            <pattern
+              id="arch-grid"
+              width="18"
+              height="18"
+              patternUnits="userSpaceOnUse"
             >
-              <path d="M0 0 L8 4 L0 8 z" fill="var(--rule)" />
-            </marker>
-            <marker
-              id="arch-arrow-on"
-              viewBox="0 0 8 8"
-              refX="7"
-              refY="4"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
-              <path d="M0 0 L8 4 L0 8 z" fill="var(--hot)" />
-            </marker>
+              <circle cx="1" cy="1" r="0.9" fill="var(--rule)" />
+            </pattern>
+
+            {/* An open chevron rather than a filled triangle. At this size a solid
+                head reads as a blob, and `userSpaceOnUse` keeps it from growing
+                with the stroke when an edge lights up. */}
+            {(
+              [
+                ['arch-arrow', 'var(--ink-dim)'],
+                ['arch-arrow-on', 'var(--hot)'],
+              ] as const
+            ).map(([id, ink]) => (
+              <marker
+                key={id}
+                id={id}
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="10"
+                markerHeight="10"
+                markerUnits="userSpaceOnUse"
+                orient="auto"
+              >
+                <path
+                  d="M2.5 1.6 L8 5 L2.5 8.4"
+                  fill="none"
+                  stroke={ink}
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </marker>
+            ))}
+
+            {/* Lifts the boxes off the paper. Two stacked shadows rather than one,
+                because a single soft shadow at this size just looks like a smudge. */}
+            <filter id="arch-lift" x="-30%" y="-30%" width="160%" height="180%">
+              <feDropShadow
+                dx="0"
+                dy="1"
+                stdDeviation="0.8"
+                floodColor="var(--ink)"
+                floodOpacity="0.07"
+              />
+              <feDropShadow
+                dx="0"
+                dy="4"
+                stdDeviation="5"
+                floodColor="var(--ink)"
+                floodOpacity="0.06"
+              />
+            </filter>
+            <filter id="arch-lift-on" x="-40%" y="-40%" width="180%" height="200%">
+              <feDropShadow
+                dx="0"
+                dy="3"
+                stdDeviation="7"
+                floodColor="var(--hot)"
+                floodOpacity="0.28"
+              />
+            </filter>
           </defs>
+
+          <rect
+            x="0"
+            y="0"
+            width={width}
+            height={height}
+            fill="url(#arch-grid)"
+            opacity="0.75"
+          />
 
           {arch.relations.map((r, i) => {
             const from = byName.get(r.source)
             const to = byName.get(r.target)
             if (!from || !to) return null
-            const { x1, y1, x2, y2 } = anchors(from, to)
+
+            const curve = edgePath(from, to)
+            const path = d(curve)
             const on = hover === r.source || hover === r.target
             const dim = hover && !on
-            const my = (y1 + y2) / 2
-            // Alternating so adjacent edges do not land their verbs in the same place.
-            const at = along(x1, y1, x2, y2, my, i % 2 ? 0.62 : 0.38)
-            const width = r.kind.length * 4.9 + 7
+            // Alternating so two edges between the same pair of rows do not land
+            // their verbs in the same place.
+            const label = at(curve, i % 2 ? 0.62 : 0.38)
+            const plate = r.kind.length * 4.9 + 11
+            // Edges draw after the rows they join have landed.
+            const delay = EDGE_DELAY + Math.max(from.row, to.row) * ROW_DELAY
+
             return (
-              <g key={i} opacity={dim ? 0.16 : 1} style={{ transition: 'opacity .15s' }}>
+              <g key={i} opacity={dim ? 0.14 : 1} style={{ transition: 'opacity .18s' }}>
                 <path
-                  d={`M${x1} ${y1} C${x1} ${my} ${x2} ${my} ${x2} ${y2}`}
+                  className="arch-edge"
+                  style={{ animationDelay: `${delay}s` }}
+                  pathLength={1}
+                  d={path}
                   fill="none"
                   stroke={on ? 'var(--hot)' : 'var(--rule)'}
-                  strokeWidth={on ? 1.8 : 1.2}
+                  strokeWidth={on ? 1.9 : 1.4}
+                  strokeLinecap="round"
                   markerEnd={`url(#${on ? 'arch-arrow-on' : 'arch-arrow'})`}
                 />
+
+                {/* The direction, marching source to target. Only while the reader
+                    is pointing at one of its ends: every edge crawling at once is
+                    a screensaver, not a diagram. */}
+                {on && (
+                  <path
+                    className="arch-flow"
+                    d={path}
+                    fill="none"
+                    stroke="var(--hot)"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    opacity="0.5"
+                  />
+                )}
+
                 {r.kind && (
-                  <>
+                  <g className="arch-label" style={{ animationDelay: `${delay + 0.3}s` }}>
                     {/* Knocked out of the line behind it, so the verb is legible
                         wherever it lands rather than striped by its own edge. */}
                     <rect
-                      x={at.x - width / 2}
-                      y={at.y - 6.5}
-                      width={width}
-                      height={12}
-                      rx="2"
+                      x={label.x - plate / 2}
+                      y={label.y - 7.5}
+                      width={plate}
+                      height={15}
+                      rx="7.5"
                       fill={on ? 'var(--hot-wash)' : 'var(--panel)'}
+                      stroke={on ? 'var(--hot-edge)' : 'var(--rule)'}
+                      strokeWidth="0.8"
                     />
                     <text
-                      x={at.x}
-                      y={at.y + 2.5}
+                      x={label.x}
+                      y={label.y + 2.8}
                       textAnchor="middle"
                       fontSize="8.5"
                       letterSpacing="0.06em"
@@ -263,7 +410,7 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
                     >
                       {r.kind}
                     </text>
-                  </>
+                  </g>
                 )}
               </g>
             )
@@ -273,12 +420,12 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
             const on = hover === n.name
             const near = lit.has(n.name)
             const dim = hover && !near
+            const ink = typeInk(n.type)
             return (
               <g
                 key={n.name}
-                opacity={dim ? 0.3 : 1}
-                className="cursor-default"
-                style={{ transition: 'opacity .15s' }}
+                className="arch-node cursor-default"
+                style={{ animationDelay: `${n.row * ROW_DELAY}s`, opacity: dim ? 0.28 : 1 }}
                 onMouseEnter={() => setHover(n.name)}
                 onMouseLeave={() => setHover(null)}
               >
@@ -287,31 +434,55 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
                   y={n.y}
                   width={NODE_W}
                   height={NODE_H}
-                  rx="4"
+                  rx={NODE_R}
                   fill={on ? 'var(--hot-wash)' : 'var(--panel)'}
-                  stroke={on ? 'var(--hot)' : 'var(--ink)'}
-                  strokeWidth={on ? 1.8 : 1.1}
+                  stroke={on ? 'var(--hot)' : 'var(--rule)'}
+                  strokeWidth={on ? 1.6 : 1.1}
+                  filter={`url(#${on ? 'arch-lift-on' : 'arch-lift'})`}
+                />
+                {/* A rounded stripe down the leading edge, coloured by what the
+                    service is. Reads at a glance; the word underneath confirms it. */}
+                <rect
+                  x={n.x + 5}
+                  y={n.y + 12}
+                  width={3}
+                  height={NODE_H - 24}
+                  rx="1.5"
+                  fill={on ? 'var(--hot)' : ink}
+                  opacity={on ? 1 : 0.8}
                 />
                 <text
-                  x={n.x + 10}
-                  y={n.y + 18}
-                  fontSize="10.5"
+                  x={n.x + 17}
+                  y={n.y + 23}
+                  fontSize="11"
                   fontWeight="700"
                   fontFamily="var(--font-mono)"
                   fill="var(--ink)"
                 >
-                  {n.name.length > 17 ? `${n.name.slice(0, 16)}…` : n.name}
+                  {n.name.length > 19 ? `${n.name.slice(0, 18)}…` : n.name}
                 </text>
                 {n.type && (
                   <text
-                    x={n.x + 10}
-                    y={n.y + 32}
+                    x={n.x + 17}
+                    y={n.y + 38}
                     fontSize="8"
-                    letterSpacing="0.1em"
+                    letterSpacing="0.12em"
                     fontFamily="var(--font-mono)"
                     fill={on ? 'var(--hot-ink)' : 'var(--ink-dim)'}
                   >
                     {n.type.toUpperCase()}
+                  </text>
+                )}
+                {n.modules.length > 1 && (
+                  <text
+                    x={n.x + NODE_W - 13}
+                    y={n.y + 38}
+                    textAnchor="end"
+                    fontSize="8"
+                    fontFamily="var(--font-mono)"
+                    fill="var(--ink-dim)"
+                  >
+                    {n.modules.length} mod
                   </text>
                 )}
               </g>
@@ -325,6 +496,10 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
       <div className="min-h-[52px] border-t border-rule bg-sunk/40 px-3 py-2">
         {shown ? (
           <p className="font-sans text-[11.5px] leading-relaxed text-ink-mid">
+            <span
+              className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
+              style={{ background: typeInk(shown.type) }}
+            />
             <span className="font-semibold text-ink">{shown.name}</span>
             {shown.type ? <span className="text-ink-dim"> · {shown.type}</span> : null}
             {shown.description ? ` · ${shown.description}` : ''}
@@ -340,7 +515,7 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
           <p className="font-sans text-[11.5px] leading-relaxed text-ink-dim">
             {arch.services.length} service{arch.services.length === 1 ? '' : 's'},{' '}
             {arch.relations.length} relation{arch.relations.length === 1 ? '' : 's'}. Point at
-            one to see what it is and what it touches.
+            one to see what it is, what it touches, and which way each call runs.
             {arch.dangling_relations > 0 && (
               <span className="text-warn">
                 {' '}

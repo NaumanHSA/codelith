@@ -750,3 +750,31 @@ export interface Architecture {
   /** Edges naming a service that does not exist. Not drawable, so reported. */
   dangling_relations: number
 }
+
+/* --- Narratives ---------------------------------------------------- *
+ * The prose analysis writes per topic. `provenance` is empty for every
+ * knowledge base built before the writer started recording its sources,
+ * and the reader says so rather than inventing one.
+ * ------------------------------------------------------------------- */
+
+export interface NarrativeProvenance {
+  generated_by: string
+  modules: string[]
+  facts: string[]
+}
+
+export interface Narrative {
+  topic: string
+  title: string
+  brief: string
+  content_md: string
+  words: number
+  provenance: NarrativeProvenance
+}
+
+export interface Narratives {
+  available: boolean
+  commit_sha: string | null
+  /** In reading order from the API: overview first, not alphabetical. */
+  narratives: Narrative[]
+}

@@ -12,6 +12,7 @@ import Preflight from '../../components/projects/Preflight'
 import ReanalyseDialog from '../../components/projects/ReanalyseDialog'
 import KnowledgeMap from '../../components/projects/KnowledgeMap'
 import ArchitectureMap from '../../components/projects/ArchitectureMap'
+import NarrativeReader from '../../components/projects/NarrativeReader'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import AppGrid from '../../components/projects/AppGrid'
 import { coverage, describeJobScope } from '../../lib/site'
@@ -157,6 +158,7 @@ export default function ProjectDetailPage() {
 
   const project = useAsync(() => api.project(id), [id])
   const arch = useAsync(sig => api.architecture(id, sig), [id])
+  const narratives = useAsync(sig => api.narratives(id, sig), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
   const features = useAsync(sig => api.projectApps(id, sig), [id])
@@ -379,6 +381,27 @@ export default function ProjectDetailPage() {
                 </Panel>
               )}
 
+              {/* The chips that used to sit at the bottom of this page named
+                  twelve topics and showed none of the three thousand words
+                  behind them. Composition read this prose from day one; a
+                  person could not. */}
+              {narratives.data?.available && (
+                <Panel
+                  title="What analysis wrote"
+                  action={
+                    <span className="tag text-ink-dim">
+                      {narratives.data.narratives.length} topics ·{' '}
+                      {narratives.data.narratives
+                        .reduce((n, x) => n + x.words, 0)
+                        .toLocaleString()}{' '}
+                      words
+                    </span>
+                  }
+                >
+                  <NarrativeReader data={narratives.data} />
+                </Panel>
+              )}
+
               {/* Directly under the knowledge base, because it is the one thing
                   on this page you ask *before* doing something rather than
                   after. */}
@@ -434,18 +457,6 @@ export default function ProjectDetailPage() {
                           </li>
                         ))}
                       </ul>
-                    </Panel>
-                  ) : null}
-
-                  {kb.data.narrative_topics?.length ? (
-                    <Panel title="What this codebase talks about">
-                      <div className="flex flex-wrap gap-1 p-2.5">
-                        {kb.data.narrative_topics.slice(0, 20).map(t => (
-                          <span key={t} className="tag border border-hot-edge bg-hot-wash px-1.5 py-0.5 text-hot-ink">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
                     </Panel>
                   ) : null}
                 </div>

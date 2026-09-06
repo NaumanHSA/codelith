@@ -626,3 +626,89 @@ summary {
 .chat-bubble {
   color: var(--ink);
 }
+
+/* ── The architecture map ─────────────────────────────────────────────────────
+   Drawn from `architecture_json`, so the number of nodes and their arrangement
+   are not known until render. Everything here is therefore expressed against the
+   element rather than against a position: a node rises in place, an edge draws
+   along its own length.
+
+   Edges use `pathLength="1"` on the path, which renormalises the geometry so a
+   dash of `1` is the whole line whatever its actual length. Without it every edge
+   would need its length measured in JS after layout, and short edges would finish
+   drawing while long ones were still a third done. */
+@keyframes arch-node-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes arch-edge-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes arch-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Direction, shown rather than inferred from an arrowhead five pixels wide. */
+@keyframes arch-flow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.arch-node {
+  /* Without fill-box the origin is the whole SVG, and a hovered node in the
+     bottom row flies across the diagram instead of growing where it stands. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: arch-node-in 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.arch-node:hover {
+  transform: scale(1.035);
+}
+.arch-edge {
+  stroke-dasharray: 1;
+  animation: arch-edge-in 0.5s ease-out backwards;
+}
+.arch-flow {
+  stroke-dasharray: 5 7;
+  animation: arch-flow 0.9s linear infinite;
+}
+.arch-label {
+  animation: arch-label-in 0.3s ease-out backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-node,
+  .arch-edge,
+  .arch-label,
+  .arch-flow {
+    animation: none;
+  }
+  .arch-edge {
+    stroke-dasharray: none;
+  }
+  .arch-node:hover {
+    transform: none;
+  }
+}

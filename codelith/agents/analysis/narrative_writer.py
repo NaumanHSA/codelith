@@ -76,13 +76,23 @@ class NarrativeWriterAgent(BaseAgent):
                 topic: await self._facts(topic, repos, kb_id, entity_kinds)
                 for topic in topics
             }
+            # Chosen out here rather than inside _write, so the same shortlist that
+            # goes into the prompt is the one recorded against the narrative. Derived
+            # in two places they would drift the first time the selection changed.
+            modules_by_topic = {
+                topic: self._relevant_modules(topic, modules) for topic in topics
+            }
 
             semaphore = asyncio.Semaphore(get_settings().ANALYSIS_SUMMARY_CONCURRENCY)
 
             async def write(topic: NarrativeTopic) -> tuple[NarrativeTopic, str | None]:
                 async with semaphore:
                     return topic, await self._write(
-                        topic, project, architecture_map, modules, facts_by_topic[topic]
+                        topic,
+                        project,
+                        architecture_map,
+                        modules_by_topic[topic],
+                        facts_by_topic[topic][0],
                     )
 
             results = await asyncio.gather(*(write(x) for x in topics), return_exceptions=True)
@@ -109,7 +119,14 @@ class NarrativeWriterAgent(BaseAgent):
                     skipped += 1
                 else:
                     await repos.narratives.upsert(
-                        kb_id, topic, content, {"generated_by": self.name}
+                        kb_id,
+                        topic,
+                        content,
+                        {
+                            "generated_by": self.name,
+                            "modules": [m.name for m in modules_by_topic[topic]],
+                            "facts": facts_by_topic[topic][1],
+                        },
                     )
                     save_text_artifact(f"narrative_writer.{topic}", content)
                     written += 1
@@ -199,9 +216,8 @@ class NarrativeWriterAgent(BaseAgent):
 
     # ── Writing ───────────────────────────────────────────────────────────────
 
-    async def _write(self, topic, project, architecture_map, modules, facts: str) -> str | None:
+    async def _write(self, topic, project, architecture_map, relevant, facts: str) -> str | None:
         """Pure LLM step — no database access, so it is safe to run concurrently."""
-        relevant = self._relevant_modules(topic, modules)
         messages = NARRATIVE.render(
             topic=str(topic),
             topic_guidance=TOPIC_GUIDANCE.get(str(topic), ""),
@@ -242,8 +258,17 @@ class NarrativeWriterAgent(BaseAgent):
         return "\n".join(lines) or "  (no modules)"
 
     @staticmethod
-    async def _facts(topic, repos, kb_id: int, entity_kinds: dict[str, int]) -> str:
-        """Entity detail relevant to this topic, so claims stay grounded."""
+    async def _facts(
+        topic, repos, kb_id: int, entity_kinds: dict[str, int]
+    ) -> tuple[str, list[str]]:
+        """
+        Entity detail relevant to this topic, so claims stay grounded.
+
+        Returns the prompt text and the kinds that actually had rows behind them.
+        The second half is provenance: `source_refs_json` has always been documented
+        as recording what fed a narrative, and until now it stored only the name of
+        the agent, which is a fact about the writer and not about the codebase.
+        """
         wanted: tuple[EntityKind, ...] = {
             NarrativeTopic.REQUEST_LIFECYCLE: (EntityKind.ROUTE, EntityKind.ENTRYPOINT),
             NarrativeTopic.DEPLOYMENT: (EntityKind.INFRA_RESOURCE, EntityKind.ENV_VAR),
@@ -253,9 +278,11 @@ class NarrativeWriterAgent(BaseAgent):
         }.get(topic, (EntityKind.ENTRYPOINT, EntityKind.DEPENDENCY))
 
         blocks: list[str] = [f"Fact counts: {entity_kinds or '{}'}"]
+        found: list[str] = []
         for kind in wanted:
             items = await repos.entities.list_by_kind(kb_id, kind, limit=30)
             if items:
                 rendered = ", ".join(i.name for i in items[:30])
                 blocks.append(f"{kind}: {rendered}")
-        return "\n".join(blocks)
+                found.append(f"{kind} ({len(items)})")
+        return "\n".join(blocks), found

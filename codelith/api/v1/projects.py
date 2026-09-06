@@ -20,6 +20,7 @@ from codelith.schemas.job import (
     ReviewOut,
     ReviewPageOut,
 )
+from codelith.schemas.narrative import NarrativesOut
 from codelith.schemas.knowledge import (
     AddPageRequest,
     AnalyzeRequest,
@@ -49,6 +50,7 @@ from codelith.services.audit_service import AuditService
 from codelith.services.job_service import JobService
 from codelith.services.architecture_service import ArchitectureService
 from codelith.services.knowledge_service import KnowledgeService
+from codelith.services.narrative_service import NarrativeService
 from codelith.services.project_service import ProjectService
 from codelith.services.source_service import SourceService
 
@@ -283,6 +285,23 @@ async def get_architecture(project_id: int, db: DbSession, user: CurrentUser):
     says so instead of looking broken.
     """
     return await ArchitectureService(db).get(project_id, user)
+
+
+@router.get("/{project_id}/narratives", response_model=NarrativesOut)
+async def get_narratives(project_id: int, db: DbSession, user: CurrentUser):
+    """
+    The prose analysis wrote about this codebase, in reading order.
+
+    A dozen topics per project, the longest running to three thousand words, and
+    until now the only thing the product did with them was print their names as
+    chips. Composition reads them; a person could not.
+
+    Provenance travels with each one and is empty for anything written before the
+    agent started recording it. Empty is the honest answer there: guessing which
+    modules a narrative was anchored on, after the fact, would be a citation nobody
+    could check.
+    """
+    return await NarrativeService(db).list_for_project(project_id, user)
 
 
 @router.get("/{project_id}/apps", response_model=list[AppOut])

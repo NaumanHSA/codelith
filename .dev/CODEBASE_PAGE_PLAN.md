@@ -83,14 +83,31 @@ sentence.
 `[x]` **1.5** Tech stack and patterns as a strip beneath it. Both are single-word
 facts that took a quality-tier call to derive and currently reach nobody.
 
-## Phase 2 — The narratives, readable
+## Phase 2 — The narratives, readable — **done**
 
-`[ ]` **2.1** `GET /projects/{id}/narratives` — topics with their prose.
+*Built. `GET /projects/{id}/narratives` returns the prose in reading order, and the
+chips became a rail with the words beside it: 12 topics and 2 234 words on project 1,
+10 and 1 691 on project 2.*
 
-`[ ]` **2.2** A reader on the codebase page: the topic chips stop being decoration and
+*2.3 turned out to need a fix in analysis, not a read.* `KBNarrative.source_refs_json`
+is documented as recording "which modules/entities fed the narrative so QA can verify
+claims" and stored `{"generated_by": "narrative_writer_agent"}` — a fact about the
+writer, not about the codebase. The writer already knew: `_relevant_modules` picks the
+shortlist that goes into the prompt and `_facts` picks the entity kinds. Both are now
+recorded. The shortlist moved out of `_write` and into the caller so the list recorded
+is the same object that went into the prompt rather than a second derivation of it.
+
+Every knowledge base on this machine predates that, so the reader says **"sources not
+recorded on this run"** and will keep saying it until those projects are re-analysed.
+That is the honest answer: inferring which modules fed a narrative after the fact
+would print a citation nobody could check.
+
+`[x]` **2.1** `GET /projects/{id}/narratives` — topics with their prose.
+
+`[x]` **2.2** A reader on the codebase page: the topic chips stop being decoration and
 open the 3 000 words behind them.
 
-`[ ]` **2.3** Provenance per narrative, the same as a published page: which commit,
+`[x]` **2.3** Provenance per narrative, the same as a published page: which commit,
 which files it was anchored on.
 
 ## Phase 3 — The code, at last

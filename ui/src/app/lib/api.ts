@@ -13,7 +13,7 @@ import type {
   ChatEvent, ChatThread, ChatThreadSummary, ProjectApp, AppCatalogItem,
   JobReview, Drift, Preflight, Depth, AnalysisPreview,
   ModelRegistry, ModelDraft, ModelTest, Tier, EvidenceBody,
-  Publication, PublishAccepted, RendererInfo, Architecture,
+  Publication, PublishAccepted, RendererInfo, Architecture, Narratives,
 } from './types'
 
 export const API_BASE =
@@ -504,6 +504,9 @@ export const api = {
    */
   architecture: (projectId: number, signal?: AbortSignal) =>
     request<Architecture>(`/projects/${projectId}/architecture`, { signal }),
+
+  narratives: (projectId: number, signal?: AbortSignal) =>
+    request<Narratives>(`/projects/${projectId}/narratives`, { signal }),
 
   /** What this codebase unlocks, and what it does not yet. */
   projectApps: (projectId: number, signal?: AbortSignal) =>
