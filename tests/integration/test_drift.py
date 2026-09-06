@@ -44,8 +44,15 @@ async def project(db_session):
     return p
 
 
-async def _generation(db, project_id: int, sha: str, modules: list[dict], entities=()):
-    kb = KnowledgeBase(project_id=project_id, commit_sha=sha, status=KBStatus.READY)
+async def _generation(
+    db, project_id: int, sha: str, modules: list[dict], entities=(), architecture=None
+):
+    kb = KnowledgeBase(
+        project_id=project_id,
+        commit_sha=sha,
+        status=KBStatus.READY,
+        architecture_json=architecture or {},
+    )
     db.add(kb)
     await db.flush()
     for m in modules:
@@ -185,3 +192,88 @@ class TestPagesThatAreNowWrong:
 
         report = await DriftService(db_session).compare(project.id, before.id, after.id)
         assert report.modules and report.pages_at_risk == []
+
+
+def _map(*names, relations=(), types=None):
+    """An `architecture_json` column, in the shape the writer actually stores."""
+    types = types or {}
+    return {
+        "services": [{"name": n, "type": types.get(n, "service")} for n in names],
+        "relations": [
+            {"from": a, "to": b, "kind": k} for a, b, k in relations
+        ],
+    }
+
+
+class TestComparingTwoArchitectures:
+    """
+    The shape of the system, diffed.
+
+    The unit tests pin the rules. This pins the part only a database answers: that
+    the column round-trips through JSON storage and comes back as something
+    comparable, and that the guard survives a real row rather than a literal.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_service_appeared_and_a_connection_broke(self, db_session, project) -> None:
+        before = await _generation(
+            db_session, project.id, "ccccccc", [{"path": "app/a"}],
+            architecture=_map("api", "cache", relations=[("api", "cache", "reads")]),
+        )
+        after = await _generation(
+            db_session, project.id, "ddddddd", [{"path": "app/a"}],
+            architecture=_map("api", "worker", relations=[("api", "worker", "queues")]),
+        )
+
+        report = await DriftService(db_session).compare(project.id, before.id, after.id)
+
+        assert report.architecture_comparable is True
+        changes = {s.name: s.change for s in report.services}
+        assert changes == {"worker": "added", "cache": "removed"}
+        edges = {(r.source, r.target): r.change for r in report.relations}
+        assert edges == {("api", "cache"): "removed", ("api", "worker"): "added"}
+        assert "1 service(s) appeared" in report.summary()
+        assert "1 connection(s) broke" in report.summary()
+
+    @pytest.mark.asyncio
+    async def test_a_reading_with_no_map_claims_nothing(self, db_session, project) -> None:
+        """
+        Every knowledge base written before the architecture agent landed has `{}` in
+        this column, and on this machine that is all of them. Diffing a map against
+        an empty one would report every service as newly added.
+        """
+        before = await _generation(db_session, project.id, "eeeeeee", [{"path": "app/a"}])
+        after = await _generation(
+            db_session, project.id, "fffffff", [{"path": "app/a"}],
+            architecture=_map("api", "worker"),
+        )
+
+        report = await DriftService(db_session).compare(project.id, before.id, after.id)
+
+        assert report.architecture_comparable is False
+        assert report.services == [] and report.relations == []
+
+    @pytest.mark.asyncio
+    async def test_a_rewiring_with_no_module_movement_is_not_an_empty_report(
+        self, db_session, project
+    ) -> None:
+        """
+        The case the old `is_empty` got wrong. A release that moved no module but
+        rewired two services would have said "nothing structural changed" while the
+        diagram was different.
+        """
+        modules = [{"path": "app/a", "loc": 100}]
+        before = await _generation(
+            db_session, project.id, "1111111", modules,
+            architecture=_map("api", "db", relations=[("api", "db", "reads")]),
+        )
+        after = await _generation(
+            db_session, project.id, "2222222", modules,
+            architecture=_map("api", "db", relations=[("api", "db", "writes")]),
+        )
+
+        report = await DriftService(db_session).compare(project.id, before.id, after.id)
+
+        assert report.modules == []
+        assert report.is_empty is False
+        assert [r.change for r in report.relations] == ["reworded"]

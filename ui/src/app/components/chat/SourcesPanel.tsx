@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { Markdown } from '../Markdown'
 import type { ChatSource, EvidenceBody } from '../../lib/types'
@@ -73,9 +74,25 @@ function Body({ projectId, refText }: { projectId: number; refText: string }) {
       <div className="doc chat-answer max-h-[360px] overflow-auto px-2 py-1 text-[10.5px]">
         <Markdown>{fence}</Markdown>
       </div>
-      <p className="border-t border-rule px-2.5 py-1 font-mono text-[10px] text-ink-dim">
-        {body.path}
-        {body.start_line != null && `:${body.start_line}-${body.end_line}`}
+      {/* The excerpt answers "is that really there". This answers the next
+          question, which is "what is around it" - the same file in the source
+          viewer with these lines already lit. The excerpt stays: navigating away
+          from an answer to check a claim you can still see is the thing the panel
+          was built to stop. */}
+      <p className="flex items-baseline gap-2 border-t border-rule px-2.5 py-1 font-mono text-[10px] text-ink-dim">
+        <span className="min-w-0 flex-1 truncate">
+          {body.path}
+          {body.start_line != null && `:${body.start_line}-${body.end_line}`}
+        </span>
+        <Link
+          to={
+            `/app/projects/${projectId}/code?file=${encodeURIComponent(body.path)}` +
+            (body.start_line != null ? `#L${body.start_line}-L${body.end_line}` : '')
+          }
+          className="shrink-0 text-hot-ink hover:underline"
+        >
+          open in source
+        </Link>
       </p>
     </div>
   )

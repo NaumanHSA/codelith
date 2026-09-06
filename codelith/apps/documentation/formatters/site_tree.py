@@ -57,6 +57,42 @@ class ExportSection:
 
 
 @dataclass(slots=True)
+class SourceSegment:
+    """A run of consecutive lines, or a run of consecutive missing ones."""
+
+    kind: str
+    start: int
+    end: int
+    text: str = ""
+
+
+@dataclass(slots=True)
+class SourceFile:
+    """
+    One file's source, as the knowledge base retained it.
+
+    Carried on the tree so a published site can show the code its pages were
+    written from. A page saying "see `src/session/Session.js`" on a site the
+    reader cannot leave is a promise with nothing behind it, and it was the
+    largest honesty gap between an export and a site somebody trusts.
+
+    `segments` is a list, not a string, for the same reason the studio's viewer
+    takes one: the stored chunks do not tile a file, and a gap has to be drawn as
+    a gap rather than closed by sliding the next chunk up.
+    """
+
+    path: str
+    #: Assigned by `SiteTree.attach_sources` so the filename is unique across the
+    #: whole site and stable between builds.
+    slug: str
+    language: str = ""
+    segments: list[SourceSegment] = field(default_factory=list)
+    lines_indexed: int = 0
+    lines_missing: int = 0
+    chunks: int = 0
+
+
+@dataclass(slots=True)
 class SiteMeta:
     """
     What the codebase is, as opposed to what was written about it.
@@ -89,6 +125,9 @@ class SiteTree:
     home_markdown: str | None = None
     version_label: str | None = None
     meta: SiteMeta = field(default_factory=lambda: SiteMeta())
+    #: The code the pages were written from. Empty for a target that does not emit
+    #: source, and for a project whose reading kept nothing showable.
+    sources: list[SourceFile] = field(default_factory=list)
 
     @property
     def pages(self) -> list[ExportPage]:
@@ -109,6 +148,11 @@ class SiteTree:
         it happens to mention.
         """
         return {p.address for s in self.sections for p in s.pages}
+
+    @property
+    def sources_by_path(self) -> dict[str, SourceFile]:
+        """The emitted source files, by the path a citation would name."""
+        return {f.path: f for f in self.sources}
 
 
 def rewrite_links(
@@ -178,3 +222,115 @@ __all__ = [
     "rewrite_links",
     "slugify_filename",
 ]
+
+
+#: A fence opening or closing. Citations inside one are code being shown, not code
+#: being referred to, and linkifying them would put an anchor inside a `<pre>`.
+_FENCE = re.compile(r"^\s*(```|~~~)")
+
+#: An inline code span that is not already the text of a link. The lookarounds are
+#: what keep `[`src/x.js`](…)` from being wrapped a second time.
+_SPAN = re.compile(r"(?<!\[)`([^`\n]+)`(?!\])")
+
+#: The `:12-30` or `:12` a citation may carry. Split off before the lookup, because
+#: the map is keyed on paths and re-attached as the anchor.
+_RANGE = re.compile(r"^(.*?):(\d+)(?:-(\d+))?$")
+
+
+def link_citations(markdown: str, sources: dict[str, SourceFile], prefix: str) -> str:
+    """
+    Turn every citation naming an emitted file into a link to that file's page.
+
+    **Only exact matches.** A written page's inline code spans are a mixture:
+    real paths (`src/util/errors.js`), module names (`src.draw`), types
+    (`Image.Image`), and files that exist in the repository but were never indexed
+    (`package.json`). Measured across the pages on this machine, fourteen of
+    twenty-eight spans on one project resolve and five of ten on the other. Anything
+    that does not resolve is left exactly as it is, which is the same rule
+    `rewrite_links` follows for pages: a link that goes nowhere is worse than text
+    that never promised to.
+
+    A trailing `:12-30` becomes the anchor, so a citation to a range lands on the
+    range rather than at the top of the file.
+    """
+    if not sources:
+        return markdown
+
+    out: list[str] = []
+    fenced = False
+    for line in markdown.split("\n"):
+        if _FENCE.match(line):
+            fenced = not fenced
+            out.append(line)
+            continue
+        out.append(line if fenced else _SPAN.sub(lambda m: _link(m, sources, prefix), line))
+    return "\n".join(out)
+
+
+def _link(match, sources: dict[str, SourceFile], prefix: str) -> str:
+    raw = match.group(1).strip()
+    path, anchor = raw, ""
+
+    ranged = _RANGE.match(raw)
+    if ranged:
+        path = ranged.group(1)
+        start, end = ranged.group(2), ranged.group(3)
+        anchor = f"#L{start}-L{end}" if end else f"#L{start}"
+
+    found = sources.get(path)
+    if found is None:
+        return match.group(0)
+    return f"[`{match.group(1)}`]({prefix}{found.slug}.html{anchor})"
+
+
+def source_slug(path: str, taken: set[str]) -> str:
+    """
+    A filename for one source file, unique within the site and stable across builds.
+
+    Sanitising alone collides: `a/b.js` and `a-b.js` both become `a-b-js`. The
+    numbered suffix breaks the tie in the caller's iteration order, and the caller
+    iterates a sorted list, so the same repository produces the same filenames every
+    time. A published site whose URLs move on a rebuild is a site with broken
+    bookmarks.
+    """
+    base = re.sub(r"[^a-z0-9]+", "-", path.lower()).strip("-") or "file"
+    slug, n = base, 1
+    while slug in taken:
+        n += 1
+        slug = f"{base}-{n}"
+    taken.add(slug)
+    return slug
+
+
+def cited_paths(markdown: str) -> set[str]:
+    """
+    Every path a page's prose points at, before knowing which of them exist.
+
+    The counterpart to `link_citations`: that one decides what to link, this one
+    decides what to look for. Deliberately loose, because the caller intersects the
+    result with what the knowledge base actually holds and a candidate that turns
+    out to be a module name or a type simply finds nothing.
+
+    Fenced blocks are skipped for the same reason as in `link_citations`: code being
+    shown is not code being referred to, and a sample containing a filename is not a
+    citation of it.
+    """
+    found: set[str] = set()
+    fenced = False
+    for line in markdown.split("\n"):
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        for raw in _SPAN.findall(line):
+            text = raw.strip()
+            ranged = _RANGE.match(text)
+            if ranged:
+                text = ranged.group(1)
+            # A path has an extension. Without this the set fills with prose - every
+            # function name and flag in the page - and every one of them costs a
+            # database round trip to discover it is not a file.
+            if "." in text.rsplit("/", 1)[-1] and " " not in text:
+                found.add(text)
+    return found

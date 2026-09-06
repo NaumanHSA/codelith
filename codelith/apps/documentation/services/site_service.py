@@ -39,9 +39,14 @@ from codelith.apps.documentation.formatters.site_tree import (
     ExportPage,
     ExportSection,
     SiteTree,
+    SourceFile,
+    SourceSegment,
     rewrite_links,
+    cited_paths,
     slugify_filename,
+    source_slug,
 )
+from codelith.services.code_service import rebuild
 from codelith.core.exceptions import NotFoundError, ValidationError
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.db.repositories.site_repo import (
@@ -826,13 +831,83 @@ class SiteService:
             for entry in nav
             if isinstance(entry, dict)
         ]
-        return SiteTree(
+        tree = SiteTree(
             title=site.title,
             sections=sections,
             home_markdown=await self._home(site),
             version_label=version.label if version else None,
             meta=await self._meta(project_id),
         )
+        tree.sources = await self._sources(project_id, tree)
+        return tree
+
+    async def _sources(self, project_id: int, tree: SiteTree) -> list[SourceFile]:
+        """
+        The code the pages were written from, rebuilt from the knowledge base.
+
+        Two sets, and both are needed. `source_files_json` is provenance: what the
+        writer was handed. The inline code spans are what the prose actually points
+        a reader at, and they are not the same list - a page written from five files
+        cites eleven, of which some are modules, some are types, and some are real
+        files nothing indexed.
+
+        So: the union of the two, intersected with what the knowledge base can
+        actually show. A path nothing was stored for is dropped here rather than
+        emitted as an empty page, and `link_citations` then leaves its citation as
+        plain text.
+
+        Never fatal. A project with no usable reading gets no source pages and a site
+        that reads exactly as it did before.
+        """
+        from codelith.services.code_service import CodeService
+
+        wanted: set[str] = set()
+        for page in tree.pages:
+            wanted.update(page.source_files or [])
+            wanted.update(cited_paths(page.content_markdown))
+        if not wanted:
+            return []
+
+        try:
+            code = CodeService(self.db)
+            kb = await code.bases.get_latest_usable(project_id)
+            if kb is None:
+                return []
+            inventory = {
+                row["path"]: row
+                for row in await code.graph.file_inventory(project_id, kb.id)
+            }
+
+            files: list[SourceFile] = []
+            taken: set[str] = set()
+            # Sorted, so the slug suffix that breaks a collision is the same one on
+            # every rebuild and a published URL does not move.
+            for path in sorted(wanted):
+                chunks = await code.chunks.chunks_for_file(kb.id, path)
+                if not chunks:
+                    continue
+                meta = inventory.get(path, {})
+                segments, indexed, missing = rebuild(chunks, int(meta.get("loc") or 0))
+                files.append(
+                    SourceFile(
+                        path=path,
+                        slug=source_slug(path, taken),
+                        language=(meta.get("language") or chunks[0].language or ""),
+                        segments=[
+                            SourceSegment(
+                                kind=seg.kind, start=seg.start, end=seg.end, text=seg.text
+                            )
+                            for seg in segments
+                        ],
+                        lines_indexed=indexed,
+                        lines_missing=missing,
+                        chunks=len(chunks),
+                    )
+                )
+            return files
+        except Exception:  # noqa: BLE001 - source is an addition, never a blocker
+            logger.warning("export_sources_failed", project_id=project_id)
+            return []
 
     async def _meta(self, project_id: int) -> SiteMeta:
         """

@@ -44,6 +44,8 @@ from codelith.apps.documentation.formatters.site_tree import (
     SiteTree,
     rewrite_links,
     slugify_filename,
+    link_citations,
+    SourceFile,
 )
 
 #: The diagram-source blocks the studio folds under each diagram. They exist so an
@@ -55,6 +57,12 @@ _DIAGRAM_SOURCE = re.compile(
 )
 
 _ANCHOR_SAFE = re.compile(r"[^a-z0-9]+")
+
+
+#: The `section` value the source pages use. Not a real section slug: sections come
+#: from the site nav, and this tab is generated. Anything a nav could legally contain
+#: would risk colliding with it, hence the space.
+_SOURCE_TAB = "\x00source"
 
 
 def _anchor(text: str) -> str:
@@ -115,6 +123,13 @@ class StaticSiteFormatter:
             zf.writestr("index.html", self._index(tree, written, assets))
             for name, body in pages_html:
                 zf.writestr(name, body)
+            # The code the pages were written from. A page saying "see
+            # `src/session/Session.js`" on a site the reader cannot leave was a
+            # promise with nothing behind it.
+            for source in tree.sources:
+                zf.writestr(
+                    f"source/{source.slug}.html", self._source(tree, written, source)
+                )
             for name, data in assets.items():
                 zf.writestr(name, data)
 
@@ -154,11 +169,12 @@ class StaticSiteFormatter:
 
     def _page(self, tree, written, page: ExportPage, assets, *, prev, next_) -> str:
         source = _DIAGRAM_SOURCE.sub("", page.content_markdown)
-        body, headings = self._render(
-            rewrite_links(source, from_page=page.address, suffix=".html", present=tree.addresses),
-            assets=assets,
-            depth=1,
+        source = rewrite_links(
+            source, from_page=page.address, suffix=".html", present=tree.addresses
         )
+        # A page lives one directory down, so its source links climb back out.
+        source = link_citations(source, tree.sources_by_path, "../source/")
+        body, headings = self._render(source, assets=assets, depth=1)
 
         meta = ""
         if page.commit_sha or page.source_files:
@@ -194,6 +210,59 @@ class StaticSiteFormatter:
                 f"{lead}{meta}{body}</article>{nav}"
             ),
             title=f"{page.title} · {tree.title}",
+        )
+
+    def _source(self, tree: SiteTree, written, source: SourceFile) -> str:
+        """
+        One file, with its line numbers and its holes.
+
+        The same reconstruction the studio's viewer shows, and the same rule: a run
+        of lines nothing stored is drawn as a gap naming them, never closed by
+        sliding the next chunk up. A published site that quietly renumbered a file
+        would be worse than one that shows no code at all, because a reader has no
+        way to check it.
+
+        Not highlighted. Shipping a syntax highlighter would mean either a script
+        from a CDN, which the product promises never to load, or a few hundred
+        kilobytes per site to colour code nobody came here to read.
+        """
+        rows: list[str] = []
+        for segment in source.segments:
+            if segment.kind == "gap":
+                span = (
+                    f"line {segment.start}"
+                    if segment.start == segment.end
+                    else f"lines {segment.start}-{segment.end}"
+                )
+                rows.append(f'<div class="gap"><span>{span} not indexed</span></div>')
+                continue
+            for offset, line in enumerate(segment.text.split("\n")):
+                n = segment.start + offset
+                rows.append(
+                    f'<div class="ln" id="L{n}"><a href="#L{n}">{n}</a>'
+                    f"<code>{html.escape(line) or '&nbsp;'}</code></div>"
+                )
+
+        facts = [
+            f"{source.lines_indexed:,} line{'' if source.lines_indexed == 1 else 's'}",
+            f"{source.chunks} chunk{'' if source.chunks == 1 else 's'}",
+        ]
+        if source.lines_missing:
+            facts.append(f"{source.lines_missing} not indexed")
+        if source.language:
+            facts.append(html.escape(source.language))
+
+        main = (
+            f'<article class="doc src-page"><h1><code>{html.escape(source.path)}</code></h1>'
+            f'<p class="meta">{" · ".join(facts)}. Reconstructed from the indexed '
+            "chunks, which is the only copy kept: the repository is read and "
+            "discarded.</p>"
+            f'<div class="code">{"".join(rows)}</div></article>'
+        )
+        return self._shell(
+            tree, written, active=None, section=_SOURCE_TAB, depth=1,
+            headings=[], main=main,
+            title=f"{source.path} · {tree.title}",
         )
 
     def _index(self, tree: SiteTree, written, assets) -> str:
@@ -269,8 +338,12 @@ class StaticSiteFormatter:
 
         # Sections are tabs. The open one decides what the left rail contains, which
         # is the whole reason this is not one flat list of every page in the site.
+        # An empty `active` alone was enough while the only page without an address
+        # was the front page. A source page has no address either, and so lit
+        # Overview as well as Source.
+        home = active is None and section is None
         tabs = [
-            f'<a class="tab{" on" if active is None else ""}" href="{up}index.html">Overview</a>'
+            f'<a class="tab{" on" if home else ""}" href="{up}index.html">Overview</a>'
         ]
         for sec, pages in written:
             first = pages[0]
@@ -278,9 +351,26 @@ class StaticSiteFormatter:
             on = " on" if sec.slug == section else ""
             tabs.append(f'<a class="tab{on}" href="{href}">{html.escape(sec.title)}</a>')
 
+        # Last, and only when there is code behind it. The written sections are what
+        # the site is for; the source is what they are answerable to.
+        if tree.sources:
+            on = " on" if section == _SOURCE_TAB else ""
+            tabs.append(
+                f'<a class="tab{on}" href="{up}source/{tree.sources[0].slug}.html">Source</a>'
+            )
+
         side = ""
         current = next((pages for sec, pages in written if sec.slug == section), None)
-        if current:
+        if section == _SOURCE_TAB:
+            side = '<p class="rail-head">Files</p><ul class="rail">'
+            for source in tree.sources:
+                on = ' class="on"' if title.startswith(f"{source.path} ") else ""
+                side += (
+                    f'<li><a href="{up}source/{source.slug}.html"{on}>'
+                    f"{html.escape(source.path)}</a></li>"
+                )
+            side += "</ul>"
+        elif current:
             title_of = next(sec.title for sec, _ in written if sec.slug == section)
             side = f'<p class="rail-head">{html.escape(title_of)}</p><ul class="rail">'
             for page in current:
@@ -832,6 +922,40 @@ main { min-width: 0; padding: 30px 0 56px; }
 .doc pre:hover .copy, .copy:focus { opacity: 1; }
 .copy:hover { color: var(--hot-ink); border-color: var(--hot); }
 .doc img { max-width: 100%; height: auto; display: block; margin: 18px auto; }
+/* ── Source pages ───────────────────────────────────────────────────────────
+   One row per line, because the line number has to be linkable and a highlighted
+   range has to be paintable. A `<pre>` with a gutter beside it cannot do either
+   without the two columns drifting apart at some font size. */
+.src-page h1 { font-size: 18px; margin-bottom: 6px; }
+.src-page h1 code { font-size: 1em; background: none; border: 0; padding: 0; }
+.code {
+  border: 1px solid var(--rule); border-radius: 5px; background: var(--code-bg);
+  overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.55;
+}
+.ln { display: flex; }
+.ln:target { background: var(--hot-wash); }
+.ln > a {
+  flex: 0 0 56px; text-align: right; padding: 0 10px 0 0;
+  color: var(--ink-dim); text-decoration: none; user-select: none;
+  border-right: 1px solid var(--rule); background: var(--panel);
+  position: sticky; left: 0;
+}
+.ln > a:hover { color: var(--hot-ink); }
+.ln:target > a { background: var(--hot-wash); color: var(--hot-ink); }
+.ln > code {
+  padding: 0 14px; white-space: pre; color: var(--ink);
+  background: none; border: 0; border-radius: 0; font-size: 12px;
+}
+/* A run of lines nothing stored. Drawn across the file so it reads as a break in
+   it: joining the next chunk onto the last would show code in an order the file
+   does not have. */
+.gap {
+  display: flex; align-items: center; gap: 10px;
+  border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule);
+  background: var(--panel); color: var(--ink-dim);
+  font-size: 10.5px; letter-spacing: .06em; padding: 3px 0 3px 66px;
+}
+
 .doc table { width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 13.5px; }
 .doc th, .doc td { border: 1px solid var(--rule); padding: 7px 10px; text-align: left; }
 .doc th { background: var(--sunk); font-weight: 600; }

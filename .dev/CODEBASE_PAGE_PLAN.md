@@ -214,16 +214,67 @@ already exist on the graph store and are reachable only through MCP.
 `[x]` **5.2** Reach and `reach_weight` from `knowledge/preflight.py`, so "what breaks
 if I change this" is answerable in the studio and not only by an agent.
 
-## Phase 6 — Joining it up
+## Phase 6 — Joining it up — **done**
 
-`[ ]` **6.1** Citations in published documentation resolve into the code viewer
+*The whole plan is now complete.*
+
+**6.1** A published site emits a source page per cited file, off a `Source` tab,
+using the same reconstruction the studio's viewer shows and drawing gaps as gaps.
+Eighteen pages on one project, six on the other, 379 links, none broken.
+
+*The rule that makes it honest is which citations become links.* A written page's
+inline code spans are a mixture: real paths, module names (`src.draw`), types
+(`Image.Image`), and files that exist in the repository but were never indexed
+(`package.json`). Only an exact match against a file the knowledge base can actually
+show becomes a link; measured, that is fourteen of twenty-eight spans on one project
+and five of ten on the other. Everything else is left exactly as it was, which is the
+same rule `rewrite_links` already followed for pages.
+
+**6.2** Deliberately not what the line says. The sources panel had learned to open an
+excerpt in place since this was written, and replacing that with a navigation away
+from the answer would be a regression: checking a claim you can still see is what the
+panel was built for. So the excerpt stays and gains an **open in source** link, with
+the cited lines already lit.
+
+**6.3** Drift compares the two maps: services added, removed or retyped; edges added,
+removed or reworded. Keyed on the pair rather than the triple, so a verb change reads
+as one edge reworded instead of one cut and another opened.
+
+*And `is_empty` was wrong.* It asked only about modules and entities, so a release
+that moved no module but rewired two services reported "nothing structural changed"
+while the diagram was different.
+
+`[x]` **6.1** Citations in published documentation resolve into the code viewer
 (`PUBLISHING_PLAN.md` 6.4).
 
-`[ ]` **6.2** Ask-the-code sources open the same viewer rather than their own panel.
+`[x]` **6.2** Ask-the-code sources open the same viewer rather than their own panel.
 
-`[ ]` **6.3** Drift compares two architecture maps: a service that appeared, an edge
+`[x]` **6.3** Drift compares two architecture maps: a service that appeared, an edge
 that vanished. Two readings and a graph per reading already exist; this is assembly,
 and nothing else in the category can do it.
+
+---
+
+## What building it taught
+
+Kept because each of these cost real time to find, and none was visible from the plan.
+
+* **Chunks overlap as well as gap.** The plan recorded the gaps. `livenessLoop.js` is
+  252 lines whose chunks cover 423, so concatenation would have doubled code as well
+  as reordered it.
+* **`docstring` chunks carry the span of the symbol they describe** and two lines of
+  summary. Written at their declared start line they put a summary where a function
+  body goes.
+* **A guard only one caller knows about protects only that caller.** Twice: the
+  highlighter's size limit lived in the component, and `coerce` relied on its own
+  service checking the column was a dict. Both broke the moment a second caller
+  arrived.
+* **A correctness test can pass while the feature is unusable.** A catastrophically
+  backtracking regex pinned the browser's main thread and threw nothing.
+  `check-highlight.mjs` is a clock as well as a checker because of it.
+* **Most of what was missing was visibility, not capability.** `imports`,
+  `dependents`, `weight`, the narratives, the module summaries, the architecture map:
+  analysis had computed all of it and nothing had ever read it.
 
 ---
 

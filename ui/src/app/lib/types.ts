@@ -518,6 +518,23 @@ export interface DriftPageAtRisk {
   reason: string
 }
 
+/** A component that appeared, went, or became something else. */
+export interface DriftService {
+  name: string
+  change: 'added' | 'removed' | 'retyped'
+  type_before: string
+  type_after: string
+}
+
+/** An edge that appeared, went, or changed its verb. */
+export interface DriftRelation {
+  source: string
+  target: string
+  change: 'added' | 'removed' | 'reworded'
+  kind: string
+  kind_before: string
+}
+
 export interface Drift {
   project_id: number
   from_commit: string | null
@@ -529,6 +546,12 @@ export interface Drift {
   modules: DriftModule[]
   entities: DriftEntity[]
   pages_at_risk: DriftPageAtRisk[]
+  services: DriftService[]
+  relations: DriftRelation[]
+  /** The same distinction as `comparable`, one level down: both readings have
+   *  modules, only readings taken since the architecture agent landed have a map.
+   *  False means the shape diff was not attempted, not that the shape held. */
+  architecture_comparable: boolean
 }
 
 /* ── Pre-flight: what an edit would touch ─────────────────────────────────── */

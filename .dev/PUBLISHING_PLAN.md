@@ -265,10 +265,16 @@ how many files it was anchored on, and the footer names what produced it. The
 `[x]` **6.3** **Retention.** Keep the last N builds per publication, delete the rest.
 Disk fills otherwise, and nobody notices until it has.
 
-`[ ]` **6.4** **Citations that resolve.** Pages cite `src/foo.py:12-30`. In the studio
+`[x]` **6.4** **Citations that resolve.** Pages cite `src/foo.py:12-30`. In the studio
 those open real code; in a published site they are dead text today. Emit a code view
 per cited file, or inline the excerpt. This is the largest quality gap between an
 export and a site somebody trusts.
+
+*Done, as a page per cited file behind a `Source` tab, with `#L12-L30` anchors.
+Only citations naming a file the knowledge base can actually show become links: the
+rest of a page's inline code spans are module names, types, and files that were never
+indexed, and linking those would trade dead text for dead links.
+See `CODEBASE_PAGE_PLAN.md` phase 6.*
 
 `[x]` **6.5** **Search.** A prebuilt `assets/search.json`, fetched on the first
 keystroke and never on a page view, matched in the browser. `/` focuses it, Enter

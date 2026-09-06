@@ -80,6 +80,95 @@ def _first(data: dict, keys: tuple[str, ...]) -> str:
     return ""
 
 
+def coerce(raw: dict, commit_sha: str | None) -> ArchitectureOut:
+    """
+    Model output, made safe to draw.
+
+    Module-level because two callers need it and only one of them has a service:
+    drift compares the maps of two readings, and standing up an `ArchitectureService`
+    to reach a method that touches neither the session nor the instance would be
+    ceremony. The service delegates here so there is one set of rules.
+    """
+    # `architecture_json` is a JSON column, so it holds whatever was written to it -
+    # including a scalar. The caller in this module checked before calling; drift
+    # does not, and a guard only one caller knows about protects only that caller.
+    if not isinstance(raw, dict):
+        return ArchitectureOut(available=False, commit_sha=commit_sha)
+
+    services: list[ArchService] = []
+    seen: set[str] = set()
+    for item in _items(raw.get("services")):
+        if not isinstance(item, dict):
+            # A bare string is a service with a name and nothing else.
+            name = _text(item, 120)
+            if name and name not in seen:
+                seen.add(name)
+                services.append(ArchService(name=name))
+            continue
+        name = _text(item.get("name"), 120)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        services.append(
+            ArchService(
+                name=name,
+                type=_text(item.get("type"), 32),
+                description=_text(item.get("description")),
+                modules=_strings(item.get("modules")),
+            )
+        )
+
+    relations: list[ArchRelation] = []
+    dangling = 0
+    for item in _items(raw.get("relations")):
+        if not isinstance(item, dict):
+            continue
+        source = _first(item, _SOURCE_KEYS)
+        target = _first(item, _TARGET_KEYS)
+        if not source or not target:
+            continue
+        # An edge whose ends are not on the diagram cannot be drawn. Counted so
+        # the defect is visible rather than silently swallowed.
+        if source not in seen or target not in seen:
+            dangling += 1
+            continue
+        relations.append(
+            ArchRelation(source=source, target=target, kind=_text(item.get("kind"), 32))
+        )
+
+    layers: list[ArchLayer] = []
+    for item in _items(raw.get("layers")):
+        if not isinstance(item, dict):
+            continue
+        name = _text(item.get("name"), 60)
+        if name:
+            layers.append(ArchLayer(name=name, modules=_strings(item.get("modules"))))
+
+    stack_raw = raw.get("tech_stack")
+    stack = TechStack()
+    if isinstance(stack_raw, dict):
+        stack = TechStack(
+            language=_text(stack_raw.get("language"), 120),
+            frameworks=_strings(stack_raw.get("frameworks"), 20),
+            databases=_strings(stack_raw.get("databases"), 20),
+            infra=_strings(stack_raw.get("infra"), 20),
+        )
+
+    return ArchitectureOut(
+        # A map with no services is not a map. Everything else can be empty and
+        # the page still has something to draw.
+        available=bool(services),
+        commit_sha=commit_sha,
+        services=services,
+        relations=relations,
+        layers=layers,
+        patterns=_strings(raw.get("patterns"), 20),
+        entry_points=_strings(raw.get("entry_points"), 20),
+        tech_stack=stack,
+        dangling_relations=dangling,
+    )
+
+
 class ArchitectureService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -110,78 +199,8 @@ class ArchitectureService:
             return ArchitectureOut(available=False, commit_sha=kb.commit_sha)
 
     def _coerce(self, raw: dict, commit_sha: str | None) -> ArchitectureOut:
-        services: list[ArchService] = []
-        seen: set[str] = set()
-        for item in _items(raw.get("services")):
-            if not isinstance(item, dict):
-                # A bare string is a service with a name and nothing else.
-                name = _text(item, 120)
-                if name and name not in seen:
-                    seen.add(name)
-                    services.append(ArchService(name=name))
-                continue
-            name = _text(item.get("name"), 120)
-            if not name or name in seen:
-                continue
-            seen.add(name)
-            services.append(
-                ArchService(
-                    name=name,
-                    type=_text(item.get("type"), 32),
-                    description=_text(item.get("description")),
-                    modules=_strings(item.get("modules")),
-                )
-            )
-
-        relations: list[ArchRelation] = []
-        dangling = 0
-        for item in _items(raw.get("relations")):
-            if not isinstance(item, dict):
-                continue
-            source = _first(item, _SOURCE_KEYS)
-            target = _first(item, _TARGET_KEYS)
-            if not source or not target:
-                continue
-            # An edge whose ends are not on the diagram cannot be drawn. Counted so
-            # the defect is visible rather than silently swallowed.
-            if source not in seen or target not in seen:
-                dangling += 1
-                continue
-            relations.append(
-                ArchRelation(source=source, target=target, kind=_text(item.get("kind"), 32))
-            )
-
-        layers: list[ArchLayer] = []
-        for item in _items(raw.get("layers")):
-            if not isinstance(item, dict):
-                continue
-            name = _text(item.get("name"), 60)
-            if name:
-                layers.append(ArchLayer(name=name, modules=_strings(item.get("modules"))))
-
-        stack_raw = raw.get("tech_stack")
-        stack = TechStack()
-        if isinstance(stack_raw, dict):
-            stack = TechStack(
-                language=_text(stack_raw.get("language"), 120),
-                frameworks=_strings(stack_raw.get("frameworks"), 20),
-                databases=_strings(stack_raw.get("databases"), 20),
-                infra=_strings(stack_raw.get("infra"), 20),
-            )
-
-        return ArchitectureOut(
-            # A map with no services is not a map. Everything else can be empty and
-            # the page still has something to draw.
-            available=bool(services),
-            commit_sha=commit_sha,
-            services=services,
-            relations=relations,
-            layers=layers,
-            patterns=_strings(raw.get("patterns"), 20),
-            entry_points=_strings(raw.get("entry_points"), 20),
-            tech_stack=stack,
-            dangling_relations=dangling,
-        )
+        """Kept as a method because the tests and `get` both reach it here."""
+        return coerce(raw, commit_sha)
 
 
-__all__ = ["ArchitectureService"]
+__all__ = ["ArchitectureService", "coerce"]

@@ -42,6 +42,21 @@ class PageAtRiskOut(BaseModel):
     reason: str
 
 
+class ServiceChangeOut(BaseModel):
+    name: str
+    change: str
+    type_before: str = ""
+    type_after: str = ""
+
+
+class RelationChangeOut(BaseModel):
+    source: str
+    target: str
+    change: str
+    kind: str = ""
+    kind_before: str = ""
+
+
 class DriftOut(BaseModel):
     project_id: int
     from_commit: str | None
@@ -51,6 +66,13 @@ class DriftOut(BaseModel):
     modules: list[ModuleChangeOut] = []
     entities: list[EntityChangeOut] = []
     pages_at_risk: list[PageAtRiskOut] = []
+    services: list[ServiceChangeOut] = []
+    relations: list[RelationChangeOut] = []
+    #: Separate from `comparable`, which is about having two readings at all. This
+    #: is about both of them having an architecture map: a reading taken before that
+    #: column existed can be diffed for modules and not for shape, and the page
+    #: should say so rather than show an empty diff that looks like "no change".
+    architecture_comparable: bool = False
 
 
 @router.get("", response_model=DriftOut)
@@ -67,6 +89,11 @@ async def get_drift(
     Defaults to the two most recent. A project analysed once is not an error and not
     an empty diff — it is `comparable: false`, because there is no history to compare
     against yet, and saying "nothing changed" would be a different and untrue claim.
+
+    `architecture_comparable` is the same distinction one level down. Both readings
+    have modules; only readings taken since the architecture agent landed have a map.
+    Diffing a map against nothing would report every service as newly added, so it
+    reports nothing and says which case you are in.
     """
     await ProjectService(db).get(project_id, user)  # authorises and 404s
     svc = DriftService(db)
@@ -110,6 +137,21 @@ async def get_drift(
                 changed_files=p.changed_files, reason=p.reason,
             )
             for p in report.pages_at_risk
+        ],
+        architecture_comparable=report.architecture_comparable,
+        services=[
+            ServiceChangeOut(
+                name=x.name, change=x.change,
+                type_before=x.type_before, type_after=x.type_after,
+            )
+            for x in report.services
+        ],
+        relations=[
+            RelationChangeOut(
+                source=r.source, target=r.target, change=r.change,
+                kind=r.kind, kind_before=r.kind_before,
+            )
+            for r in report.relations
         ],
     )
 

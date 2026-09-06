@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.models.knowledge import KBEntity, KBModule, KnowledgeBase
 from codelith.models.site import DocPage, DocSite
+from codelith.services.architecture_service import coerce
 
 
 @dataclass(slots=True)
@@ -56,6 +57,27 @@ class EntityChange:
 
 
 @dataclass(slots=True)
+class ServiceChange:
+    """A component that appeared, went, or became something else."""
+
+    name: str
+    change: str  # added | removed | retyped
+    type_before: str = ""
+    type_after: str = ""
+
+
+@dataclass(slots=True)
+class RelationChange:
+    """An edge that appeared, went, or changed its verb."""
+
+    source: str
+    target: str
+    change: str  # added | removed | reworded
+    kind: str = ""
+    kind_before: str = ""
+
+
+@dataclass(slots=True)
 class PageAtRisk:
     """A written page whose source has moved under it."""
 
@@ -75,10 +97,16 @@ class DriftReport:
     modules: list[ModuleChange] = field(default_factory=list)
     entities: list[EntityChange] = field(default_factory=list)
     pages_at_risk: list[PageAtRisk] = field(default_factory=list)
+    services: list[ServiceChange] = field(default_factory=list)
+    relations: list[RelationChange] = field(default_factory=list)
+    #: False when either reading has no architecture map. Without this, comparing
+    #: against a knowledge base written before the column existed reports every
+    #: service as newly added, which is a confident description of nothing.
+    architecture_comparable: bool = False
 
     @property
     def is_empty(self) -> bool:
-        return not (self.modules or self.entities)
+        return not (self.modules or self.entities or self.services or self.relations)
 
     def summary(self) -> str:
         """One sentence, for a person who will read no further."""
@@ -94,6 +122,18 @@ class DriftReport:
             bits.append(f"{removed} removed")
         if changed:
             bits.append(f"{changed} changed shape")
+        # The architecture is the one part that says what the change *means*: a
+        # module growing by 200 lines is a fact, a service appearing is a
+        # decision somebody made.
+        gone = sum(1 for x in self.services if x.change == "removed")
+        new = sum(1 for x in self.services if x.change == "added")
+        if new:
+            bits.append(f"{new} service(s) appeared")
+        if gone:
+            bits.append(f"{gone} service(s) went")
+        cut = sum(1 for r in self.relations if r.change == "removed")
+        if cut:
+            bits.append(f"{cut} connection(s) broke")
         if self.pages_at_risk:
             bits.append(f"**{len(self.pages_at_risk)} written page(s) now describe code that moved**")
         return ", ".join(bits) + "."
@@ -144,7 +184,76 @@ class DriftService:
         report.modules = await self._module_changes(before_id, after_id)
         report.entities = await self._entity_changes(before_id, after_id)
         report.pages_at_risk = await self._pages_at_risk(project_id, report.modules)
+        self._architecture(report, before, after)
         return report
+
+    @staticmethod
+    def _architecture(report: DriftReport, before, after) -> None:
+        """
+        The two maps, compared.
+
+        Two readings and a map per reading have both existed for a while and nothing
+        had put them side by side. This is the difference between "these modules
+        changed size" and "the thing that talked to the database no longer does".
+
+        Silent unless *both* readings have a map. A knowledge base written before
+        `architecture_json` existed, or one whose call produced nothing usable, would
+        otherwise make every service look newly added and every edge newly cut. The
+        flag says which case a reader is in.
+        """
+        left = coerce(before.architecture_json or {}, None) if before else None
+        right = coerce(after.architecture_json or {}, None) if after else None
+        if left is None or right is None or not (left.available and right.available):
+            return
+        report.architecture_comparable = True
+
+        was = {s.name: s for s in left.services}
+        now = {s.name: s for s in right.services}
+        for name in sorted(set(was) | set(now)):
+            a, b = was.get(name), now.get(name)
+            if a is None:
+                report.services.append(
+                    ServiceChange(name=name, change="added", type_after=b.type)
+                )
+            elif b is None:
+                report.services.append(
+                    ServiceChange(name=name, change="removed", type_before=a.type)
+                )
+            elif a.type != b.type:
+                # Worth reporting: an "api" that became a "worker" is a rewrite, not
+                # a rename, and the diagram would otherwise look unchanged.
+                report.services.append(
+                    ServiceChange(
+                        name=name, change="retyped", type_before=a.type, type_after=b.type
+                    )
+                )
+
+        # Keyed on the pair, so a relation whose verb changed reads as one edge
+        # reworded rather than as one removed and another added.
+        old_edges = {(r.source, r.target): r.kind for r in left.relations}
+        new_edges = {(r.source, r.target): r.kind for r in right.relations}
+        for pair in sorted(set(old_edges) | set(new_edges)):
+            source, target = pair
+            if pair not in old_edges:
+                report.relations.append(
+                    RelationChange(
+                        source=source, target=target, change="added", kind=new_edges[pair]
+                    )
+                )
+            elif pair not in new_edges:
+                report.relations.append(
+                    RelationChange(
+                        source=source, target=target, change="removed",
+                        kind_before=old_edges[pair],
+                    )
+                )
+            elif old_edges[pair] != new_edges[pair]:
+                report.relations.append(
+                    RelationChange(
+                        source=source, target=target, change="reworded",
+                        kind=new_edges[pair], kind_before=old_edges[pair],
+                    )
+                )
 
     # ── the diffs ─────────────────────────────────────────────────────────────
 
