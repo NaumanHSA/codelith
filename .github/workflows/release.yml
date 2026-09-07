@@ -1,0 +1,70 @@
+name: Release
+
+# Fires on a version tag. Building is automatic; publishing waits for a human to
+# approve the `pypi` environment, because a release that goes out on a mistyped tag
+# cannot be taken back — PyPI does not allow re-uploading a version.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.19"
+          cache: "pnpm"
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Build the studio
+        # The package ships the built studio, so the API can serve it. Without this
+        # step the wheel installs and the browser gets nothing.
+        working-directory: ui
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build
+        run: |
+          pip install build
+          python -m build
+
+      - name: Check the metadata
+        run: |
+          pip install twine
+          twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Trusted publishing: no token in the repository. Configure the publisher once on
+    # PyPI against this repository and workflow.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/codelith
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

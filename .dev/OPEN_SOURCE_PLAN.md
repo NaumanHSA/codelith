@@ -68,29 +68,34 @@ to a number nobody can act on.
 names that no longer exist and a cluster nobody runs; `PROGRESS.md` is an internal work
 log that a visitor should not meet first. Log moves to `.dev/`.
 
-## Phase 2 — What a repository needs
+## Phase 2 — What a repository needs — **done**
 
-`[ ]` **2.1** `LICENSE` (Apache-2.0), and the header/notice wherever the project
+*Also removed `doc-gen.yml`, found while restoring CI: it posted to a hosted
+`DOCANY_API_URL` with secrets nobody holds, against the legacy jobs endpoint, for a
+deployment that does not exist. A workflow describing the product as a service somebody
+calls over the network is the opposite of what it claims to be.*
+
+`[x]` **2.1** `LICENSE` (Apache-2.0), and the header/notice wherever the project
 identifies itself.
 
-`[ ]` **2.2** `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1, with a real contact.
+`[x]` **2.2** `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1, with a real contact.
 
-`[ ]` **2.3** `CONTRIBUTING.md`, and specifically *not* a generic one. This repository
+`[x]` **2.3** `CONTRIBUTING.md`, and specifically *not* a generic one. This repository
 has rules a newcomer will break on their first patch: the base may not import an app,
 apps may not import each other (`tests/unit/test_module_isolation.py` fails if they
 do), no hardcoded colours outside `theme.css`, no language-specific code outside
 `codelith/languages/`, DB access only through repositories. Those belong here.
 
-`[ ]` **2.4** `SECURITY.md` and `CHANGELOG.md`.
+`[x]` **2.4** `SECURITY.md` and `CHANGELOG.md`.
 
-`[ ]` **2.5** `.github/`: bug and feature issue templates, a PR template,
+`[x]` **2.5** `.github/`: bug and feature issue templates, a PR template,
 `dependabot.yml`.
 
-`[ ]` **2.6** CI restored to `push` and `pull_request`, matrixed on 3.11/3.12/3.13,
+`[x]` **2.6** CI restored to `push` and `pull_request`, matrixed on 3.11/3.12/3.13,
 running the Python suite and the UI build. A repository other people install from needs
 CI that runs without being asked.
 
-`[ ]` **2.7** A release workflow: build and publish to PyPI on a tag, via trusted
+`[x]` **2.7** A release workflow: build and publish to PyPI on a tag, via trusted
 publishing. Wired but not fired — publishing is the maintainer's call.
 
 ## Phase 3 — Docker that actually opens in a browser

@@ -1,0 +1,39 @@
+name: Feature request
+description: Something Codelith should be able to do and cannot.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        The problem, not the solution. What you were doing when you wanted this, and
+        what you did instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you think would help
+      description: Optional. A shape for it, if you have one in mind.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Analysis (reading a repository)
+        - Documentation (writing pages)
+        - Ask the code
+        - What changed (drift)
+        - Publishing
+        - MCP / agent integration
+        - The studio
+        - CLI
+        - Packaging or deployment
+        - Something else
+    validations:
+      required: true

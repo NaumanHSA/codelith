@@ -1,0 +1,81 @@
+name: Bug report
+description: Something behaves differently from how it is documented or how it obviously should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else, please run `codelith doctor` and paste its output below.
+        It checks the model endpoints, the database and the embedding model, and it
+        resolves a good share of reports on its own.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I ran an analysis on a Go repository and it finished with 0 modules.
+        I expected the packages to be listed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`codelith doctor` output"
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.1.0, or the commit SHA if you are running from source"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running it
+      options:
+        - From source (make dev + pnpm dev)
+        - Docker
+        - Installed package
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11, macOS 15, Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: models
+    attributes:
+      label: Which models
+      description: >
+        Provider and model for each tier, if the problem involves analysis, composition
+        or asking. A local endpoint plus its base URL is fine — no keys, please.
+      placeholder: |
+        quality: openai / gpt-4o
+        fast:    local / qwen3-8b at http://localhost:1234/v1
+        embedding: local / nomic-embed-text-v1.5
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        The job's trace under `./runs/{job_id}/` is usually the most useful thing here.
+        Redact anything from your own source that you would rather not publish.
+      render: text
+    validations:
+      required: false
