@@ -38,6 +38,47 @@ from codelith.memory.vector_store import VectorStore
 #: all of them, and the fill step decides how many actually fit.
 _RETRIEVAL_CANDIDATES = 24
 
+#: How deep the vector half goes before fusion. Wider than the caller's limit so a
+#: chunk the named half ranks first can still be joined by its semantic neighbours.
+_FUSION_CANDIDATES = 24
+
+#: Ceiling on the literal-substring fallback. It is unranked, so a common word would
+#: otherwise flood the result with whatever the database happened to return first.
+_LITERAL_CANDIDATES = 6
+
+#: Reciprocal-rank-fusion constant. 60 is the value from the original paper and the
+#: one every implementation uses; it flattens the difference between rank 1 and rank 2
+#: enough that a list which is confidently wrong cannot dominate one that is right.
+_RRF_K = 60
+
+
+def _fuse(named: list, vector: list, limit: int) -> list:
+    """
+    One ranking out of two, without pretending the scores are comparable.
+
+    Cosine distance and "this is literally the name you typed" are not on the same
+    scale and cannot be added, so nothing here adds them: fusion is on *rank*, which
+    is what reciprocal rank fusion exists for.
+
+    The exception is deliberate. A chunk the named half put first is pinned to the
+    front rather than fused, because the case this whole path was built for is a
+    reader typing a function name: if the chunk declaring it is present and does not
+    surface, the answer is "not found" and the reader is told something false.
+    """
+    order: dict[int, float] = {}
+    for rank, chunk in enumerate(named):
+        order[chunk.id] = order.get(chunk.id, 0.0) + 1.0 / (_RRF_K + rank)
+    for rank, chunk in enumerate(vector):
+        order[chunk.id] = order.get(chunk.id, 0.0) + 1.0 / (_RRF_K + rank)
+
+    by_id = {c.id: c for c in [*named, *vector]}
+    pinned = [named[0]] if named else []
+    rest = sorted(
+        (c for c in by_id.values() if not pinned or c.id != pinned[0].id),
+        key=lambda c: -order[c.id],
+    )
+    return [*pinned, *rest][:limit]
+
 #: Per-narrative ceiling inside a section bundle. Section context competes with
 #: verbatim source for the same budget, so narratives stay bounded here even though
 #: strategy and the planner now read them whole.
@@ -274,22 +315,115 @@ class SectionContextBuilder:
         Defaults to code. Prose is never returned by accident: a caller that wants it
         has to name it, and the policy has to allow it.
         """
-        embedding = await create_embedding(query)
-        if embedding is None:
-            return []
         wanted = chunk_types if chunk_types is not None else frozenset({CODE})
         if not self.policy.allow_prose:
             wanted = wanted & frozenset({CODE})
         if not wanted:
             return []
-        return await self.store.search(
-            project_id=self.project_id,
-            query_embedding=embedding,
-            limit=limit,
-            kb_id=self.kb_id,
-            exclude_paths=exclude or None,
-            chunk_types=wanted,
-        )
+
+        # Both halves, always. The vector half answers "where is rate limiting
+        # handled"; the named half answers "update_with_detection", which the vector
+        # half demonstrably cannot — a bare identifier embeds to its meaning and lands
+        # on code that is *about* the same subject rather than on the file that
+        # declares it.
+        named = await self._chunks_by_name(query, wanted, exclude)
+
+        vector: list = []
+        embedding = await create_embedding(query)
+        if embedding is not None:
+            vector = await self.store.search(
+                project_id=self.project_id,
+                query_embedding=embedding,
+                # Over-fetched so fusion has something to fuse. Costs one extra slice
+                # of an in-process ranking that has already loaded the rows.
+                limit=max(limit, _FUSION_CANDIDATES),
+                kb_id=self.kb_id,
+                exclude_paths=exclude or None,
+                chunk_types=wanted,
+            )
+
+        if not named:
+            return vector[:limit]
+        return _fuse(named, vector, limit)
+
+    async def _chunks_by_name(
+        self, query: str, wanted: frozenset[str], exclude: list[str] | None
+    ) -> list:
+        """
+        Chunks found by what things are called rather than what they mean.
+
+        Two routes, and the second is the safety net for names that are not symbols at
+        all: an env var, a route path, a config key. Both are ordinary SQL, so this
+        adds no model call to a search.
+
+        Silent without a session. The policy tests build this class around a stubbed
+        store and no database on purpose, to check what the *policy* admits; the named
+        half has nothing to read in that state and the vector half answers alone.
+        """
+        if self.db is None:
+            return []
+
+        from sqlalchemy import select as _select
+
+        from codelith.knowledge.lexical import find_symbols, query_terms
+        from codelith.models.chunk import CodeChunk
+
+        hits = await find_symbols(self.db, self.kb_id, self.project_id, query)
+        blocked = set(exclude or ())
+
+        found: list = []
+        seen: set[int] = set()
+
+        if hits:
+            paths = [h.path for h in hits if h.path not in blocked]
+            if paths:
+                rows = (
+                    await self.db.execute(
+                        _select(CodeChunk).where(
+                            CodeChunk.kb_id == self.kb_id,
+                            CodeChunk.source_path.in_(paths),
+                            CodeChunk.chunk_type.in_(list(wanted)),
+                        )
+                    )
+                ).scalars().all()
+                by_path: dict[str, list] = {}
+                for row in rows:
+                    by_path.setdefault(row.source_path, []).append(row)
+
+                # Strongest symbol first, and for each one the chunk that actually
+                # spans its declaration. A file can be many chunks; the one holding
+                # line 65 is the answer, and the rest are noise.
+                for hit in hits:
+                    for chunk in by_path.get(hit.path, []):
+                        start = chunk.start_line or 1
+                        end = chunk.end_line or start
+                        if start <= hit.line <= end and chunk.id not in seen:
+                            seen.add(chunk.id)
+                            found.append(chunk)
+                            break
+
+        # The literal fallback. Runs when the symbol table had nothing to say, which
+        # is every name analysis does not model as a symbol.
+        if not found:
+            terms = [t for t in query_terms(query) if len(t) >= 4][:2]
+            for term in terms:
+                rows = (
+                    await self.db.execute(
+                        _select(CodeChunk)
+                        .where(
+                            CodeChunk.kb_id == self.kb_id,
+                            CodeChunk.chunk_type.in_(list(wanted)),
+                            CodeChunk.content.ilike(f"%{term}%"),
+                        )
+                        .limit(_LITERAL_CANDIDATES)
+                    )
+                ).scalars().all()
+                for row in rows:
+                    if row.id not in seen and row.source_path not in blocked:
+                        seen.add(row.id)
+                        found.append(row)
+
+        return found
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
