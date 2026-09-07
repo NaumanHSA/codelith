@@ -94,9 +94,15 @@ const LEGEND: [string, string][] = [
 
 /* ── Sizes ────────────────────────────────────────────────────────── */
 
+/** Thousands as `20.9k`. A role card is 166px and a grouped six-digit count does
+ *  not fit in it; a clipped number reads as a different number. */
+function compact(n: number): string {
+  return n >= 10_000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString()
+}
+
 const SIZE: Record<Exclude<Kind, 'symbols'>, { w: number; h: number }> = {
   root: { w: 208, h: 50 },
-  role: { w: 146, h: 38 },
+  role: { w: 166, h: 38 },
   module: { w: 158, h: 40 },
   file: { w: 150, h: 40 },
 }
@@ -160,6 +166,14 @@ const ALPHA_MIN = 0.01
 const restLength = (kids: number, childWidth: number) =>
   Math.max(112, (kids * (childWidth + 16)) / (2 * Math.PI))
 
+/** How many monospace characters fit on a card's second line. The inset differs by
+ *  kind (a role pill leaves room for its dot) and the right edge has to clear the
+ *  "+" that says a node can be opened. */
+function metaChars(kind: Kind, w: number): number {
+  const inset = kind === 'role' ? 26 : 14
+  return Math.max(8, Math.floor((w - inset - 14) / 5.1))
+}
+
 const trim = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text)
 
 /** A card's second line has about twenty-three characters. "javascript" spends
@@ -207,7 +221,7 @@ function buildTree(
       id: `role:${role}`,
       kind: 'role',
       label: role.replace(/_/g, ' ').toUpperCase(),
-      meta: `${entries.length} modules · ${lines.toLocaleString()} lines`,
+      meta: `${entries.length} modules · ${compact(lines)} lines`,
       full: role,
       parent: 'root',
       children: [],
@@ -1026,7 +1040,7 @@ function Card({
         fontFamily="var(--font-mono)"
         fill={node.kind === 'root' && !on ? 'var(--term-dim)' : 'var(--ink-dim)'}
       >
-        {trim(node.meta, 23)}
+        {trim(node.meta, metaChars(node.kind, w))}
       </text>
       {hasMore && (
         <text

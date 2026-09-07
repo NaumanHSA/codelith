@@ -125,13 +125,13 @@ the API answers. A Dockerfile that has never been run is a guess.
 
 ## Phase 4 — The README and what it shows
 
-`[ ]` **4.1** Screenshots of the studio against real data: home, the knowledge graph,
+`[x]` **4.1** Screenshots of the studio against real data: home, the knowledge graph,
 the source viewer, a published site.
 
-`[ ]` **4.2** An architecture diagram in the product's own visual language — read once,
+`[x]` **4.2** An architecture diagram in the product's own visual language — read once,
 serve it: ingest → analyse → knowledge base → the apps and MCP that consume it.
 
-`[ ]` **4.3** Rewrite `README.md`: banner, badges that resolve, one paragraph on what
+`[x]` **4.3** Rewrite `README.md`: banner, badges that resolve, one paragraph on what
 it is, the diagram, what is in the box, quick start, Docker, MCP setup for Claude Code
 and Cursor, install options, license, support.
 

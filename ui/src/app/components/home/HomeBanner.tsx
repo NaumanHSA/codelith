@@ -30,13 +30,13 @@ import type { Project } from '../../lib/types'
 
 /** The specimen run. Illustrative — see the note above. */
 const TERMINAL = [
-  { t: 'cmd', s: '$ codelith analyse github.com/acme/neurosurfer' },
-  { t: 'ok', s: '  ✓ repo_analyzer        257 files · 45 modules          3.7s' },
-  { t: 'ok', s: '  ✓ structured_extractor 45 modules · 77 facts          141ms' },
-  { t: 'ok', s: '  ✓ semantic_indexer     1,103 chunks · pgvector          21s' },
-  { t: 'ok', s: '  ✓ module_summarizer    40/40 summarised                 13s' },
-  { t: 'ok', s: '  ✓ architecture_synth   5 components mapped              93s' },
-  { t: 'live', s: '  … narrative_writer     writing 6 narratives…' },
+  { t: 'cmd', s: '$ codelith analyse github.com/NaumanHSA/neurosurfer' },
+  { t: 'ok', s: '  ✓ repo_analyzer        355 files · 65 modules          4.1s' },
+  { t: 'ok', s: '  ✓ structured_extractor 65 modules · 185 facts         162ms' },
+  { t: 'ok', s: '  ✓ semantic_indexer     2,922 chunks · 768-dim          24s' },
+  { t: 'ok', s: '  ✓ module_summarizer    65/65 summarised                 31s' },
+  { t: 'ok', s: '  ✓ architecture_synth   8 roles · 5 layers mapped        88s' },
+  { t: 'live', s: '  … narrative_writer     writing 12 narratives…' },
 ]
 
 export default function HomeBanner({ projects }: { projects: Project[] | null }) {
@@ -60,7 +60,7 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
         <div className="border-rule px-5 py-10 lg:border-r lg:py-12">
           <div className="mb-5 flex flex-wrap gap-1.5">
             <Chip>open source</Chip>
-            <Chip>MIT</Chip>
+            <Chip>APACHE-2.0</Chip>
             <Chip>self-hosted</Chip>
             <Chip tone="hot">● runs fully offline</Chip>
           </div>

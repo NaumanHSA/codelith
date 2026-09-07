@@ -1,193 +1,141 @@
-# Codelith
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Codelith — read once, serve it" width="100%">
+</p>
 
-**Your coding agent re-reads your repository from scratch every session, by grepping.
-Codelith reads it once and serves it.**
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-ff6b35?style=flat-square"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-ff6b35?style=flat-square">
+  <a href="https://github.com/NaumanHSA/codelith/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/NaumanHSA/codelith/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="MCP: 8 tools" src="https://img.shields.io/badge/MCP-8%20tools-14120f?style=flat-square">
+  <img alt="Runs offline" src="https://img.shields.io/badge/runs-fully%20offline-2f9e44?style=flat-square">
+</p>
+
+---
+
+## What this is
+
+Your coding agent re-reads your repository from scratch every session, by grepping.
+
+Codelith reads it **once** — every file, route, entrypoint, module boundary and
+dependency — and stores that reading as a **knowledge base** pinned to the commit it
+read. Then it serves that reading: to your editor over MCP, to a question-answering
+app with checked citations, to a documentation writer, and to a diff that tells you
+what moved between two commits.
+
+**Analysis is the product. The apps are what it unlocks.**
+
+Everything runs on your machine. The knowledge base is one SQLite file under
+`~/.codelith`; the models are whichever OpenAI-compatible endpoint you point it at —
+LM Studio, Ollama, vLLM, llama.cpp, or a hosted API if you want one. There is no
+database to run, no queue, no vector service, and no account anywhere.
+
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="Sources are ingested, analysed once per commit into a knowledge base, and read by four apps and an MCP server." width="100%">
+</p>
+
+---
+
+## Quick start
+
+### Docker — one container, one address
+
+The image builds the studio, serves it from the API, creates the database and seeds an
+account. Nothing else to install.
 
 ```bash
-pipx install codelith          # or: pip install -e .
-codelith analyse .             # reads the repo, builds a knowledge base
-codelith mcp                   # serves it to Claude Code, Cursor, anything MCP
+git clone https://github.com/NaumanHSA/codelith.git
+cd codelith
+docker compose up --build -d
 ```
 
-Point an editor at it and the agent can ask *what calls this*, *what breaks if I change
-it*, *where is auth handled* — and get an answer from a structured reading of your code,
-pinned to a commit, instead of thirty tool calls spent rediscovering the same thing.
+Open **<http://localhost:8000>** and sign in with `admin@codelith.dev` / `admin1234`.
 
-```jsonc
-// .mcp.json
-{ "mcpServers": { "codelith": { "command": "codelith", "args": ["mcp"] } } }
+> **Your model stays on your machine.** A container's `localhost` is the container, so
+> a model server running on your host is not reachable at the address that works
+> everywhere else. Compose maps `host.docker.internal` for exactly this, and the studio
+> says so at the field where you type a model endpoint — with a button that rewrites it
+> for you. Point the tiers at `http://host.docker.internal:1234/v1` and it works.
+
+`make docker` does the same thing and prints the address. `make docker-down` stops it;
+the knowledge bases live in a named volume and survive.
+
+### From source
+
+Needs Python 3.11+ and, for the studio, Node ≥ 20.19.
+
+```bash
+git clone https://github.com/NaumanHSA/codelith.git
+cd codelith
+pip install -e ".[dev]"
+
+python scripts/seed_dev.py     # the first account
+make dev                       # API on :8000
+
+# a second terminal
+cd ui && pnpm install && pnpm dev    # studio on :5173
 ```
 
-**Nothing to install and nothing leaves your machine.** The knowledge base is a SQLite
-file under `~/.codelith`; the models run in [LM Studio](https://lmstudio.ai/) or any
-OpenAI-compatible endpoint you point it at. No database to run, no queue, no cloud.
+`.env` is optional — every setting has a working default and `.env.example` documents
+them. The database is a file under `~/.codelith` (or `CODELITH_HOME`), created on first
+run, so there is no migrate step for a fresh install.
 
-That same knowledge base is what the other apps read — documentation, grounded Q&A —
-and it is why the second thing you ask for is cheap.
+### From the command line
+
+The CLI is a **client**: it talks to a running Codelith server, so start one of the
+above first.
+
+```bash
+codelith login                          # remembers the token
+codelith analyse .                      # or a GitHub URL, or a folder
+codelith ask "how does auth work?"
+codelith status                         # what has been analysed
+codelith doctor                         # check the config before it fails deep
+codelith mcp                            # serve the knowledge base over MCP
+```
+
+---
+
+## The studio
+
+<p align="center">
+  <img src="docs/assets/studio-home.png" alt="The Codelith home screen, with three analysed codebases." width="100%">
+</p>
+
+**The knowledge graph** — the whole shape of a codebase, by role. Click a role to open
+its modules, a module to open its files, a file to read its source. Nodes are added to
+the canvas rather than replacing it, so you keep the context you came from.
+
+<p align="center">
+  <img src="docs/assets/studio-graph.png" alt="Codelith reading itself: 71 modules grouped into eleven roles." width="100%">
+</p>
+
+**Ask the code** — grounded answers whose citations are checked against the evidence
+actually retrieved. A citation that does not resolve is stripped rather than shown. The
+suggested questions come from the analysis, not from a generic list.
+
+<p align="center">
+  <img src="docs/assets/studio-ask.png" alt="Asking a question about an analysed codebase." width="100%">
+</p>
 
 ---
 
 ## Read once, use many times
 
-**Analysis is the product.** Clone the source, parse it, extract facts (routes,
-entrypoints, dependencies, env vars, datastores), summarise every module, synthesise
-the architecture, embed everything for retrieval, and persist it as a **knowledge
-base** tied to the commit SHA.
+Analysis runs once per commit SHA and takes no document type — it must not, or the
+apps stop being interchangeable. Everything below reads the stored knowledge base and
+**none of them re-open the repository**.
 
-That happens once per commit. Everything below is an app built on it, and none of
-them re-read the repository.
-
-| App | What it does | What it needs from the KB |
+| App | What it does | What it reads |
 |---|---|---|
 | **Documentation** | Structured documents in Markdown, DOCX, MkDocs or Docusaurus. Document types are offered from an evidence-backed menu, so a project with no HTTP routes is never offered an API Reference | retrieval, narratives |
 | **Ask the code** | Grounded question answering. Every citation is checked against the evidence actually retrieved, and one that does not resolve is stripped | retrieval, code graph |
 | **What changed** | The difference between two readings of the same repository — modules added or rewritten, routes that came and went, and which written pages now describe code that is no longer there | modules, entities, written pages |
 | **Before you edit** | What a change to a file or a symbol would touch: importers, transitive reach, call sites, whether a test covers it, and the pages that describe it. Also the `before_edit` MCP tool | code graph, entities, written pages |
 
-Analysing once is what makes the second and third thing you ask for cheap — and it is
-why adding an app never means touching analysis.
-
-```
-  repository
-      │
-      │   PHASE 1 — ANALYSE  (once per commit)
-      └─► clone → extract facts → embed → summarise modules
-                → synthesise architecture → write narratives
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │    KNOWLEDGE BASE     │   keyed by commit SHA
-                    │  facts · summaries    │
-                    │  narratives · chunks  │
-                    └───────────┬───────────┘
-                                │   "given this, what's worth writing?"
-                                │
-          PHASE 2 — COMPOSE  (per document request)
-          plan → retrieve per section → write → diagram + QA
-                → format → publish ──► documents
-```
-
----
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| API | FastAPI + Python 3.11+ (async) |
-| UI | React 19 + Vite 8 + Tailwind 4 (light studio, Node ≥ 20.19) |
-| Database | SQLite + SQLAlchemy 2.0 async + Alembic — one file, nothing to install |
-| Background work | One thread, in process |
-| Agent workflow | LangGraph |
-| LLM | `openai` package → LM Studio (offline, OpenAI-compatible) |
-| Vector search | Exact cosine in numpy, over embeddings stored as float32 |
-| Artefact storage | A directory under `~/.codelith` |
-| Observability | OpenTelemetry + Prometheus metrics (exposed; scrape them if you want) |
-| Containers | None |
-
----
-
-## Quick Start
-
-### 1. Prerequisites
-
-- Python 3.11 or newer
-- Node.js 20.19+ — only for the studio; the CLI and the MCP server need none
-- [LM Studio](https://lmstudio.ai/) running locally with a model loaded and server started on `http://localhost:1234`
-
-No database, no broker, no containers. That is the whole list.
-
-### 2. Clone & configure
-
-```bash
-git clone https://github.com/NaumanHSA/codelith.git
-cd codelith
-cp .env.example .env
-```
-
-Edit `.env` — the key settings:
-
-```env
-# Three models, each described by the same four settings. `openai` uses the API key;
-# `local` needs no key at all — that is the only difference between them.
-OPENAI_API_KEY=
-
-MODEL_QUALITY_PROVIDER=local            # plan / write / review / architecture / diagram
-MODEL_QUALITY=qwen/qwen3.5-9b
-MODEL_QUALITY_BASE_URL=http://localhost:1234/v1
-MODEL_QUALITY_CONTEXT_WINDOW=21000
-
-MODEL_FAST_PROVIDER=local               # classify / extract / summarize
-MODEL_FAST=liquid/lfm2.5-1.2b
-MODEL_FAST_BASE_URL=http://localhost:1234/v1
-MODEL_FAST_CONTEXT_WINDOW=21000
-
-MODEL_EMBEDDING_PROVIDER=local
-MODEL_EMBEDDING=text-embedding-nomic-embed-text-v1.5-embedding
-MODEL_EMBEDDING_BASE_URL=http://localhost:1234/v1
-
-VECTOR_DIMENSIONS=768                   # must match the embedding model's output size
-```
-
-To move a tier to OpenAI, change one word and the model name:
-
-```env
-MODEL_QUALITY_PROVIDER=openai
-MODEL_QUALITY=gpt-5-mini
-MODEL_QUALITY_BASE_URL=https://api.openai.com/v1
-MODEL_QUALITY_CONTEXT_WINDOW=128000
-```
-
-The tiers are independent, which is the point: a 1.2b model can summarise 45 modules
-locally while a hosted model writes the prose. **Embeddings never follow the quality
-tier** — every stored vector has the width of the model that produced it, so changing
-the embedder means re-ingesting every project. No migration (the column is a blob), but
-no way to mix old vectors with new ones either.
-
-The quality/fast split is a real speed lever, not decoration: module summarisation is
-thousands of short calls and runs fine on a small model, while planning and writing
-degrade badly on one. Point both tiers at the same model if you only have one loaded.
-
-### 3. Install Python dependencies
-
-```bash
-pip install -e ".[dev]"
-```
-
-Or with uv (recommended):
-
-```bash
-uv sync
-```
-
-### 4. Start it
-
-```bash
-uvicorn codelith.main:app --reload      # API on http://localhost:8000
-make seed                                # admin@codelith.dev / admin1234
-```
-
-There is nothing to install first and no migrate step. The knowledge base is a SQLite
-file under `~/.codelith`, created on first run; artefacts go in a folder beside it.
-
-This used to be six containers — PostgreSQL with pgvector, Redis, Neo4j, MinIO,
-Prometheus, Grafana — plus a Celery worker in its own terminal, and it is why nobody
-tried this. They were replaced by a file, a folder, a set in memory and a background
-thread, and then deleted.
-
-### 5. Start the UI (second terminal)
-
-```bash
-cd ui
-pnpm install
-pnpm dev              # studio on http://localhost:5173
-```
-
-Requires **Node 20.19 or newer**. The UI talks to `http://localhost:8000` by default;
-copy `ui/.env.example` to `ui/.env.local` and set `VITE_API_URL` to point it elsewhere.
-
-### 8. Explore the API
-
-Open `http://localhost:8000/docs` for the interactive Swagger UI.
+Adding an app means one entry in `codelith/apps/registry.py` and one page — never a
+change to analysis. That rule is a test, not a convention:
+`tests/unit/test_module_isolation.py` fails if the base imports an app, or if one app
+imports another.
 
 ---
 
@@ -263,255 +211,98 @@ already talk to.
 
 ---
 
-## Architecture
+## Models
 
-### Layered Structure
+Three tiers, each pointed wherever you like. The provider decides only whether an API
+key is sent.
 
-```
-API routes (codelith/api/v1/)
-    ↓
-Services (codelith/services/)
-    ↓
-Agents (codelith/agents/)   ←→   LangGraph Workflows (codelith/workflows/)
-    ↓                            ↕
-Repositories (codelith/db/repositories/)   Language providers (codelith/languages/)
-    ↓
-SQLite — one file
-```
+| Tier | Used for | A reasonable local choice |
+|---|---|---|
+| **quality** | writing, review, validation, architecture, planning | a 7–14B instruct model |
+| **fast** | classification, extraction, diagrams, summarising | a 1–3B instruct model |
+| **embedding** | indexing and retrieval | any embedding model |
 
-### Analysis workflow (`analysis_workflow.py`)
+Configure them in the studio under **Settings → Models**, or in `.env`:
 
-Seven nodes, run once per commit. Produces a knowledge base, not a document.
-
-```
-repo_analyzer  →  structured_extractor  →  semantic_indexer  →  module_summarizer
-     clone            routes, deps,           embed chunks         per-module
-   + inventory        env vars, …             into the index        summaries
-                                                                        ↓
-                              kb_persister  ←  narrative_writer  ←  architecture_synthesizer
-                              mark READY        how it works          layers, flows
+```bash
+MODEL_QUALITY_PROVIDER=local          # local | openai
+MODEL_QUALITY=qwen/qwen3.5-9b
+MODEL_QUALITY_BASE_URL=http://localhost:1234/v1
+MODEL_QUALITY_CONTEXT_WINDOW=21000
+# …and the same four for MODEL_FAST_* and MODEL_EMBEDDING_*
 ```
 
-### Composition workflow (`composition_workflow.py`)
+**There is no embedding-width setting, and there should not be.** The width is a
+property of the model, so Codelith measures it on the first call and records it on the
+knowledge base along with the model name. Open a knowledge base with a different
+embedding model and it refuses to read it and tells you to re-analyse, rather than
+silently comparing vectors that do not mean the same thing. Any model works; you never
+have to tell it a number.
 
-Runs per document request, against the stored knowledge base.
-
-```
-kb_loader → strategy → planner → writer (retrieve-then-write, per section)
-                                       ↓
-                              diagram  ‖  qa      (parallel)
-                                       ↓
-                             gate → formatter → publisher → documents
-```
-
-`gate` is the join point for the parallel diagram/QA branches, and where the
-human-review decision is made. Review is opt-in per job (`human_review: true`): when QA
-does not pass every page the graph routes to `hold`, which stores the written pages on
-the job and parks it as `awaiting_review`. Approving via
-`POST /projects/{project_id}/compose/{job_id}/approve` replays only the tail —
-`formatter` then `publisher` — against those stored pages, so approval publishes the
-text that was reviewed rather than commissioning new text.
-
-### Language support
-
-Everything language-specific lives behind `LanguageProvider` in `codelith/languages/`.
-Symbol extraction, manifest parsing, test/entrypoint detection and framework entity
-detection are provider hooks; the knowledge base itself speaks a neutral vocabulary
-(`codelith/knowledge/constants.py`) so a route is a route whether it came from a FastAPI
-decorator, an Express call or a Spring annotation.
-
-**Python ships today** (stdlib `ast`). Adding a language means implementing one class
-and registering it — no changes to the agents, workflows or schema.
-
-### Cancellation
-
-Cancelling actually stops work. `POST /jobs/{id}/cancel` sets an in-process
-`CancellationToken` (the signal has to cross the API→worker process boundary) and
-flag the workflow polls. LLM calls stream by default so the flag can be checked
-between chunks and the HTTP request aborted mid-generation — without that, cancelling
-just relabels a job that keeps generating.
-
-### Project Layout
-
-```
-codelith/                       the importable package
-├── main.py                     FastAPI app factory
-├── config.py                   All settings (env-driven via pydantic-settings)
-├── api/v1/                     Route handlers (thin) — mounts each app's router
-├── core/                       Security, logging, exceptions, middleware
-│   └── cancellation.py         CancellationToken + JobCancelled
-├── db/ models/ schemas/        Persistence and contracts, shared by every app
-├── services/                   Shared logic only — auth, audit, job, project,
-│                               source, knowledge. An app's services live with it
-├── knowledge/                  THE BASE: KB vocabulary, builder, retrieval,
-│                               questions, artefacts, tools
-├── languages/                  The multi-language seam
-│   └── providers/              python · typescript · go · java
-├── agents/analysis/            Analysis-phase agents
-├── workflows/                  analysis_workflow + states
-├── apps/                       ── THE APPS ─────────────────────────────
-│   ├── registry.py             What exists, and what unlocks it
-│   ├── ask/                    Answers, threads, routes
-│   └── documentation/          Agents, workflows, services, tasks,
-│                               formatters, routes
-├── ingestion/ memory/ llm/     Cloning, stores, model client
-├── storage/ workers/ tracing/  files, the inline worker, per-job artifacts
-└── observability/              OpenTelemetry + Prometheus
-
-ui/                             React studio (Vite)
-tests/                          unit/ + integration/
-.dev/                           STATUS.md + the two records worth keeping
-```
-
-### Agents
-
-| Phase | Agents |
-|---|---|
-| Analysis | `repo_analyzer`, `structured_extractor`, `semantic_indexer`, `module_summarizer`, `architecture_synthesizer`, `narrative_writer`, `kb_persister` |
-| Composition | `kb_loader`, `strategy`, `planner`, `writer` — plus shared `diagram`, `qa`, `formatter`, `publisher` |
-| Legacy single-shot | `coordinator`, `planner`, `repo_analyzer`, `code_understanding`, `architecture`, `strategy`, `writer` (kept for the pre-two-phase endpoint) |
-
-Every agent inherits `app.agents.base.BaseAgent` and implements
-`async def run(state) -> state`.
+Which tier handles which task is decided in `codelith/llm/router.py`, not by the
+caller.
 
 ---
 
-## API Overview
+## What it can read
 
-### Auth
+**Languages** — Python, TypeScript/JavaScript, Go, Java. Each is one provider under
+`codelith/languages/providers/`; no language-specific code exists anywhere else, so
+adding a language means adding a provider, not touching agents or schema.
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/v1/auth/register` | Register new user |
-| POST | `/api/v1/auth/login` | Login → JWT tokens |
-| POST | `/api/v1/auth/refresh` | Refresh access token |
-| GET | `/api/v1/auth/me` | Current user info |
+**Sources** — a public or private Git repository (any branch), a folder on disk, or an
+uploaded zip/tarball.
 
-### Projects and sources
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/v1/projects` | List projects |
-| POST | `/api/v1/projects` | Create project |
-| POST | `/api/v1/projects/sources:probe` | Fetch and inspect a source **without creating anything** |
-| POST | `/api/v1/projects/with-source` | Create project + first source atomically (422 leaves nothing behind) |
-| GET | `/api/v1/projects/{id}` | Project detail with stats and latest job |
-| PATCH | `/api/v1/projects/{id}` | Update project |
-| DELETE | `/api/v1/projects/{id}` | Delete project |
-| POST | `/api/v1/projects/{id}/sources` | Add a source to an existing project |
-| DELETE | `/api/v1/projects/{id}/sources/{src_id}` | Remove a source |
-| POST | `/api/v1/projects/{id}/upload` | Upload a zip or single file as a source |
-
-### Two-phase generation
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/v1/projects/{id}/analyze` | **Phase 1** — build the knowledge base (takes no doc type) |
-| GET | `/api/v1/projects/{id}/knowledge-base` | What we know + evidence-backed doc-type suggestions (`null` if never analysed) |
-| POST | `/api/v1/projects/{id}/compose` | **Phase 2** — write the chosen documents from the KB |
-| POST | `/api/v1/projects/{id}/jobs` | Legacy single-shot: analyse and write in one job |
-| GET | `/api/v1/projects/{id}/jobs` | List a project's jobs |
-
-### Jobs and documents
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/v1/jobs/{id}` | Poll job status and steps |
-| GET | `/api/v1/jobs/{id}/logs` | Agent logs |
-| GET | `/api/v1/jobs/{id}/stream` | SSE progress stream (`?token=` for `EventSource`) |
-| POST | `/api/v1/jobs/{id}/approve` | Human review approval |
-| POST | `/api/v1/jobs/{id}/cancel` | Cancel — revokes the task and aborts generation |
-| GET | `/api/v1/documents` | List documents (`?project_id=` to scope) |
-| GET | `/api/v1/documents/{id}` | Document content |
-| PATCH | `/api/v1/documents/{id}` | Update document |
-| POST | `/api/v1/documents/{id}/publish` | Publish a document |
-| GET | `/api/v1/documents/{id}/export?format=` | Export (queued to a worker) |
-
----
-
-## Supported Inputs
-
-**Repositories:** GitHub, GitLab, Bitbucket, local folders, zip upload
-
-**Code analysis:** Python today. Other languages are a provider implementation away —
-see [Language support](#language-support). Files in other languages are still ingested
-and indexed for retrieval; they just do not yet contribute extracted symbols.
-
-**Documents:** PDF, DOCX, Markdown, OpenAPI/Swagger, Dockerfiles, Terraform, Kubernetes YAML
-
----
-
-## Output Formats
-
-Chosen on export rather than before writing — the stored page is markdown, and every target is a transform of it.
-
-| Format | Generated by a job | Standalone `/documents/{id}/export` |
-|---|---|---|
-| Markdown | ✅ | ✅ |
-| DOCX | ✅ | ❌ `NotImplementedError` |
-| MkDocs site | ✅ | ❌ |
-| Docusaurus site | ✅ | ❌ |
-| PDF | ❌ no formatter exists | ❌ |
-
-The export endpoint advertises more formats than it implements — it only wires
-Markdown. Everything else has to come out of a generation job for now.
+**Documentation output** — Markdown, DOCX, HTML, MkDocs or Docusaurus.
 
 ---
 
 ## Development
 
 ```bash
-make lint         # ruff linter
-make format       # ruff auto-format
-make typecheck    # mypy
-make test         # full pytest suite
+make test          # full suite — ~30 seconds, starts nothing
+make test-unit     # unit only
+make lint          # ruff
+make typecheck     # mypy
+
+cd ui && pnpm build    # typecheck, two render checks, then the bundle
 ```
 
----
+The integration tests use a temporary SQLite file. There are no services to bring up
+for any of it.
 
-## What is running
-
-| | |
-|---|---|
-| API | http://localhost:8000 |
-| Swagger UI | http://localhost:8000/docs |
-| Studio | http://localhost:5173 |
-
-One process for the first two, one for the studio, and one SQLite file under
-`~/.codelith` holding all of it — the vectors, the code graph and the documents.
-Backing Codelith up is copying that file.
+The rules a newcomer is most likely to break — and the tests that catch them — are in
+[CONTRIBUTING.md](CONTRIBUTING.md). The short version: the base may not import an app,
+apps may not import each other, colours live only in `ui/src/styles/theme.css`,
+language-specific code lives only in `codelith/languages/`, and database access goes
+through `codelith/db/repositories/`.
 
 ---
 
-## Environment Variables
+## Installing
 
-See `.env.example` for the full list. Key variables:
+**From source** — the path above. This is the supported one today.
 
-| Variable | Default | Description |
-|---|---|---|
-| `MODEL_QUALITY_PROVIDER` | `local` | `local` or `openai` — serves plan / write / review / architecture / diagram |
-| `MODEL_QUALITY` | `local-model` | Model name, exactly as the endpoint lists it |
-| `MODEL_QUALITY_BASE_URL` | `http://localhost:1234/v1` | Where to connect |
-| `MODEL_QUALITY_CONTEXT_WINDOW` | `21000` | What it will accept; ReAct compaction reads it |
-| `MODEL_FAST_*` | — | The same four, for classify / extract / summarize |
-| `MODEL_EMBEDDING_*` | — | Provider, model and base URL. Independent of the other tiers — see `VECTOR_DIMENSIONS` |
-| `OPENAI_API_KEY` | — | Required only for tiers set to `openai` |
-| `LLM_MAX_TOKENS` | `12288` | **Local only.** Hosted models are sent no ceiling |
-| `LLM_STREAMING` | `true` | Stream completions — required for cancellation to interrupt generation |
-| `DATABASE_URL` | `sqlite+aiosqlite:///~/.codelith/codelith.db` | Rarely set. The default is a file under `CODELITH_HOME` |
-| `VECTOR_DIMENSIONS` | `768` | Must match your embedding model's output dimensions |
-| `ANALYSIS_MAX_SUMMARISED_MODULES` | `40` | Cap on modules sent for summarisation |
-| `ANALYSIS_SUMMARY_CONCURRENCY` | `6` | Parallel summary calls against the LLM |
+**Docker** — `docker compose up --build`, also above.
+
+**PyPI** — not published yet. The release workflow is built and wired to trusted
+publishing; firing it is a maintainer decision, and this README will say so when it
+happens rather than before.
 
 ---
 
-## Build Phases
+## Contributing
 
-- [PROGRESS.md](PROGRESS.md) — build phase tracker
-- [.dev/STATUS.md](.dev/STATUS.md) — where the work stands: what exists, what is weak, and
-  what is open. The phase plans that built the product completed and were deleted; the git
-  history is their record
-- [.dev/QA_AGENT_PLAN.md](.dev/QA_AGENT_PLAN.md) — the Quality app, and what it
-  deliberately does not do
-- [.dev/ASK_SCORECARD.md](.dev/ASK_SCORECARD.md) — twenty questions hand-scored against a
-  real repository
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) —
+it covers the layout, the invariants that are enforced by tests, and how to run
+everything.
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md) — please do not open a public issue for a
+  vulnerability
+- [Changelog](CHANGELOG.md)
+
+## License
+
+[Apache-2.0](LICENSE). Permissive, with an explicit patent grant — which is what a tool
+that ends up inside other people's build pipelines should carry.

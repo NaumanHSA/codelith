@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 626" width="1280" height="626" role="img" aria-label="Codelith architecture: sources are ingested, analysed once per commit into a knowledge base, and read by four apps and an MCP server.">
+  <title>Codelith — read once, serve it</title>
+
+  <style>
+    .t   { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; }
+    .tag { font-size: 10.5px; letter-spacing: 1.7px; fill: #8a847c; }
+    .num { font-size: 10.5px; letter-spacing: 1.7px; fill: #ff6b35; }
+    .h   { font-size: 13px; fill: #14120f; }
+    .hk  { font-size: 13px; letter-spacing: 1.2px; fill: #c2400c; }
+    .b   { font-size: 10.5px; fill: #55504a; }
+    .d   { font-size: 10px; fill: #8a847c; }
+    .st  { font-size: 11.5px; fill: #14120f; }
+    .hi  { font-size: 13px; fill: #efe9e1; }
+    .di  { font-size: 10px; fill: #8a8178; }
+  </style>
+
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#14120f" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0.5 L9.5 5 L0 9.5 z" fill="#ff6b35"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="626" fill="#f4f3ef"/>
+  <rect width="1280" height="626" fill="url(#grid)"/>
+
+  <!-- station labels -->
+  <line x1="40" y1="46" x2="1240" y2="46" stroke="#dcd8d0" stroke-width="1"/>
+
+  <text class="t num" x="40" y="74">01</text><text class="t tag" x="66" y="74">SOURCE</text>
+  <text class="t num" x="288" y="74">02</text><text class="t tag" x="314" y="74">ANALYSE</text>
+  <text class="t num" x="648" y="74">03</text><text class="t tag" x="674" y="74">KNOWLEDGE BASE</text>
+  <text class="t num" x="980" y="74">04</text><text class="t tag" x="1006" y="74">WHAT READS IT</text>
+
+  <!-- 01 source -->
+  <g>
+    <rect x="40" y="205" width="196" height="54" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t st" x="58" y="230">a git repository</text>
+    <text class="t d" x="58" y="246">public or private, any branch</text>
+
+    <rect x="40" y="273" width="196" height="54" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t st" x="58" y="298">a folder on disk</text>
+    <text class="t d" x="58" y="314">read where it sits</text>
+
+    <rect x="40" y="341" width="196" height="54" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t st" x="58" y="366">an archive</text>
+    <text class="t d" x="58" y="382">zip or tarball, uploaded</text>
+  </g>
+
+  <line x1="240" y1="300" x2="282" y2="300" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+
+  <!-- 02 analyse -->
+  <rect x="288" y="100" width="308" height="400" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+  <line x1="288" y1="138" x2="596" y2="138" stroke="#dcd8d0"/>
+  <text class="t h" x="306" y="126">one pass, once per commit SHA</text>
+
+  <g>
+    <rect x="306" y="154" width="272" height="44" rx="3" fill="#f4f3ef" stroke="#dcd8d0"/>
+    <text class="t st" x="322" y="173">clone and parse</text>
+    <text class="t d" x="322" y="189">one provider per language</text>
+
+    <rect x="306" y="210" width="272" height="44" rx="3" fill="#f4f3ef" stroke="#dcd8d0"/>
+    <text class="t st" x="322" y="229">extract facts</text>
+    <text class="t d" x="322" y="245">routes, entrypoints, env vars, stores</text>
+
+    <rect x="306" y="266" width="272" height="44" rx="3" fill="#f4f3ef" stroke="#dcd8d0"/>
+    <text class="t st" x="322" y="285">build the code graph</text>
+    <text class="t d" x="322" y="301">imports, calls, symbols, files</text>
+
+    <rect x="306" y="322" width="272" height="44" rx="3" fill="#f4f3ef" stroke="#dcd8d0"/>
+    <text class="t st" x="322" y="341">embed for retrieval</text>
+    <text class="t d" x="322" y="357">your model, your machine</text>
+
+    <rect x="306" y="378" width="272" height="44" rx="3" fill="#f4f3ef" stroke="#dcd8d0"/>
+    <text class="t st" x="322" y="397">summarise every module</text>
+    <text class="t d" x="322" y="413">what it is for, not what it contains</text>
+
+    <rect x="306" y="434" width="272" height="44" rx="3" fill="#f4f3ef" stroke="#dcd8d0"/>
+    <text class="t st" x="322" y="453">synthesise the architecture</text>
+    <text class="t d" x="322" y="469">layers, boundaries, narratives</text>
+  </g>
+
+  <line x1="600" y1="300" x2="642" y2="300" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+
+  <!-- 03 the knowledge base -->
+  <rect x="648" y="140" width="280" height="320" rx="3" fill="#fff0e9" stroke="#ff6b35" stroke-width="1.5"/>
+  <line x1="648" y1="196" x2="928" y2="196" stroke="#ffc7ac"/>
+  <text class="t hk" x="668" y="170">THE KNOWLEDGE BASE</text>
+  <text class="t d" x="668" y="186">one SQLite file, keyed by commit SHA</text>
+
+  <g>
+    <text class="t st" x="668" y="222">modules</text>
+    <text class="t d" x="668" y="238">what each one is for</text>
+    <text class="t st" x="668" y="266">entities</text>
+    <text class="t d" x="668" y="282">routes, jobs, env vars, datastores</text>
+    <text class="t st" x="668" y="310">the code graph</text>
+    <text class="t d" x="668" y="326">who imports and calls what</text>
+    <text class="t st" x="668" y="354">chunks and vectors</text>
+    <text class="t d" x="668" y="370">exact cosine, no index to run</text>
+    <text class="t st" x="668" y="398">narratives</text>
+    <text class="t d" x="668" y="414">prose with its evidence attached</text>
+    <text class="t st" x="668" y="442">the architecture</text>
+  </g>
+
+  <!-- the bus out to the apps -->
+  <line x1="932" y1="300" x2="954" y2="300" stroke="#ff6b35" stroke-width="1.5"/>
+  <line x1="954" y1="152" x2="954" y2="448" stroke="#ff6b35" stroke-width="1.5"/>
+  <line x1="954" y1="152" x2="976" y2="152" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="954" y1="222" x2="976" y2="222" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="954" y1="292" x2="976" y2="292" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="954" y1="362" x2="976" y2="362" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="954" y1="448" x2="976" y2="448" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ah)"/>
+
+  <!-- 04 what reads it -->
+  <g>
+    <rect x="980" y="123" width="260" height="58" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t h" x="998" y="146">Documentation</text>
+    <text class="t d" x="998" y="164">Markdown, DOCX, MkDocs, Docusaurus</text>
+
+    <rect x="980" y="193" width="260" height="58" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t h" x="998" y="216">Ask the code</text>
+    <text class="t d" x="998" y="234">answers whose citations are checked</text>
+
+    <rect x="980" y="263" width="260" height="58" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t h" x="998" y="286">What changed</text>
+    <text class="t d" x="998" y="304">two readings of one repository</text>
+
+    <rect x="980" y="333" width="260" height="58" rx="3" fill="#ffffff" stroke="#dcd8d0"/>
+    <text class="t h" x="998" y="356">Before you edit</text>
+    <text class="t d" x="998" y="374">what a change would reach</text>
+  </g>
+
+  <line x1="980" y1="410" x2="1240" y2="410" stroke="#dcd8d0" stroke-dasharray="3 4"/>
+
+  <rect x="980" y="419" width="260" height="58" rx="3" fill="#14120f" stroke="#14120f"/>
+  <text class="t hi" x="998" y="442">MCP server</text>
+  <text class="t di" x="998" y="460">the same base, inside your editor</text>
+
+  <!-- the standing claim -->
+  <line x1="40" y1="528" x2="1240" y2="528" stroke="#dcd8d0"/>
+  <text class="t tag" x="40" y="556">NOTHING LEAVES THE MACHINE</text>
+  <text class="t b" x="40" y="578">The knowledge base is a SQLite file under ~/.codelith. The models are yours — LM Studio, Ollama, vLLM, or any</text>
+  <text class="t b" x="40" y="596">OpenAI-compatible endpoint you point it at. No database to run, no queue, no service to sign up for.</text>
+</svg>

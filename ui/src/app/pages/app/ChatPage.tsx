@@ -421,15 +421,24 @@ export default function ChatPage() {
                     )}
                   </div>
 
-                  {/* The largest module's own summary. Not the project's
-                      `description`, which is empty on every project created without
-                      one — an accurate sentence about the biggest thing in the
-                      repository beats a blank line where a description should be. */}
-                  {kb.data.top_modules?.[0]?.summary && (
-                    <p className="mt-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
-                      {kb.data.top_modules[0].summary.split('. ').slice(0, 2).join('. ')}
-                    </p>
-                  )}
+                  {/* What this repository is. The project's own description when it
+                      has one; otherwise the largest module's summary, because an
+                      accurate sentence about the biggest thing in the repository
+                      beats a blank line. The fallback is written about a module and
+                      says so — "This module manages…" under a repository heading
+                      reads as a mistake — so it is only reached when nothing better
+                      exists. */}
+                  {(() => {
+                    const fallback = kb.data.top_modules?.[0]?.summary
+                    const blurb =
+                      project?.description ||
+                      (fallback ? fallback.split('. ').slice(0, 2).join('. ') : null)
+                    return blurb ? (
+                      <p className="mt-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
+                        {blurb}
+                      </p>
+                    ) : null
+                  })()}
 
                   {!!kb.data.entrypoints?.length && (
                     <p className="mt-1.5 truncate font-mono text-[10.5px] text-ink-dim">
