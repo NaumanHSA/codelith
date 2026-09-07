@@ -1,7 +1,11 @@
-# Shipping Codelith as an open-source project
+# Shipping Codelith as an open-source project — **all five phases done**
 
 The product works. What is missing is everything between "it works on this machine"
 and "somebody who has never seen it can run it, read it, and contribute to it".
+
+**Where it stands.** Every phase is complete and committed. What remains before the
+repository goes public is not on this plan: pushing it, flipping it public, and
+firing the release workflow — all three the maintainer's, deliberately.
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` deliberately not doing
 
@@ -98,7 +102,7 @@ CI that runs without being asked.
 `[x]` **2.7** A release workflow: build and publish to PyPI on a tag, via trusted
 publishing. Wired but not fired — publishing is the maintainer's call.
 
-## Phase 3 — Docker that actually opens in a browser
+## Phase 3 — Docker that actually opens in a browser — **done**
 
 `[x]` **3.1** `.dockerignore`. There is none, so the build context currently includes
 `node_modules`, `.git`, `repos/`, `.venv` and every cache directory.
@@ -123,7 +127,7 @@ coming.
 `[x]` **3.6** Build it, run it, sign in through a browser, confirm the studio loads and
 the API answers. A Dockerfile that has never been run is a guess.
 
-## Phase 4 — The README and what it shows
+## Phase 4 — The README and what it shows — **done**
 
 `[x]` **4.1** Screenshots of the studio against real data: home, the knowledge graph,
 the source viewer, a published site.
@@ -135,7 +139,7 @@ serve it: ingest → analyse → knowledge base → the apps and MCP that consum
 it is, the diagram, what is in the box, quick start, Docker, MCP setup for Claude Code
 and Cursor, install options, license, support.
 
-## Phase 5 — Fresh data
+## Phase 5 — Fresh data — **done**
 
 Needs a model. LM Studio supplies the fast and embedding tiers; the quality tier runs
 on OpenAI.

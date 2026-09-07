@@ -27,8 +27,15 @@ All notable changes to Codelith are recorded here. The format follows
   read-only, taken down or re-run at will, with change detection before a republish.
   Published sites carry a source page per cited file, so a citation in the prose resolves
   to the code it came from.
-- **Drift compares architecture maps.** Services that appeared, went or were retyped;
-  connections added, cut or reworded.
+- **Drift compares architecture maps.** Services that appeared, went, were renamed or
+  retyped; connections added, cut or reworded.
+- **One container that opens in a browser.** `docker compose up` builds the studio,
+  serves it from the API on a single port, creates the database and seeds an account.
+  The model stays on your machine: compose maps `host.docker.internal`, and the studio
+  says so at the field where a model endpoint is typed, with a button that rewrites it.
+- **The API serves the studio.** A SPA fallback mounted after the API and published-docs
+  routers, so neither is shadowed and an unknown `/api/...` path still answers a JSON
+  404 rather than the page shell.
 
 ### Changed
 
@@ -39,6 +46,24 @@ All notable changes to Codelith are recorded here. The format follows
   works and a changed one is refused with a message rather than producing nonsense.
 - **Prometheus metrics renamed** from `docany_*` to `codelith_*`, with the bundled
   Grafana dashboard updated to match.
+- **Drift matches services by what is in them, not what they are called.** Service names
+  are written by a model, and two readings of an unchanged repository do not agree on
+  them — so a diff whose real content was two new files reported nine services appeared
+  and eight went. Services are now paired on the modules they contain, which come from
+  the code; the same comparison reports two appeared, one went and seven renamed, and
+  an edge between two renamed services is no longer a connection cut.
+
+### Fixed
+
+- **Analysis discards its checkout.** It never had: every run left a full copy of the
+  repository behind, one per run rather than one per project, and deleting the project
+  did not remove it — while the file viewer's own docstring said the checkout was
+  discarded. Clones are now removed when the job ends, whether it succeeded, failed or
+  was cancelled, and clones left by earlier versions are swept at startup. A `local`
+  source is your own folder and is never touched.
+- **Cleanup works on Windows.** Git marks its pack files read-only and a read-only file
+  cannot be unlinked there, so removing a clone failed on the first pack file and left
+  everything in place.
 
 ### Removed
 
