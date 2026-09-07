@@ -8,6 +8,12 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Read-only by default. The publish job below raises its own `id-token: write` for
+# trusted publishing, which is the only write this workflow needs and the only place
+# that should have it.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build distributions

@@ -1,0 +1,55 @@
+name: CodeQL
+
+# Static analysis for the two languages this repository actually ships: the Python
+# package and the TypeScript studio.
+#
+# **Guarded on visibility, deliberately.** Code scanning is free on public
+# repositories and requires GitHub Advanced Security on private ones, where the action
+# fails outright with "Advanced Security must be enabled". Adding it unguarded would
+# have put a permanent red cross on a repository that is private today and public
+# tomorrow. The `if` below skips the job while private and starts running it, with no
+# further change, the moment the repository is made public.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    permissions:
+      # The three CodeQL needs and nothing else: read the code, read the Actions API
+      # for the workflow run, and write the results back as security alerts.
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript-typescript"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize
+        uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          # `security-and-quality` adds maintainability rules on top of the security
+          # ones. Left off: this is here to find vulnerabilities, and a scanner that
+          # also reports style produces a queue nobody triages.
+          queries: security-extended
+
+      # No build step. Both languages are interpreted, CodeQL reads them directly, and
+      # a build here would only be a second, slower copy of what CI already does.
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

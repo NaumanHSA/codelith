@@ -147,6 +147,28 @@ class TestPathResolution:
         got = paths.resolve_within(root, requested)
         assert got is None or root.resolve() in got.parents or got == root.resolve()
 
+    @pytest.mark.parametrize(
+        "requested",
+        [
+            "\..\secret.txt",
+            "..\secret.txt",
+            "assets\..\..\secret.txt",
+            "a\b\..\..\..\secret.txt",
+        ],
+    )
+    def test_backslashes_are_separators_on_every_platform(self, root, requested):
+        """
+        `pathlib` treats a backslash as a separator on Windows and as an ordinary
+        character everywhere else, so this suite passed on the developer's machine
+        and failed on Linux, which is what CI and the container actually run.
+
+        The escape was never exploitable (no file is named `..\secret.txt`, so the
+        route answered 404) but the guard's contract said these are refused, and on
+        the deployed platform they were not. Parametrised over shapes rather than
+        asserted once, because the failure was one specific string getting through.
+        """
+        assert paths.resolve_within(root, requested) is None
+
     def test_a_symlink_out_of_the_tree_is_refused(self, root, tmp_path):
         link = root / "escape"
         try:

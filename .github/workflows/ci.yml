@@ -10,6 +10,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege, set here rather than inherited. A repository's default token
+# permission is a setting, it is often read-write, and a workflow that never needs to
+# write should not be one compromised action away from being able to. Nothing in this
+# file pushes, comments or releases.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

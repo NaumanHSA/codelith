@@ -105,8 +105,19 @@ def resolve_within(root: Path, relative: str) -> Path | None:
     letter, a backslash separator and a symlink out of the tree all have to fail
     here, so the check is on the *resolved* path rather than on the string: string
     inspection has to anticipate every encoding, and `resolve()` does not.
+
+    **Backslashes are separators here on every platform.** `pathlib` only treats them
+    that way on Windows; on Linux a backslash-separated path is one ordinary
+    filename, so
+    `root / that` stayed inside the root and the guard returned it. Harmless in the
+    end, because no such file exists and the route answers 404, but the contract this
+    function states was only being met on the platform it was written on, and the
+    platform it actually runs on is the other one. Normalising first makes the answer
+    the same in both places. It costs the ability to serve a file whose name really
+    contains a backslash, which is not a thing a published documentation build has.
     """
-    candidate = (root / relative.lstrip("/\\")).resolve()
+    requested = relative.replace("\\", "/").lstrip("/")
+    candidate = (root / requested).resolve()
     root = root.resolve()
     if candidate != root and root not in candidate.parents:
         return None

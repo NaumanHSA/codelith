@@ -64,6 +64,12 @@ All notable changes to Codelith are recorded here. The format follows
 - **Cleanup works on Windows.** Git marks its pack files read-only and a read-only file
   cannot be unlinked there, so removing a clone failed on the first pack file and left
   everything in place.
+- **The published-site path guard treats a backslash as a separator on every platform.**
+  `pathlib` only does so on Windows, so a Windows-style traversal such as
+  `\..\secret.txt` was refused on the machine it was written on and accepted as an
+  ordinary filename on Linux, which is what the container and CI run. Not exploitable
+  (nothing is named that, so the route answered 404) but the guard's stated contract was
+  not being met where it matters, and the suite only caught it once it ran on Linux.
 
 ### Removed
 
