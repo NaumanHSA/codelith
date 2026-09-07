@@ -53,7 +53,7 @@ dependencies = [
     # passlib 1.7.4 probes its bcrypt backend with a >72-byte password. bcrypt 5.0
     # raises on that instead of truncating, so every hash_password() call dies with
     # "password cannot be longer than 72 bytes" — including seeding and login.
-    "bcrypt>=4.0,<5",
+    "bcrypt>=4.0,<6",
     "python-multipart>=0.0.12",
 
     # Config & Validation
