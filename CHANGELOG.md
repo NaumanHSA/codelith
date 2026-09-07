@@ -64,6 +64,13 @@ All notable changes to Codelith are recorded here. The format follows
 - **Cleanup works on Windows.** Git marks its pack files read-only and a read-only file
   cannot be unlinked there, so removing a clone failed on the first pack file and left
   everything in place.
+- **Startup applies migrations before filling in missing tables.** It was the other way
+  round, and that broke every table-creating migration on an already-installed copy:
+  `create_all` helpfully created the new table, then the migration that creates the same
+  table failed on "table already exists". The marker never advanced, so it failed again
+  on every subsequent start and no later migration could ever run. A database left in
+  that state now repairs its own marker, once, after checking that every table and
+  column the models declare is really present.
 - **The published-site path guard treats a backslash as a separator on every platform.**
   `pathlib` only does so on Windows, so a Windows-style traversal such as
   `\..\secret.txt` was refused on the machine it was written on and accepted as an
