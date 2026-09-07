@@ -201,6 +201,13 @@ export const api = {
   projects: (limit = 50, offset = 0) =>
     request<Project[]>(`/projects?limit=${limit}&offset=${offset}`),
 
+  /** Liveness, plus whether the API is inside a container. The browser cannot
+   *  work the second one out, and it changes what a model endpoint should say. */
+  health: () =>
+    fetch(`${API_BASE}/health`).then(
+      r => r.json() as Promise<{ status: string; env: string; container: boolean }>,
+    ),
+
   project: (id: number) => request<Project>(`/projects/${id}`),
 
   patchProject: (id: number, body: { name?: string; description?: string; status?: string }) =>

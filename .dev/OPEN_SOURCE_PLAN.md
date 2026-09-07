@@ -100,27 +100,27 @@ publishing. Wired but not fired — publishing is the maintainer's call.
 
 ## Phase 3 — Docker that actually opens in a browser
 
-`[ ]` **3.1** `.dockerignore`. There is none, so the build context currently includes
+`[x]` **3.1** `.dockerignore`. There is none, so the build context currently includes
 `node_modules`, `.git`, `repos/`, `.venv` and every cache directory.
 
-`[ ]` **3.2** Multi-stage `Dockerfile`: a Node stage builds the studio, a Python stage
+`[x]` **3.2** Multi-stage `Dockerfile`: a Node stage builds the studio, a Python stage
 installs the package and copies `dist/` in.
 
-`[ ]` **3.3** Serve the studio from FastAPI — a SPA fallback mounted *after* the API
+`[x]` **3.3** Serve the studio from FastAPI — a SPA fallback mounted *after* the API
 router and the published-docs router, so it cannot shadow either. This is the change
 that makes one container enough.
 
-`[ ]` **3.4** `docker-compose.yml`: one service, a named volume for `~/.codelith` so a
+`[x]` **3.4** `docker-compose.yml`: one service, a named volume for `~/.codelith` so a
 knowledge base survives `docker compose down`, `extra_hosts` for
 `host.docker.internal`, and a commented block for the hosted-model path. A `make
 docker` target.
 
-`[ ]` **3.5** Tell the operator about `host.docker.internal` **where they configure a
+`[x]` **3.5** Tell the operator about `host.docker.internal` **where they configure a
 model**, not in a README they read once. The settings page knows whether it is running
 in a container; a base URL of `localhost` from inside one is a mistake the app can see
 coming.
 
-`[ ]` **3.6** Build it, run it, sign in through a browser, confirm the studio loads and
+`[x]` **3.6** Build it, run it, sign in through a browser, confirm the studio loads and
 the API answers. A Dockerfile that has never been run is a guess.
 
 ## Phase 4 — The README and what it shows

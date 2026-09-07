@@ -1,0 +1,70 @@
+# Codelith, in one command.
+#
+#     docker compose up --build
+#     open http://localhost:8000
+#
+# Sign in with admin@codelith.dev / admin1234, then point it at a repository.
+#
+# ── About the model ──────────────────────────────────────────────────────────
+# Codelith needs a model to read a repository, and the model is not in this container.
+# It runs on your machine, and from inside a container `localhost` means the container,
+# not your machine. `host.docker.internal` is how to reach the host, and `extra_hosts`
+# below makes that name resolve on Linux too, where it otherwise does not exist.
+#
+# So if LM Studio or Ollama is serving on your machine at http://localhost:1234/v1,
+# the address to give Codelith is http://host.docker.internal:1234/v1. The studio says
+# this where you configure a model, so you do not have to remember it here.
+
+services:
+  codelith:
+    build: .
+    image: codelith:latest
+    container_name: codelith
+    ports:
+      - "8000:8000"
+    volumes:
+      # Everything that is worth keeping: the database, the artefacts, the clones.
+      # Without this, every knowledge base you build is gone on `down`.
+      - codelith-data:/data
+    extra_hosts:
+      # A no-op on Docker Desktop, which provides it already; required on Linux.
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Change these. They are the defaults so the first run works, which is exactly
+      # why they are not a secret.
+      APP_SECRET_KEY: "change-me-in-production"
+      JWT_SECRET_KEY: "change-me-in-production-too"
+      APP_ENV: "production"
+
+      # ── Models ───────────────────────────────────────────────────────────
+      # Three tiers, each independently pointed at a provider. `local` means any
+      # OpenAI-compatible server: LM Studio, Ollama, vLLM, llama.cpp.
+      #
+      # Quality writes documents and answers; fast classifies and extracts; embedding
+      # turns code into vectors. There is no dimension setting — the width is measured
+      # from whichever embedding model you load, so any of them works.
+      MODEL_QUALITY_PROVIDER: "local"
+      MODEL_QUALITY: "qwen/qwen3-8b"
+      MODEL_QUALITY_BASE_URL: "http://host.docker.internal:1234/v1"
+
+      MODEL_FAST_PROVIDER: "local"
+      MODEL_FAST: "qwen/qwen3-8b"
+      MODEL_FAST_BASE_URL: "http://host.docker.internal:1234/v1"
+
+      MODEL_EMBEDDING_PROVIDER: "local"
+      MODEL_EMBEDDING: "text-embedding-nomic-embed-text-v1.5"
+      MODEL_EMBEDDING_BASE_URL: "http://host.docker.internal:1234/v1"
+
+      # ── Or a hosted provider ─────────────────────────────────────────────
+      # Set a tier's provider to `openai` and give it a key. Worth knowing what it
+      # means: analysis sends source excerpts to whichever endpoint you choose, so a
+      # hosted provider is your code reaching that provider. The local path above is
+      # the one where nothing leaves the machine.
+      #
+      # MODEL_QUALITY_PROVIDER: "openai"
+      # MODEL_QUALITY: "gpt-4o"
+      # OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    restart: unless-stopped
+
+volumes:
+  codelith-data:

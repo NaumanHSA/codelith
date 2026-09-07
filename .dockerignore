@@ -1,0 +1,49 @@
+# The build context, kept to what the image actually needs.
+#
+# There was no .dockerignore, so every build shipped `node_modules`, the whole `.git`
+# history, every cloned repository under `repos/`, and four caches to the daemon before
+# the first instruction ran.
+
+.git
+.github
+.gitignore
+.dockerignore
+
+# Caches and local tool state
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Built by the image itself, in the stage that needs it
+node_modules/
+ui/node_modules/
+ui/dist/
+codelith/studio/
+dist/
+build/
+
+# Local runtime state. `repos/` in particular is every repository ever analysed.
+repos/
+runs/
+storage/
+*.db
+*.sqlite3
+.env
+.env.local
+ui/.env.local
+
+# Notes, plans and screenshots — not the product
+.dev/
+docs/
+*.md
+!README.md
+
+# Editors
+.vscode/
+.idea/
+.DS_Store

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ApiError } from '../../lib/api'
 import { Button, Field, inputClass } from '../ui'
 import type { ConfiguredModel, ModelDraft, ModelTest, Provider, Tier } from '../../lib/types'
@@ -73,6 +73,21 @@ export default function ModelForm({
   const [test, setTest] = useState<ModelTest | null>(null)
   const [busy, setBusy] = useState<'test' | 'save' | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Asked rather than guessed: only the server knows whether it is in a container.
+  const [containerised, setContainerised] = useState(false)
+  useEffect(() => {
+    let live = true
+    api
+      .health()
+      .then(h => live && setContainerised(!!h.container))
+      // A health check that does not answer is not worth a message here; the rest of
+      // the studio will have said so long before anyone reaches this form.
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
 
   const local = draft.provider === 'local'
   const hosted = !local
@@ -188,9 +203,39 @@ export default function ModelForm({
               className={inputClass}
               value={draft.base_url ?? ''}
               onChange={e => set('base_url', e.target.value)}
-              placeholder="http://localhost:1234/v1"
+              placeholder={
+                containerised ? 'http://host.docker.internal:1234/v1' : 'http://localhost:1234/v1'
+              }
             />
           </Field>
+
+          {/* The one piece of advice that has to arrive here rather than in a
+              README. Inside a container `localhost` is the container, so a model
+              on the host is unreachable at the address that works everywhere
+              else - and the failure is a connection error that names neither the
+              cause nor the fix. */}
+          {containerised && /(^|\/\/)(localhost|127\.0\.0\.1)/.test(draft.base_url ?? '') && (
+            <p className="border border-warn/40 bg-warn-wash px-2.5 py-2 font-sans text-[11.5px] leading-relaxed text-warn">
+              Codelith is running in a container, where <code>localhost</code> means the
+              container itself. A model server on your machine is reachable at{' '}
+              <code>host.docker.internal</code> instead.
+              <button
+                type="button"
+                onClick={() =>
+                  set(
+                    'base_url',
+                    (draft.base_url ?? '').replace(
+                      /(localhost|127\.0\.0\.1)/,
+                      'host.docker.internal',
+                    ),
+                  )
+                }
+                className="ml-1 underline underline-offset-2 hover:text-hot-ink"
+              >
+                Fix it
+              </button>
+            </p>
+          )}
           {/* Embeddings are never trimmed, so nothing budgets against a window. */}
           {tierHint !== 'embedding' && (
             <Field
