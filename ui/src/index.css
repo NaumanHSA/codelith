@@ -744,6 +744,10 @@ summary {
 .kb-canvas {
   touch-action: none;
   cursor: grab;
+  /* Every label in here is inside a thing you drag. Without this, moving a card
+     paints a selection through whatever text the cursor crossed on the way. */
+  user-select: none;
+  -webkit-user-select: none;
   background-color: var(--panel);
   /* The blueprint field, so the graph reads as something drawn on a surface
      rather than floating on nothing. */

@@ -371,7 +371,27 @@ export default function KnowledgeGraph({
   const bodies = useRef(new Map<string, Body>())
   const alpha = useRef(1)
   const frame = useRef(0)
+  /** Whether the animation loop is currently scheduled. */
+  const running = useRef(false)
+  /** The latest tick, so a gesture can restart a loop that has stopped itself. */
+  const tick = useRef<() => void>(() => {})
   const [, redraw] = useState(0)
+
+  /**
+   * Wake the simulation.
+   *
+   * Raising alpha is not enough on its own: the loop stops scheduling itself
+   * once the layout is cold, so nothing is left to read the new value. That is
+   * why dragging a card worked for the first second after an expansion and did
+   * nothing at all once things had settled.
+   */
+  const kick = useCallback((heat = 0.5) => {
+    alpha.current = Math.max(alpha.current, heat)
+    if (!running.current) {
+      running.current = true
+      frame.current = requestAnimationFrame(() => tick.current())
+    }
+  }, [])
 
   useEffect(() => {
     const map = bodies.current
@@ -525,11 +545,20 @@ export default function KnowledgeGraph({
 
       alpha.current *= ALPHA_DECAY
       redraw(t => t + 1)
-      if (alpha.current > ALPHA_MIN) frame.current = requestAnimationFrame(step)
+      if (alpha.current > ALPHA_MIN) {
+        frame.current = requestAnimationFrame(step)
+      } else {
+        running.current = false
+      }
     }
 
+    tick.current = step
+    running.current = true
     frame.current = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(frame.current)
+    return () => {
+      cancelAnimationFrame(frame.current)
+      running.current = false
+    }
   }, [visible, byId])
 
   /* ── Data ───────────────────────────────────────────────────── */
@@ -583,6 +612,8 @@ export default function KnowledgeGraph({
   const pan = useRef<{ x: number; y: number } | null>(null)
   const dragged = useRef<string | null>(null)
   const moved = useRef(false)
+  /** Whether the card being dragged was already pinned before the press. */
+  const wasPinned = useRef(false)
   const [panning, setPanning] = useState(false)
 
   const toGraph = (clientX: number, clientY: number) => {
@@ -628,7 +659,9 @@ export default function KnowledgeGraph({
         body.y = p.y
         body.vx = 0
         body.vy = 0
-        alpha.current = Math.max(alpha.current, 0.5)
+        // Reheat so the neighbours move out of the way of where you are putting
+        // it, and wake the loop if it had already gone cold.
+        kick()
       }
       moved.current = true
       return
@@ -644,8 +677,12 @@ export default function KnowledgeGraph({
   const endGesture = () => {
     if (dragged.current) {
       const body = bodies.current.get(dragged.current)
-      if (body && moved.current) body.pinned = true
+      // Dropped where you put it; a card that springs back the moment you let go
+      // makes the layout feel like it is arguing with you. A click that never
+      // moved leaves the card exactly as pinned as it already was.
+      if (body && !moved.current) body.pinned = wasPinned.current
       dragged.current = null
+      kick(0.35)
     }
     pan.current = null
     setPanning(false)
@@ -667,6 +704,7 @@ export default function KnowledgeGraph({
     for (const body of bodies.current.values()) body.pinned = false
     const rootBody = bodies.current.get('root')
     if (rootBody) rootBody.pinned = true
+    kick(1)
   }
 
   /**
@@ -778,6 +816,14 @@ export default function KnowledgeGraph({
                     dragged.current = node.id
                     moved.current = false
                     pan.current = null
+                    // Held still by the physics for as long as the pointer holds
+                    // it, so the card sits under the cursor instead of being
+                    // pulled off it by its own springs.
+                    const held = bodies.current.get(node.id)
+                    if (held) {
+                      wasPinned.current = !!held.pinned
+                      held.pinned = true
+                    }
                   }}
                   onPointerUp={() => {
                     if (!moved.current) toggle(node)

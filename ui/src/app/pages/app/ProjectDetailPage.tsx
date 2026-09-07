@@ -26,33 +26,43 @@ import { coverage, describeJobScope } from '../../lib/site'
  * which of the two screens below is shown.
  * ------------------------------------------------------------------ */
 
-function SourcePanel({ project }: { project: Project }) {
+/**
+ * Where the code came from, across the top of the page.
+ *
+ * It used to be a panel in the rail, below the fold, under everything written
+ * about the repository - which is backwards. The repository is what all of it is
+ * about, and the URL, the commit and the language mix are three facts that read
+ * perfectly well as one line.
+ */
+function SourceStrip({ project }: { project: Project }) {
   const source = project.sources?.[0]
   const probe = source?.config_json?.probe
   const shares = languageShares(probe?.languages)
 
   return (
-    <Panel title="Source" action={<span className="tag text-ink-dim">{source?.source_type}</span>}>
-      <div className="px-3 py-2.5">
-        <a
-          href={source?.source_type === 'local' ? undefined : source?.url_or_path}
-          target="_blank"
-          rel="noreferrer"
-          className="block truncate text-[12px] text-hot-ink hover:underline"
-        >
-          {source?.url_or_path ?? 'No source attached.'}
-        </a>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-          <span className="tag text-ink-dim">branch {source?.branch ?? 'default'}</span>
-          <span className="tag text-ink-dim">sha {shortSha(probe?.commit_sha)}</span>
-          <span className="tag text-ink-dim">
-            {probe?.file_count != null ? countLabel(probe.file_count, 'file') : 'unmeasured'}
-          </span>
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-rule bg-panel px-3 py-2">
+      <span className="tag shrink-0 text-ink-dim">{source?.source_type ?? 'source'}</span>
+
+      <a
+        href={source?.source_type === 'local' ? undefined : source?.url_or_path}
+        target="_blank"
+        rel="noreferrer"
+        className="min-w-0 flex-1 truncate text-[12px] text-hot-ink hover:underline"
+      >
+        {source?.url_or_path ?? 'No source attached.'}
+      </a>
+
+      <span className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="tag text-ink-dim">branch {source?.branch ?? 'default'}</span>
+        <span className="tag text-ink-dim">sha {shortSha(probe?.commit_sha)}</span>
+        <span className="tag text-ink-dim">
+          {probe?.file_count != null ? countLabel(probe.file_count, 'file') : 'unmeasured'}
+        </span>
+      </span>
+
       {shares.length > 0 && (
-        <div className="border-t border-rule px-3 py-2.5">
-          <div className="flex h-[6px] w-full overflow-hidden border border-rule">
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="flex h-[6px] w-[130px] overflow-hidden border border-rule">
             {shares.slice(0, 6).map((l, i) => (
               <span
                 key={l.name}
@@ -61,17 +71,15 @@ function SourcePanel({ project }: { project: Project }) {
                 className="block bg-hot"
               />
             ))}
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-            {shares.slice(0, 5).map(l => (
-              <span key={l.name} className="tag text-ink-dim">
-                {l.name} {Math.round(l.pct)}%
-              </span>
-            ))}
-          </div>
-        </div>
+          </span>
+          {shares.slice(0, 3).map(l => (
+            <span key={l.name} className="tag text-ink-dim">
+              {l.name} {Math.round(l.pct)}%
+            </span>
+          ))}
+        </span>
       )}
-    </Panel>
+    </div>
   )
 }
 
@@ -163,7 +171,7 @@ export default function ProjectDetailPage() {
   // For the graph's file ring: language, size and symbol counts per file.
   // Not fatal if it fails - the ring still draws from the module's own list.
   const fileTree = useAsync(sig => api.files(id, sig), [id])
-  const [kbView, setKbView] = useState<'map' | 'list'>('map')
+  const [kbView, setKbView] = useState<'graph' | 'architecture' | 'list'>('graph')
   const narratives = useAsync(sig => api.narratives(id, sig), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
   const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
@@ -277,6 +285,13 @@ export default function ProjectDetailPage() {
 
       {analyseError && <ErrorState message={analyseError} compact />}
 
+      {/* Directly under the title. It is the answer to "which repository is
+          this", which is the first thing anybody arriving on the page wants and
+          the last thing it used to tell them. */}
+      <div className="mb-3">
+        <SourceStrip project={p} />
+      </div>
+
       {!!features.data?.length && (
         <div className="mb-3">
           <AppGrid
@@ -288,8 +303,8 @@ export default function ProjectDetailPage() {
 
       {/* One column, not two. The rail used to take 320px off the widest thing
           on the page, and the widest thing on the page is now a graph that
-          wants every pixel of it. Source, jobs and documents are reference
-          material: they read fine as a row underneath. */}
+          wants every pixel of it. Jobs and documents are reference material:
+          they read fine as a row underneath. */}
       <div className="flex flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-3">
           {kb.loading && <SkeletonPanel rows={5} />}
@@ -339,24 +354,6 @@ export default function ProjectDetailPage() {
                 title="Knowledge base"
                 action={
                   <span className="flex items-center gap-2">
-                    {modules.data?.available && (
-                      <span className="flex items-center gap-1">
-                        {(['map', 'list'] as const).map(option => (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => setKbView(option)}
-                            className={`tag px-1.5 py-[2px] ${
-                              kbView === option
-                                ? 'text-hot-ink underline'
-                                : 'text-ink-dim hover:text-ink'
-                            }`}
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </span>
-                    )}
                     {/* The counters above say how much was read. This is the only
                         way to see any of it, and until it existed the product
                         asked to be taken on faith. */}
@@ -376,67 +373,120 @@ export default function ProjectDetailPage() {
                   <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '-'} />
                   <Stat k="commit" v={shortSha(base.commit_sha)} />
                 </div>
-                {/* The map is the default because the shape of a codebase is the
-                    thing you cannot get from a list: which roles carry the
-                    weight, and what sits under them. The list is still here
-                    because a graph is for exploring and a list is for finding,
-                    and those are different jobs. */}
+                {/* One canvas, three ways of reading it. The architecture map
+                    used to be a panel of its own directly underneath, which
+                    meant two large drawings competing for the same screen and
+                    neither getting it. Tabs rather than a toggle in the corner:
+                    a second drawing nobody knows exists is a drawing nobody
+                    opens. */}
                 {modules.data?.available && (
-                  <div className="border-t border-rule">
-                    {kbView === 'map' ? (
-                      <KnowledgeGraph
-                        title={p.name}
-                        modules={modules.data}
-                        files={fileTree.data}
-                        projectId={id}
-                      />
-                    ) : (
-                      <ModuleExplorer data={modules.data} projectId={id} />
-                    )}
-                  </div>
+                  <>
+                    <div className="flex items-stretch gap-px border-t border-rule bg-rule">
+                      {(
+                        [
+                          ['graph', 'Graph', 'the whole shape'],
+                          [
+                            'architecture',
+                            'Architecture',
+                            arch.data?.available
+                              ? `${arch.data.services.length} services`
+                              : 'not mapped',
+                          ],
+                          [
+                            'list',
+                            'Modules',
+                            `${modules.data.modules.length}, as a list`,
+                          ],
+                        ] as const
+                      ).map(([key, label, hint]) => {
+                        const on = kbView === key
+                        const off = key === 'architecture' && !arch.data?.available
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            disabled={off}
+                            onClick={() => setKbView(key)}
+                            className={`flex-1 px-3 py-2 text-left transition-colors ${
+                              on
+                                ? 'border-b-2 border-hot bg-panel'
+                                : off
+                                  ? 'cursor-default bg-sunk/60'
+                                  : 'bg-sunk/60 hover:bg-panel'
+                            }`}
+                          >
+                            <span
+                              className={`block text-[12px] font-semibold tracking-tight ${
+                                on ? 'text-hot-ink' : off ? 'text-ink-dim' : 'text-ink'
+                              }`}
+                            >
+                              {label}
+                            </span>
+                            <span className="tag text-ink-dim">{hint}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div className="border-t border-rule">
+                      {kbView === 'graph' && (
+                        <KnowledgeGraph
+                          title={p.name}
+                          modules={modules.data}
+                          files={fileTree.data}
+                          projectId={id}
+                        />
+                      )}
+                      {kbView === 'list' && (
+                        <ModuleExplorer data={modules.data} projectId={id} />
+                      )}
+                      {kbView === 'architecture' && arch.data?.available && (
+                        <>
+                          <ArchitectureMap arch={arch.data} />
+                          {(arch.data.tech_stack.frameworks.length > 0 ||
+                            arch.data.patterns.length > 0 ||
+                            arch.data.layers.length > 0) && (
+                            <div className="border-t border-rule px-3 py-2.5">
+                              {/* Single-word facts that each cost a quality-tier
+                                  call to derive and reached nobody until now. */}
+                              {arch.data.layers.length > 0 && (
+                                <Facts
+                                  label="layers"
+                                  items={arch.data.layers.map(l => l.name)}
+                                />
+                              )}
+                              {arch.data.patterns.length > 0 && (
+                                <Facts label="patterns" items={arch.data.patterns} hot />
+                              )}
+                              {arch.data.tech_stack.frameworks.length > 0 && (
+                                <Facts
+                                  label="frameworks"
+                                  items={arch.data.tech_stack.frameworks}
+                                />
+                              )}
+                              {arch.data.tech_stack.infra.length > 0 && (
+                                <Facts label="infra" items={arch.data.tech_stack.infra} />
+                              )}
+                              {arch.data.tech_stack.databases.length > 0 && (
+                                <Facts
+                                  label="data stores"
+                                  items={arch.data.tech_stack.databases}
+                                />
+                              )}
+                            </div>
+                          )}
+                          <p className="border-t border-rule px-3 py-1.5">
+                            <span className="tag text-ink-dim">
+                              as analysed at {shortSha(arch.data.commit_sha)}
+                            </span>
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </>
                 )}
               </Panel>
 
-              {/* Above the counters and the role plot, because it is the only thing
-                  here that answers "what is this project" rather than "how big is
-                  it". Analysis has written this on every run and nothing has ever
-                  read it. */}
-              {arch.data?.available && (
-                <Panel
-                  title="Architecture"
-                  action={
-                    <span className="tag text-ink-dim">
-                      as analysed at {shortSha(arch.data.commit_sha)}
-                    </span>
-                  }
-                >
-                  <ArchitectureMap arch={arch.data} />
-
-                  {(arch.data.tech_stack.frameworks.length > 0 ||
-                    arch.data.patterns.length > 0 ||
-                    arch.data.layers.length > 0) && (
-                    <div className="border-t border-rule px-3 py-2.5">
-                      {/* Single-word facts that each cost a quality-tier call to
-                          derive and reached nobody until now. */}
-                      {arch.data.layers.length > 0 && (
-                        <Facts label="layers" items={arch.data.layers.map(l => l.name)} />
-                      )}
-                      {arch.data.patterns.length > 0 && (
-                        <Facts label="patterns" items={arch.data.patterns} hot />
-                      )}
-                      {arch.data.tech_stack.frameworks.length > 0 && (
-                        <Facts label="frameworks" items={arch.data.tech_stack.frameworks} />
-                      )}
-                      {arch.data.tech_stack.infra.length > 0 && (
-                        <Facts label="infra" items={arch.data.tech_stack.infra} />
-                      )}
-                      {arch.data.tech_stack.databases.length > 0 && (
-                        <Facts label="data stores" items={arch.data.tech_stack.databases} />
-                      )}
-                    </div>
-                  )}
-                </Panel>
-              )}
 
               {/* The chips that used to sit at the bottom of this page named
                   twelve topics and showed none of the three thousand words
@@ -523,10 +573,10 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        {/* Was the rail. Three panels of context, now side by side below the
-            work rather than beside it. */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <SourcePanel project={p} />
+        {/* Was the rail. Context, now side by side below the work rather than
+            beside it. The source moved further still, to the top: it is the one
+            thing here that everything else is about. */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
 
           <Panel
             title="Recent jobs"
