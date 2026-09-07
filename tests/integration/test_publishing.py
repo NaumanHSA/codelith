@@ -204,8 +204,9 @@ class TestPublishing:
     async def test_an_empty_site_is_refused_rather_than_published_blank(
         self, db_session, scene
     ):
-        from codelith.core.exceptions import ValidationError
         from sqlalchemy import delete
+
+        from codelith.core.exceptions import ValidationError
 
         await db_session.execute(delete(DocPage).where(DocPage.site_id == scene["site"].id))
         await db_session.commit()

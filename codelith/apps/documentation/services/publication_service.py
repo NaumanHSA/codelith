@@ -35,9 +35,9 @@ from codelith.db.repositories.publication_repo import (
 )
 from codelith.db.repositories.site_repo import DocSiteRepository
 from codelith.models.publication import (
+    LIVE_TARGET,
     BuildStatus,
     DocSitePublication,
-    LIVE_TARGET,
     PublicationStatus,
 )
 from codelith.models.user import User

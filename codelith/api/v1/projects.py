@@ -13,6 +13,7 @@ from codelith.apps.documentation.services.site_service import SiteService
 from codelith.config import get_settings
 from codelith.dependencies import CurrentUser, DbSession, ManagerUser, ReviewerUser
 from codelith.schemas.architecture import ArchitectureOut
+from codelith.schemas.code import FileOut, FileTreeOut
 from codelith.schemas.job import (
     JobApproveRequest,
     JobCreate,
@@ -20,9 +21,6 @@ from codelith.schemas.job import (
     ReviewOut,
     ReviewPageOut,
 )
-from codelith.schemas.code import FileOut, FileTreeOut
-from codelith.schemas.module import ModulesOut
-from codelith.schemas.narrative import NarrativesOut
 from codelith.schemas.knowledge import (
     AddPageRequest,
     AnalyzeRequest,
@@ -31,6 +29,8 @@ from codelith.schemas.knowledge import (
     KnowledgeBaseSummary,
     ReviseRequest,
 )
+from codelith.schemas.module import ModulesOut
+from codelith.schemas.narrative import NarrativesOut
 from codelith.schemas.project import (
     ProjectCreate,
     ProjectCreateWithSource,
@@ -48,10 +48,10 @@ from codelith.schemas.site import (
     SitePageDetail,
     SiteVersionOut,
 )
-from codelith.services.audit_service import AuditService
-from codelith.services.job_service import JobService
 from codelith.services.architecture_service import ArchitectureService
+from codelith.services.audit_service import AuditService
 from codelith.services.code_service import CodeService
+from codelith.services.job_service import JobService
 from codelith.services.knowledge_service import KnowledgeService
 from codelith.services.module_service import ModuleService
 from codelith.services.narrative_service import NarrativeService

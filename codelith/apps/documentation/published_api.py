@@ -21,6 +21,7 @@ one row update that activates it, this route behaves as though it does not exist
 from __future__ import annotations
 
 import mimetypes
+
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 

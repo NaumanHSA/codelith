@@ -10,8 +10,6 @@ away.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Request
 
 from codelith.apps.documentation.publishing.renderers import available_renderers
@@ -177,7 +175,8 @@ async def _project_name(service: PublicationService, publication) -> str:
     it is there and one scalar is fetched when it is not: correct in both places, and
     no N+1 in the one that lists.
     """
-    from sqlalchemy import inspect as sa_inspect, select
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy import select
 
     from codelith.models.project import Project
 

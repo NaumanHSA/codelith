@@ -16,7 +16,6 @@ import pytest
 
 from codelith.services.module_service import assemble
 
-
 #: "Not supplied", so that passing an explicit None is a case the test can express.
 #: Without it `files=None` and `files` omitted are the same call, and the parametrised
 #: junk test silently checked the default instead of the null column it names.

@@ -42,10 +42,10 @@ from markdown_it import MarkdownIt
 from codelith.apps.documentation.formatters.site_tree import (
     ExportPage,
     SiteTree,
+    SourceFile,
+    link_citations,
     rewrite_links,
     slugify_filename,
-    link_citations,
-    SourceFile,
 )
 
 #: The diagram-source blocks the studio folds under each diagram. They exist so an

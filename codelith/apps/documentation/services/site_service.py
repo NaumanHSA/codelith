@@ -35,18 +35,17 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.apps.documentation.formatters.site_tree import (
-    SiteMeta,
     ExportPage,
     ExportSection,
+    SiteMeta,
     SiteTree,
     SourceFile,
     SourceSegment,
-    rewrite_links,
     cited_paths,
+    rewrite_links,
     slugify_filename,
     source_slug,
 )
-from codelith.services.code_service import rebuild
 from codelith.core.exceptions import NotFoundError, ValidationError
 from codelith.db.repositories.knowledge import KnowledgeRepositories
 from codelith.db.repositories.site_repo import (
@@ -64,6 +63,7 @@ from codelith.schemas.site import (
     SiteSectionOut,
     SiteVersionOut,
 )
+from codelith.services.code_service import rebuild
 from codelith.services.project_service import ProjectService
 
 #: Page columns the merge may rewrite from a proposal. `slug` and `section_slug` are

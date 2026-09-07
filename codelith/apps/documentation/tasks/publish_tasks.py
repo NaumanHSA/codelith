@@ -46,7 +46,7 @@ async def _publish(job_id: int, publication_id: int, build_id: int) -> dict:
             PublicationBuildRepository,
             PublicationRepository,
         )
-        from codelith.models.publication import BuildStatus, LIVE_TARGET, PublicationStatus
+        from codelith.models.publication import LIVE_TARGET, BuildStatus, PublicationStatus
 
         jobs = JobRepository(db)
         pubs = PublicationRepository(db)
