@@ -1,0 +1,26 @@
+# Line endings, decided here rather than per-machine.
+#
+# Git on Windows defaults to converting LF to CRLF on checkout, and the Docker build
+# copies from the working tree rather than from the object store. A CRLF `entrypoint.sh`
+# fails inside the image with "no such file or directory" — naming the interpreter, not
+# the file — which is a long way from the cause.
+
+* text=auto
+
+# These are read by a Linux shell or by Docker, wherever they were cloned.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+docker/**       text eol=lf
+Makefile        text eol=lf
+
+# Binary, so Git neither diffs them nor touches their bytes.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.pdf           binary
+*.docx          binary
