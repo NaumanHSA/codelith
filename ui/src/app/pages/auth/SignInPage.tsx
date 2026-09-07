@@ -17,7 +17,7 @@ import AuthLayout from './AuthLayout'
  * Rendered only in dev builds, so it never reaches a `pnpm build` artifact.
  */
 const GUEST = {
-  email: (import.meta.env.VITE_GUEST_EMAIL as string | undefined) ?? 'admin@docany.dev',
+  email: (import.meta.env.VITE_GUEST_EMAIL as string | undefined) ?? 'admin@codelith.dev',
   password: (import.meta.env.VITE_GUEST_PASSWORD as string | undefined) ?? 'admin1234',
 }
 

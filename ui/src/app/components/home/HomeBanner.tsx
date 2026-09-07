@@ -112,7 +112,7 @@ export default function HomeBanner({ projects }: { projects: Project[] | null })
                 the third thing a person does with a local-first tool they have just
                 been told keeps nothing from them. */}
             <a
-              href="https://github.com/codelith"
+              href="https://github.com/NaumanHSA/codelith"
               target="_blank"
               rel="noreferrer"
               className={`${cta} border-rule bg-panel px-4 py-[10px] text-ink-mid hover:border-ink hover:text-ink`}

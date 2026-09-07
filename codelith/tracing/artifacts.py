@@ -131,7 +131,7 @@ class ArtifactWriter:
 
 
 _current_writer: contextvars.ContextVar[ArtifactWriter | None] = contextvars.ContextVar(
-    "docany_artifact_writer",
+    "codelith_artifact_writer",
     default=None,
 )
 

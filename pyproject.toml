@@ -5,8 +5,37 @@ build-backend = "hatchling.build"
 [project]
 name = "codelith"
 version = "0.1.0"
-description = "AI-Powered Documentation Generation Platform"
+# What this is now. The old description - "AI-Powered Documentation Generation
+# Platform" - described the product two rewrites ago, when documentation was the
+# point rather than one of the things understanding a codebase unlocks.
+description = "Read a codebase once, then ask it anything. Local-first code intelligence with an MCP server."
+readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Nauman Hafeez", email = "naumanhsa965@gmail.com" }]
+keywords = [
+    "code-intelligence",
+    "mcp",
+    "static-analysis",
+    "documentation",
+    "rag",
+    "developer-tools",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     # Web framework
     "fastapi>=0.115.0",
@@ -104,6 +133,12 @@ dependencies = [
     "tenacity>=9.0.0",
     "python-slugify>=8.0.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NaumanHSA/codelith"
+Repository = "https://github.com/NaumanHSA/codelith"
+Issues = "https://github.com/NaumanHSA/codelith/issues"
+Changelog = "https://github.com/NaumanHSA/codelith/blob/main/CHANGELOG.md"
 
 [project.scripts]
 # The command the landing page has advertised since before it existed.

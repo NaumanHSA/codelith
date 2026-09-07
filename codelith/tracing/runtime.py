@@ -9,7 +9,7 @@ from codelith.config import get_settings
 from codelith.tracing import NullSpanTracer, RichTracer, Tracer, TracerConfig
 
 _current_tracer: contextvars.ContextVar[Tracer | None] = contextvars.ContextVar(
-    "docany_current_tracer",
+    "codelith_current_tracer",
     default=None,
 )
 
@@ -43,7 +43,7 @@ def create_tracer(
             "workflow_type": workflow_type,
             "run_dir": str(run_dir),
         },
-        logger_=logging.getLogger("docany.tracing"),
+        logger_=logging.getLogger("codelith.tracing"),
     )
     # Write each step's JSON the moment it completes so the steps/ folder
     # fills up incrementally during the run, not only after it finishes.

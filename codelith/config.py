@@ -86,10 +86,15 @@ class Settings(BaseSettings):
     MODEL_FAST_CONTEXT_WINDOW: int = 21000
 
     # The embedding model is a third tier, and deliberately not tied to the other
-    # two: its output size is baked into `code_chunks.embedding` by the migrations
-    # (`VECTOR_DIMENSIONS`), so changing it means a migration that TRUNCATEs the
-    # table and a full re-ingest. Moving the writing model to OpenAI must not drag
-    # the embedder with it. No context window — nothing reads one for embeddings.
+    # two: a vector only means anything to the model that produced it, so changing
+    # the embedder invalidates every knowledge base already built. Moving the
+    # writing model to OpenAI must not drag the embedder with it.
+    #
+    # There is no dimension setting. The width is measured from whatever model is
+    # loaded and recorded on the knowledge base by `knowledge/embedding_guard.py`,
+    # which refuses to read one built by a different model rather than returning
+    # nonsense. Any embedding model works. No context window — nothing reads one
+    # for embeddings.
     MODEL_EMBEDDING_PROVIDER: str = "local"
     MODEL_EMBEDDING: str = "text-embedding-nomic-embed-text-v1.5"
     MODEL_EMBEDDING_BASE_URL: str = ""
@@ -106,9 +111,6 @@ class Settings(BaseSettings):
     # Texts per embeddings request. Batching is what keeps ingestion off a
     # one-request-per-chunk path; lower it if the endpoint rejects large batches.
     EMBEDDING_BATCH_SIZE: int = 64
-
-    # pgvector — must match your embedding model's output size (common: 1536, 1024, 768, 384)
-    VECTOR_DIMENSIONS: int = 1536
 
     # ── Analysis (Phase 1: build the knowledge base) ──────────────────────────
     # Modules sent to the summarizer, largest first. Bounds cost on big repos.

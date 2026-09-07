@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace.export import (
 
 from codelith.config import get_settings
 
-_TRACER_NAME = "docany"
+_TRACER_NAME = "codelith"
 
 
 def setup_tracing() -> None:

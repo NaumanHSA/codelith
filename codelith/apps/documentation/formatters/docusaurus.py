@@ -233,7 +233,7 @@ module.exports = config;
         return (
             f"# {title}\n\n"
             "Documentation written from the codebase by "
-            "[Codelith](https://github.com/codelith), as a Docusaurus site.\n\n"
+            "[Codelith](https://github.com/NaumanHSA/codelith), as a Docusaurus site.\n\n"
             "## Running it\n\n"
             "```bash\n"
             "npm install\n"

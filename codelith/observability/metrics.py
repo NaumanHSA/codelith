@@ -9,47 +9,47 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 
 # ── Job metrics ───────────────────────────────────────────────────────────────
 job_total = Counter(
-    "docany_jobs_total",
+    "codelith_jobs_total",
     "Total documentation jobs by final status",
     ["status"],  # completed | failed | cancelled
 )
 job_duration = Histogram(
-    "docany_job_duration_seconds",
+    "codelith_job_duration_seconds",
     "End-to-end job duration in seconds",
     buckets=[30, 60, 120, 300, 600, 1200, 1800, 3600],
 )
 
 # ── Agent metrics ─────────────────────────────────────────────────────────────
 agent_duration = Histogram(
-    "docany_agent_duration_seconds",
+    "codelith_agent_duration_seconds",
     "Agent run duration in seconds",
     ["agent"],
     buckets=[1, 5, 15, 30, 60, 120, 300],
 )
 agent_runs_total = Counter(
-    "docany_agent_runs_total",
+    "codelith_agent_runs_total",
     "Total agent invocations",
     ["agent", "status"],  # status: success | error
 )
 agent_errors_total = Counter(
-    "docany_agent_errors_total",
+    "codelith_agent_errors_total",
     "Agent errors by agent name",
     ["agent"],
 )
 
 # ── LLM / token metrics ───────────────────────────────────────────────────────
 llm_tokens_total = Counter(
-    "docany_llm_tokens_total",
+    "codelith_llm_tokens_total",
     "Total LLM tokens consumed",
     ["model", "direction"],  # direction: prompt | completion
 )
 llm_calls_total = Counter(
-    "docany_llm_calls_total",
+    "codelith_llm_calls_total",
     "Total LLM API calls",
     ["model", "task_type", "status"],  # status: success | error
 )
 llm_call_duration = Histogram(
-    "docany_llm_call_duration_seconds",
+    "codelith_llm_call_duration_seconds",
     "LLM API call duration in seconds",
     ["model", "task_type"],
     buckets=[0.5, 1, 2, 5, 10, 20, 30, 60],

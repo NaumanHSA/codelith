@@ -233,7 +233,7 @@ function ShellBody() {
 
         <div className="grid grid-cols-2 gap-px border-t border-rule bg-rule">
           <a
-            href="https://github.com/codelith"
+            href="https://github.com/NaumanHSA/codelith"
             target="_blank"
             rel="noreferrer"
             className="tag flex items-center justify-center gap-1.5 bg-panel py-2 text-ink-dim transition-colors hover:bg-sunk hover:text-ink"

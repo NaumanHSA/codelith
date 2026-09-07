@@ -342,21 +342,22 @@ def cmd_doctor(args, o: Output) -> int:
         else:
             record(f"model:{tier}", False, f"{model} is not loaded at {base}")
 
+    # Reported, not compared. There is nothing to compare against: the width is
+    # measured from the model and recorded on the knowledge base it builds, so any
+    # model works and a changed one is caught at read time by `embedding_guard`.
     dim = _embedding_dimension(settings)
     if dim is None:
         record(
-            "vector dimensions",
+            "embedding model",
             False,
-            f"could not measure — configured as {settings.VECTOR_DIMENSIONS}",
+            f"{settings.MODEL_EMBEDDING} did not answer at "
+            f"{settings.MODEL_EMBEDDING_BASE_URL or 'the configured endpoint'}",
         )
-    elif dim == settings.VECTOR_DIMENSIONS:
-        record("vector dimensions", True, f"{dim}, matching VECTOR_DIMENSIONS")
     else:
         record(
-            "vector dimensions",
-            False,
-            f"{settings.MODEL_EMBEDDING} emits {dim}, VECTOR_DIMENSIONS={settings.VECTOR_DIMENSIONS}. "
-            "Ingestion will fail when the first embedding is written.",
+            "embedding model",
+            True,
+            f"{settings.MODEL_EMBEDDING} emits {dim}-dimension vectors",
         )
 
     o.result(checks)

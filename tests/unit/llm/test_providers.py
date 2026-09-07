@@ -92,9 +92,10 @@ class TestTierResolution:
 class TestEmbeddings:
     def test_embeddings_do_not_follow_the_quality_tier(self, settings_factory) -> None:
         """
-        The load-bearing one. `VECTOR_DIMENSIONS` is baked into
-        `code_chunks.embedding` at migration time, so an embedder that quietly moved
-        with the writing model would mean a truncating migration and a full re-ingest.
+        The load-bearing one. A vector only means anything to the model that made
+        it, so an embedder that quietly moved with the writing model would leave
+        every knowledge base already built unreadable - and unreadable without
+        anything saying so, since the widths might even match.
         """
         settings_factory(MODEL_QUALITY_PROVIDER="openai", MODEL_EMBEDDING_PROVIDER="local")
         spec = providers.embedding_spec()

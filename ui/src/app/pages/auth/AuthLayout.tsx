@@ -97,12 +97,12 @@ export default function AuthLayout({
               </div>
 
               <a
-                href="https://github.com/codelith"
+                href="https://github.com/NaumanHSA/codelith"
                 target="_blank"
                 rel="noreferrer"
                 className="tag mt-6 flex w-fit items-center gap-1.5 text-ink-dim transition-colors hover:text-ink"
               >
-                <GitHubMark size={12} /> github.com/codelith
+                <GitHubMark size={12} /> github.com/NaumanHSA/codelith
               </a>
             </div>
 

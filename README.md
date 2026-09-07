@@ -163,7 +163,7 @@ uv sync
 
 ```bash
 uvicorn codelith.main:app --reload      # API on http://localhost:8000
-make seed                                # admin@docany.dev / admin1234
+make seed                                # admin@codelith.dev / admin1234
 ```
 
 There is nothing to install first and no migrate step. The knowledge base is a SQLite

@@ -19,10 +19,10 @@ async def main():
             org = await org_repo.create(name="Default Org", slug="default", plan_tier="free")
             print(f"Created org: {org.name} (id={org.id})")
 
-        user = await user_repo.get_by_email("admin@docany.dev")
+        user = await user_repo.get_by_email("admin@codelith.dev")
         if not user:
             user = await user_repo.create(
-                email="admin@docany.dev",
+                email="admin@codelith.dev",
                 password_hash=hash_password("admin1234"),
                 full_name="Admin User",
                 role="admin",

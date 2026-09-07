@@ -148,16 +148,12 @@ class TestSemanticIndexer:
         extracted = await StructuredExtractorAgent(db=db_session, job_id=job.id).run(state)
         calls: list[int] = []
 
-        from codelith.config import get_settings
-
-        dimensions = get_settings().VECTOR_DIMENSIONS
-
         async def fake_embeddings(texts, model=None, batch_size=None):
             calls.append(len(texts))
-            # Follows the configured dimension: `code_chunks.embedding` is built
-            # from VECTOR_DIMENSIONS, so a hardcoded width fails on any deployment
-            # whose embedding model differs from whoever wrote the test.
-            return [[0.1] * dimensions for _ in texts]
+            # Any width will do. The column is a blob and nothing declares a size,
+            # which is the whole point: an embedding model of any dimension works
+            # and a changed one is caught by `embedding_guard`, not by the schema.
+            return [[0.1] * 768 for _ in texts]
 
         monkeypatch.setattr(
             "codelith.agents.analysis.semantic_indexer.create_embeddings", fake_embeddings
