@@ -878,10 +878,13 @@ export default function KnowledgeGraph({
         </div>
 
         {showLegend && <Key />}
-        {focus && (
-          <Detail node={focus} selected={focus.id === selected} onOpen={openCode} />
-        )}
       </div>
+
+      {/* Under the canvas rather than floating over it. As a card in the corner
+          it covered a third of the graph it was describing, and a module summary
+          in a 310px column is six lines of two-inch prose. Full width, fixed
+          height, so opening a node never moves the drawing. */}
+      <Detail node={focus} selected={focus?.id === selected} onOpen={openCode} />
 
       {peek && (
         <SourcePeek
@@ -1223,9 +1226,12 @@ function Key() {
 /**
  * What is on the card you are pointing at.
  *
- * Anchored in the corner rather than following the cursor, because the thing it
- * describes is the thing under the cursor and a panel that chases you covers it.
- * Hovering peeks; clicking pins, and clicking also opens the node, so the panel
+ * A strip rather than a panel: the thing it describes is on the canvas above it,
+ * so anything that overlaps the canvas hides the answer to the question it was
+ * opened to answer. Fixed height, so the graph does not jump every time the
+ * pointer crosses a card.
+ *
+ * Hovering peeks; clicking pins, and clicking also opens the node, so the strip
  * outlives the hover that summoned it.
  */
 function Detail({
@@ -1233,146 +1239,152 @@ function Detail({
   selected,
   onOpen,
 }: {
-  node: Node
+  node: Node | null
   selected: boolean
   onOpen: (path: string, line?: number) => void
 }) {
-  return (
-    <div className="absolute bottom-2 left-2 max-h-[70%] w-[310px] overflow-y-auto border border-rule bg-panel/95 shadow-[0_2px_14px_rgba(20,18,15,0.10)] backdrop-blur">
-      <div className="flex items-baseline gap-2 border-b border-rule bg-sunk/60 px-2.5 py-1.5">
-        <span className="tag text-ink-dim">{node.kind}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-ink">
-          {node.label}
-        </span>
-        {selected && <span className="tag text-hot-ink">selected</span>}
+  if (!node) {
+    return (
+      <div className="flex h-[92px] items-center border-t border-rule bg-sunk/30 px-3">
+        <p className="font-sans text-[11.5px] text-ink-dim">
+          Point at a card to see what it is. Click it to open what is inside.
+        </p>
       </div>
+    )
+  }
 
-      <div className="px-2.5 py-2">
-        {node.full !== node.label && (
-          <p className="mb-1.5 break-all font-mono text-[10px] text-ink-dim">{node.full}</p>
-        )}
+  const ink = node.kind === 'root' ? 'var(--hot)' : familyInk(node.role ?? '')
+  const facts: [string, string | number][] =
+    node.kind === 'module' && node.module
+      ? [
+          ['language', node.module.language || 'mixed'],
+          ['lines', node.module.loc.toLocaleString()],
+          ['files', node.module.file_count],
+          ['symbols', node.module.symbols],
+          ['role', node.module.role],
+        ]
+      : node.kind === 'file'
+        ? [
+            ['language', node.file?.language || 'unknown'],
+            ['lines', node.file?.loc ? node.file.loc.toLocaleString() : '-'],
+            ['symbols', node.file?.symbols ?? '-'],
+            ...(node.file && !node.file.has_source
+              ? ([['source', 'not kept']] as [string, string][])
+              : []),
+          ]
+        : node.kind === 'symbols'
+          ? [
+              ['symbols', node.rows?.length ?? 0],
+              [
+                'functions',
+                (node.rows ?? []).filter(r => (r.kind ?? '').includes('function')).length,
+              ],
+              [
+                'classes',
+                (node.rows ?? []).filter(r => (r.kind ?? '').includes('class')).length,
+              ],
+            ]
+          : node.meta.split(' · ').map(part => {
+              const [count, ...rest] = part.split(' ')
+              return [rest.join(' '), count] as [string, string]
+            })
 
-        {node.kind === 'root' && (
-          <p className="font-sans text-[11px] leading-relaxed text-ink-mid">
-            {node.meta}. Every module analysis found, grouped by what it is for. Open a
-            role for its modules, a module for its files, a file for its symbols.
-          </p>
-        )}
+  const prose =
+    node.kind === 'module' && node.module
+      ? node.module.summary ||
+        (node.module.is_test
+          ? 'Test modules are not summarised.'
+          : 'No summary was written for this module.')
+      : node.kind === 'root'
+        ? 'Every module analysis found, grouped by what it is for. Open a role for its modules, a module for its files, a file for its symbols.'
+        : node.kind === 'role'
+          ? 'What analysis decided these modules are for, read from how they are written rather than from where they sit.'
+          : node.kind === 'symbols'
+            ? 'Every function, class and variable the parser found in this file. A row goes to its line.'
+            : 'One file, as the knowledge base retained it. The viewer shows the lines it kept and names the ones it did not.'
 
-        {node.kind === 'role' && (
-          <p className="font-sans text-[11px] leading-relaxed text-ink-mid">
-            {node.meta}. What analysis decided these modules are for, read from how they
-            are written rather than from where they sit.
-          </p>
-        )}
-
-        {node.kind === 'module' && node.module && (
-          <>
-            <Rows
-              rows={[
-                ['language', node.module.language || 'mixed'],
-                ['lines', node.module.loc.toLocaleString()],
-                ['files', node.module.file_count],
-                ['symbols', node.module.symbols],
-              ]}
-            />
-            <p className="mt-1.5 font-sans text-[11px] leading-relaxed text-ink-mid">
-              {node.module.summary ||
-                (node.module.is_test
-                  ? 'Test modules are not summarised.'
-                  : 'No summary was written for this module.')}
-            </p>
-            {/* A module is not a file, so it has no single destination. Its files
-                are the destinations, and every one of them is one click away. */}
-            {node.module.files.length > 0 && (
-              <div className="mt-2 border-t border-rule pt-1.5">
-                <span className="tag text-ink-dim">open in source</span>
-                <ul className="mt-1">
-                  {node.module.files.slice(0, 8).map(path => (
-                    <li key={path}>
-                      <button
-                        type="button"
-                        onClick={() => onOpen(path)}
-                        className="block w-full truncate text-left font-mono text-[10.5px] text-hot-ink hover:underline"
-                      >
-                        {path}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </>
-        )}
-
-        {node.kind === 'file' && node.path && (
-          <>
-            <Rows
-              rows={[
-                ['language', node.file?.language || 'unknown'],
-                ['lines', node.file?.loc ? node.file.loc.toLocaleString() : '-'],
-                ['symbols', node.file?.symbols ?? '-'],
-                ...(node.file && !node.file.has_source
-                  ? ([['source', 'not kept']] as [string, string][])
-                  : []),
-              ]}
-            />
-            <button
-              type="button"
-              onClick={() => onOpen(node.path!)}
-              className="mt-2 inline-block border border-hot-edge bg-hot-wash px-2 py-1 font-mono text-[10.5px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
+  return (
+    <div className="h-[92px] border-t border-rule bg-sunk/30">
+      <div className="flex h-full items-start gap-4 px-3 py-2">
+        <div className="flex min-w-0 shrink-0 flex-col gap-1.5" style={{ width: 300 }}>
+          <div className="flex items-baseline gap-2">
+            <span
+              className="shrink-0 rounded-sm px-1.5 py-[1px] text-[9px] font-semibold tracking-wide uppercase"
+              style={{ background: ink, color: 'var(--on-hot)' }}
             >
-              open in source →
-            </button>
-          </>
+              {node.kind}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-semibold text-ink">
+              {node.label}
+            </span>
+            {selected && <span className="tag shrink-0 text-hot-ink">selected</span>}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {facts.slice(0, 5).map(([k, v]) => (
+              <Badge key={k} label={k} value={v} ink={ink} />
+            ))}
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-3 font-sans text-[11.5px] leading-relaxed text-ink-mid">
+            {prose}
+          </p>
+          {node.full !== node.label && (
+            <p className="mt-1 truncate font-mono text-[10px] text-ink-dim">{node.full}</p>
+          )}
+        </div>
+
+        {node.kind === 'module' && node.module && node.module.files.length > 0 && (
+          <div className="hidden max-h-[76px] shrink-0 overflow-y-auto md:block" style={{ width: 210 }}>
+            <span className="tag text-ink-dim">open in source</span>
+            {node.module.files.slice(0, 6).map(path => (
+              <button
+                key={path}
+                type="button"
+                onClick={() => onOpen(path)}
+                className="block w-full truncate text-left font-mono text-[10.5px] text-hot-ink hover:underline"
+              >
+                {path}
+              </button>
+            ))}
+          </div>
         )}
 
-        {node.kind === 'symbols' && node.path && (
-          <>
-            {/* Every row, including the ones the block on the canvas had no
-                height for. Each goes to its own line. */}
-            <ul>
-              {(node.rows ?? []).map(symbol => (
-                <li key={`${symbol.qname || symbol.name}:${symbol.line}`}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(node.path!, symbol.line)}
-                    className="flex w-full items-baseline gap-2 py-[2px] text-left font-mono text-[10.5px] text-ink-mid hover:text-hot-ink"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{symbol.name}</span>
-                    <span className="shrink-0 text-[9px] text-ink-dim">
-                      {symbol.kind || 'symbol'}
-                    </span>
-                    <span className="shrink-0 text-[9px] tabular-nums text-ink-dim">
-                      L{symbol.line}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={() => onOpen(node.path!)}
-              className="mt-2 inline-block border border-hot-edge bg-hot-wash px-2 py-1 font-mono text-[10.5px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
-            >
-              open the whole file →
-            </button>
-          </>
+        {(node.kind === 'file' || node.kind === 'symbols') && node.path && (
+          <button
+            type="button"
+            onClick={() => onOpen(node.path!)}
+            className="shrink-0 self-center border border-hot-edge bg-hot-wash px-2.5 py-1.5 font-mono text-[11px] text-hot-ink hover:bg-hot hover:text-[var(--on-hot)]"
+          >
+            open in source →
+          </button>
         )}
       </div>
     </div>
   )
 }
 
-function Rows({ rows }: { rows: [string, string | number][] }) {
+/** A fact, as a tag. The value leads because that is what is being read. */
+function Badge({
+  label,
+  value,
+  ink,
+}: {
+  label: string
+  value: string | number
+  ink: string
+}) {
   return (
-    <dl className="grid grid-cols-[66px_1fr] gap-x-2 gap-y-[2px]">
-      {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="tag text-ink-dim">{k}</dt>
-          <dd className="min-w-0 truncate font-mono text-[10.5px] text-ink">{v}</dd>
-        </div>
-      ))}
-    </dl>
+    <span
+      className="inline-flex items-baseline gap-1 rounded-sm border px-1.5 py-[1px]"
+      style={{
+        borderColor: `color-mix(in srgb, ${ink} 35%, transparent)`,
+        background: `color-mix(in srgb, ${ink} 7%, transparent)`,
+      }}
+    >
+      <span className="font-mono text-[10.5px] font-semibold text-ink">{value}</span>
+      <span className="text-[9px] tracking-wide text-ink-dim uppercase">{label}</span>
+    </span>
   )
 }

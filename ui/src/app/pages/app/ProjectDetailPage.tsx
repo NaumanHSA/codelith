@@ -5,7 +5,7 @@ import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
 import { useRunningJobs } from '../../running-jobs'
 import { countLabel, humanize, languageShares, relativeTime, shortSha } from '../../lib/format'
-import type { Project } from '../../lib/types'
+import type { KnowledgeBase, Project } from '../../lib/types'
 import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import Preflight from '../../components/projects/Preflight'
@@ -154,6 +154,132 @@ function Facts({ label, items, hot }: { label: string; items: string[]; hot?: bo
           {item}
         </span>
       ))}
+    </div>
+  )
+}
+
+/**
+ * What analysis extracted, in one place.
+ *
+ * A codebase has whichever of these it has: a library declares no routes, a
+ * service has no CLI commands, a frontend has neither. Three panels that each
+ * vanish when their kind of fact is missing made the page a different shape per
+ * project; one panel that lists what was found is the same page every time and
+ * says more.
+ */
+function FoundFacts({ kb }: { kb: KnowledgeBase }) {
+  const kinds = Object.entries(kb.entity_kinds ?? {})
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+
+  const entrypoints = kb.entrypoints ?? []
+  const dependencies = kb.key_dependencies ?? []
+  const routes = kb.sample_routes ?? []
+
+  if (!kinds.length && !entrypoints.length && !dependencies.length && !routes.length) {
+    return null
+  }
+
+  const total = kinds.reduce((n, [, count]) => n + count, 0)
+  const detailed = [entrypoints.length > 0, routes.length > 0, dependencies.length > 0]
+  const columns = detailed.filter(Boolean).length
+
+  return (
+    <Panel
+      title="What analysis found"
+      action={
+        <span className="tag text-ink-dim">
+          {total} across {kinds.length} kind{kinds.length === 1 ? '' : 's'}
+        </span>
+      }
+    >
+      {/* Every kind, including the ones with no sample to show. A codebase with
+          twenty-four env vars and no routes should be able to say so. */}
+      {kinds.length > 0 && (
+        <div className="flex flex-wrap gap-1 border-b border-rule px-3 py-2.5">
+          {kinds.map(([kind, count]) => (
+            <span
+              key={kind}
+              className="inline-flex items-baseline gap-1 border border-rule bg-sunk/50 px-1.5 py-[2px]"
+            >
+              <span className="font-mono text-[11px] font-semibold text-ink">{count}</span>
+              <span className="tag text-ink-dim">{humanize(kind)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {columns > 0 && (
+        <div
+          className={`grid grid-cols-1 gap-px bg-rule ${
+            columns >= 3 ? 'lg:grid-cols-3' : columns === 2 ? 'md:grid-cols-2' : ''
+          }`}
+        >
+          {entrypoints.length > 0 && (
+            <Found title="Entrypoints" count={entrypoints.length}>
+              {entrypoints.slice(0, 10).map(e => (
+                <li key={e} className="truncate py-[3px] text-[11.5px] text-ink-mid">
+                  <span className="text-hot-ink">→</span> {e}
+                </li>
+              ))}
+            </Found>
+          )}
+
+          {routes.length > 0 && (
+            <Found title="Surface" count={routes.length} hint="sample">
+              {routes.slice(0, 10).map((r, i) => (
+                <li key={`${r.name}-${i}`} className="flex gap-2 py-[3px]">
+                  <span className="tag w-[62px] shrink-0 text-ink-dim">
+                    {humanize(r.kind)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">
+                    {r.name}
+                  </span>
+                </li>
+              ))}
+            </Found>
+          )}
+
+          {dependencies.length > 0 && (
+            <Found title="Key dependencies" count={dependencies.length}>
+              <li className="flex flex-wrap gap-1 py-1">
+                {dependencies.slice(0, 24).map(d => (
+                  <span
+                    key={d}
+                    className="tag border border-rule bg-sunk/60 px-1.5 py-0.5 text-ink-mid"
+                  >
+                    {d}
+                  </span>
+                ))}
+              </li>
+            </Found>
+          )}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/** One kind of finding, with what was found. */
+function Found({
+  title,
+  count,
+  hint,
+  children,
+}: {
+  title: string
+  count: number
+  hint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="min-w-0 bg-panel">
+      <div className="flex items-baseline gap-2 bg-sunk/40 px-3 py-1.5">
+        <span className="tag text-ink-dim">{title}</span>
+        <span className="tag tabular-nums text-ink-dim">{count}</span>
+        {hint && <span className="ml-auto tag text-ink-dim">{hint}</span>}
+      </div>
+      <ul className="max-h-[220px] overflow-y-auto px-3 py-1.5">{children}</ul>
     </div>
   )
 }
@@ -514,60 +640,7 @@ export default function ProjectDetailPage() {
                   after. */}
               <Preflight projectId={id} />
 
-              {(kb.data.sample_routes?.length ||
-                kb.data.key_dependencies?.length ||
-                kb.data.entrypoints?.length) && (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {kb.data.entrypoints?.length ? (
-                    <Panel title="Entrypoints">
-                      <ul className="p-2.5">
-                        {kb.data.entrypoints.slice(0, 8).map(e => (
-                          <li key={e} className="truncate py-[3px] text-[11.5px] text-ink-mid">
-                            <span className="text-hot-ink">→</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </Panel>
-                  ) : null}
-
-                  {kb.data.key_dependencies?.length ? (
-                    <Panel title="Key dependencies">
-                      <div className="flex flex-wrap gap-1 p-2.5">
-                        {kb.data.key_dependencies.slice(0, 24).map(d => (
-                          <span
-                            key={d}
-                            className="tag border border-rule bg-sunk/60 px-1.5 py-0.5 text-ink-mid"
-                          >
-                            {d}
-                          </span>
-                        ))}
-                      </div>
-                    </Panel>
-                  ) : null}
-
-                  {kb.data.sample_routes?.length ? (
-                    <Panel title="Surface" action={<span className="tag text-ink-dim">sample</span>}>
-                      <ul className="divide-y divide-rule">
-                        {kb.data.sample_routes.slice(0, 10).map((r, i) => (
-                          <li key={`${r.name}-${i}`} className="flex gap-2 px-2.5 py-1.5">
-                            <span className="tag w-[74px] shrink-0 text-ink-dim">
-                              {humanize(r.kind)}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">
-                              {r.name}
-                            </span>
-                            {r.detail && (
-                              <span className="hidden truncate text-[11px] text-ink-dim sm:block">
-                                {r.detail}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </Panel>
-                  ) : null}
-                </div>
-              )}
+              <FoundFacts kb={kb.data} />
 
             </>
           )}

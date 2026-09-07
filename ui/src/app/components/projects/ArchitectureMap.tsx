@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Architecture, ArchService } from '../../lib/types'
 
 /* ------------------------------------------------------------------ *
@@ -212,7 +212,37 @@ function at({ p0, c1, c2, p3 }: Curve, t: number): Point {
 
 export default function ArchitectureMap({ arch }: { arch: Architecture }) {
   const [hover, setHover] = useState<string | null>(null)
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 })
+  const svgRef = useRef<SVGSVGElement>(null)
+  const pan = useRef<{ x: number; y: number } | null>(null)
+  const [panning, setPanning] = useState(false)
   const { nodes, rows, width } = useMemo(() => layout(arch), [arch])
+
+  // Non-passive, or the page scrolls behind the zoom.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = svg.getBoundingClientRect()
+      const px = e.clientX - rect.left - rect.width / 2
+      const py = e.clientY - rect.top - rect.height / 2
+      setView(v => {
+        const k = Math.min(3, Math.max(0.35, v.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12)))
+        const ratio = k / v.k
+        return { k, x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio }
+      })
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const zoom = useCallback(
+    (factor: number) =>
+      setView(v => ({ ...v, k: Math.min(3, Math.max(0.35, v.k * factor)) })),
+    [],
+  )
+  const reset = useCallback(() => setView({ k: 1, x: 0, y: 0 }), [])
 
   if (!arch.available || !arch.services.length) return null
 
@@ -250,11 +280,39 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
 
   return (
     <div>
-      <div className="overflow-x-auto px-3 pt-3">
+      <div className="relative">
+        {/* The height is the whole fix for "too zoomed". Without one, the browser
+            stretches the viewBox to whatever width the container has, and this
+            panel went from an 840px column to the full page: a map 742 units
+            wide was being drawn at 1140. With a height it fits to whichever axis
+            runs out first, which for these tall maps is the height. */}
         <svg
+          ref={svgRef}
           viewBox={`0 0 ${width} ${height}`}
-          className="w-full"
-          style={{ minWidth: Math.min(width, 560) }}
+          preserveAspectRatio="xMidYMid meet"
+          className={`h-[520px] w-full select-none lg:h-[600px] ${
+            panning ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          onPointerDown={e => {
+            pan.current = { x: e.clientX - view.x, y: e.clientY - view.y }
+            setPanning(true)
+          }}
+          onPointerMove={e => {
+            if (!pan.current) return
+            setView(v => ({
+              ...v,
+              x: e.clientX - pan.current!.x,
+              y: e.clientY - pan.current!.y,
+            }))
+          }}
+          onPointerUp={() => {
+            pan.current = null
+            setPanning(false)
+          }}
+          onPointerLeave={() => {
+            pan.current = null
+            setPanning(false)
+          }}
           role="img"
           aria-label={`Architecture: ${arch.services.length} services and ${arch.relations.length} relations between them.`}
         >
@@ -331,6 +389,7 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
             </filter>
           </defs>
 
+          <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           <rect
             x="0"
             y="0"
@@ -488,7 +547,26 @@ export default function ArchitectureMap({ arch }: { arch: Architecture }) {
               </g>
             )
           })}
+          </g>
         </svg>
+
+        <div className="absolute right-2 top-2 flex flex-col gap-px border border-rule bg-panel">
+          {[
+            ['+', () => zoom(1.25), 'Zoom in'],
+            ['−', () => zoom(1 / 1.25), 'Zoom out'],
+            ['⤢', reset, 'Fit to view'],
+          ].map(([label, onClick, tip]) => (
+            <button
+              key={tip as string}
+              type="button"
+              title={tip as string}
+              onClick={onClick as () => void}
+              className="h-6 w-6 border-b border-rule text-[12px] leading-none text-ink-dim last:border-b-0 hover:bg-sunk hover:text-hot-ink"
+            >
+              {label as string}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* The diagram carries the shape; this carries the sentence. Without it,
