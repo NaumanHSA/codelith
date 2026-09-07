@@ -116,10 +116,29 @@ const TABLE_W = 198
  *  detail panel, which lists every one of them with a link into the source. */
 const MAX_ROWS = 14
 
+/** Widest a group card is allowed to get. "Registry and Sandboxed Execution" is a
+ *  real component name and has to fit; a pathological one gets trimmed instead of
+ *  pushing everything else off the canvas. */
+const ROLE_W_MAX = 300
+
 function sizeOf(node: Node) {
-  if (node.kind !== 'symbols') return SIZE[node.kind]
-  const rows = Math.min(node.rows?.length ?? 0, MAX_ROWS)
-  return { w: TABLE_W, h: TABLE_HEAD + rows * ROW_H + 6 }
+  if (node.kind === 'symbols') {
+    const rows = Math.min(node.rows?.length ?? 0, MAX_ROWS)
+    return { w: TABLE_W, h: TABLE_HEAD + rows * ROW_H + 6 }
+  }
+  // A group card used to hold one of twelve fixed words, so a fixed width was fine.
+  // It now holds a name derived from the codebase, and "Worker Face Tracking Engine"
+  // was arriving as "Worker Face Trac…". Measured from the label rather than guessed,
+  // and the meta line is measured too so the wider of the two wins.
+  if (node.kind === 'role') {
+    const label = ROLE_INSET + node.label.length * ROLE_CHAR_W + ROLE_PAD
+    const meta = ROLE_INSET + (node.meta?.length ?? 0) * META_CHAR_W + ROLE_PAD
+    return {
+      w: Math.min(ROLE_W_MAX, Math.max(SIZE.role.w, Math.ceil(label), Math.ceil(meta))),
+      h: SIZE.role.h,
+    }
+  }
+  return SIZE[node.kind]
 }
 
 /* ── Forces ───────────────────────────────────────────────────────── */
@@ -170,9 +189,16 @@ const restLength = (kids: number, childWidth: number) =>
  *  kind (a role pill leaves room for its dot) and the right edge has to clear the
  *  "+" that says a node can be opened. */
 function metaChars(kind: Kind, w: number): number {
-  const inset = kind === 'role' ? 26 : 14
-  return Math.max(8, Math.floor((w - inset - 14) / 5.1))
+  return Math.max(8, Math.floor((w - (kind === 'role' ? ROLE_INSET : 14) - ROLE_PAD) / META_CHAR_W))
 }
+
+/** Monospace at the sizes these cards use, measured rather than guessed: the label is
+ *  10.5px bold with letter-spacing, the meta line 8.5px plain. `ROLE_INSET` clears the
+ *  dot on a group pill and `ROLE_PAD` clears the "+" that says it can be opened. */
+const ROLE_CHAR_W = 7.1
+const META_CHAR_W = 5.1
+const ROLE_INSET = 26
+const ROLE_PAD = 16
 
 const trim = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text)
 
@@ -195,9 +221,22 @@ function buildTree(
   files: Map<string, FileEntry>,
   symbols: Map<string, SymbolEntry[]>,
 ): { root: Node; byId: Map<string, Node> } {
-  const byRole = new Map<string, ModuleEntry[]>()
+  // Grouped by the component analysis named for *this* codebase — "Worker Face
+  // Tracking Engine", not "SERVICE". The role is the fallback, and it is a closed
+  // vocabulary of twelve words that reads the same in every repository; it is what
+  // the apps consume, and it was never a good label for a person browsing.
+  const groupOf = (m: ModuleEntry) => m.service || m.role || 'unknown'
+  const byGroup = new Map<string, ModuleEntry[]>()
   for (const m of modules.modules) {
-    byRole.set(m.role || 'unknown', [...(byRole.get(m.role || 'unknown') ?? []), m])
+    byGroup.set(groupOf(m), [...(byGroup.get(groupOf(m)) ?? []), m])
+  }
+
+  /** A group's colour comes from the role its modules mostly have, so the key keeps
+   *  meaning when the group names are different in every codebase. */
+  const dominantRole = (entries: ModuleEntry[]) => {
+    const tally = new Map<string, number>()
+    for (const m of entries) tally.set(m.role || 'unknown', (tally.get(m.role || 'unknown') ?? 0) + m.loc)
+    return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'unknown'
   }
 
   const totalFiles = modules.modules.reduce((n, m) => n + m.file_count, 0)
@@ -211,18 +250,23 @@ function buildTree(
     children: [],
   }
 
-  const roles = [...byRole.entries()].sort(
+  const groups = [...byGroup.entries()].sort(
     (a, b) => b[1].reduce((n, m) => n + m.loc, 0) - a[1].reduce((n, m) => n + m.loc, 0),
   )
 
-  for (const [role, entries] of roles) {
+  for (const [group, entries] of groups) {
     const lines = entries.reduce((n, m) => n + m.loc, 0)
+    const role = dominantRole(entries)
+    // A derived component keeps its own capitalisation, because it is a name someone
+    // would say out loud. A fallback role is one of twelve fixed words and reads as a
+    // label, so it stays shouted.
+    const derived = entries.some(m => m.service === group)
     const roleNode: Node = {
-      id: `role:${role}`,
+      id: `role:${group}`,
       kind: 'role',
-      label: role.replace(/_/g, ' ').toUpperCase(),
+      label: derived ? group : group.replace(/_/g, ' ').toUpperCase(),
       meta: `${entries.length} modules · ${compact(lines)} lines`,
-      full: role,
+      full: group,
       parent: 'root',
       children: [],
       role,
@@ -749,7 +793,7 @@ export default function KnowledgeGraph({
           {visible.length} of {byId.size} nodes
         </span>
         <button type="button" onClick={expandRoles} className="tag text-hot-ink hover:underline">
-          open every role
+          open every group
         </button>
         <button type="button" onClick={collapseAll} className="tag text-ink-dim hover:text-ink">
           collapse
@@ -1031,7 +1075,14 @@ function Card({
         fontFamily="var(--font-mono)"
         fill={node.kind === 'root' && !on ? 'var(--on-ink)' : 'var(--ink)'}
       >
-        {trim(node.label, node.kind === 'root' ? 21 : 17)}
+        {trim(
+          node.label,
+          node.kind === 'role'
+            ? Math.floor((w - ROLE_INSET - ROLE_PAD) / ROLE_CHAR_W)
+            : node.kind === 'root'
+              ? 21
+              : 17,
+        )}
       </text>
       <text
         x={node.kind === 'module' ? 14 : node.kind === 'role' ? 26 : 14}
@@ -1177,7 +1228,9 @@ function Key() {
           [
             ['project', <rect key="s" width="16" height="9" y="2" rx="1.5" fill="var(--ink)" />],
             [
-              'role',
+              // Named for what it holds, which is a component of *this* codebase
+              // rather than one of twelve words that fit any of them.
+              'component',
               <rect
                 key="s"
                 width="16"

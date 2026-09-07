@@ -39,6 +39,18 @@ All notable changes to Codelith are recorded here. The format follows
 
 ### Changed
 
+- **The knowledge graph groups by components derived from your codebase.** It grouped
+  by `ModuleRole`, which is twelve fixed words assigned by matching directory names
+  against a hint table, so every repository showed the same `SERVICE` / `API` / `TEST`
+  rings. The architecture pass already names components per codebase and lists their
+  modules; the graph now reads that. Watchtower shows "Worker Face Tracking Engine" and
+  "Controller Persistence", Neurosurfer "RAG and Retrieval" and "Graph Workflow Engine".
+  Roles are unchanged and still what the apps consume; they remain the fallback for a
+  module the architecture pass did not place.
+- **Retrieval finds code by name as well as by meaning.** A hybrid search, fused on
+  rank: the vector half still answers "where is rate limiting handled", and a new
+  lexical half matches identifiers against the symbol table, exactly, in another naming
+  style, misspelled, or described in words that overlap the symbol's own name.
 - **Docusaurus exports are runnable.** They ship a `package.json`, a config and the
   scaffolding, so `npm install && npm run build` works on a fresh download.
 - **`VECTOR_DIMENSIONS` is gone.** The width of an embedding is measured from the model
@@ -55,6 +67,11 @@ All notable changes to Codelith are recorded here. The format follows
 
 ### Fixed
 
+- **Asking about a function by name finds it.** Search was one cosine lookup over chunk
+  vectors, and a bare identifier embeds to its meaning, so it landed on code about the
+  same subject rather than the file declaring it. Asked about `update_with_detection`,
+  Watchtower's own knowledge base returned six chunks and none was the file containing
+  it, and the answer said the function did not exist. The data had been there all along.
 - **Analysis discards its checkout.** It never had: every run left a full copy of the
   repository behind, one per run rather than one per project, and deleting the project
   did not remove it — while the file viewer's own docstring said the checkout was

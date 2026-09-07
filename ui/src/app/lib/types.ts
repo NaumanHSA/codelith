@@ -878,7 +878,11 @@ export interface ModuleEntry {
   path: string
   name: string
   kind: string
+  /** One of twelve fixed words, the same in every codebase. What the apps consume. */
   role: string
+  /** The component analysis named for *this* codebase, e.g. "Worker Face Tracking
+   *  Engine". Empty when the architecture pass did not place this module. */
+  service: string
   language: string
   file_count: number
   loc: number

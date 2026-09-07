@@ -24,8 +24,13 @@ class ModuleOut(BaseModel):
     name: str
     #: Provider-decided: package, file, and so on.
     kind: str = ""
-    #: Inferred during analysis: service, api, utility, config, test.
+    #: Inferred during analysis: service, api, utility, config, test. A closed
+    #: vocabulary, stable across every codebase, which is what the apps consume.
     role: str = ""
+    #: The component analysis named for *this* codebase, e.g. "Worker Face Tracking
+    #: Engine". Derived per repository rather than chosen from a list, and empty when
+    #: the architecture pass did not place this module in one.
+    service: str = ""
     language: str = ""
     file_count: int = 0
     loc: int = 0

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.db.repositories.knowledge.knowledge_base_repo import KnowledgeBaseRepository
 from codelith.db.repositories.knowledge.module_repo import KBModuleRepository
+from codelith.knowledge.services import assign
 from codelith.models.user import User
 from codelith.schemas.module import ModuleOut, ModulesOut
 from codelith.services.project_service import ProjectService
@@ -31,18 +32,25 @@ def _strings(value: object, limit: int = 400) -> list[str]:
     return [str(item) for item in value if isinstance(item, str) and item][:limit]
 
 
-def assemble(rows, commit_sha: str | None) -> ModulesOut:
+def assemble(rows, commit_sha: str | None, architecture: object = None) -> ModulesOut:
     """
     Module rows as the explorer wants them.
 
     A function rather than a method so the test exercises this and not a copy of it.
+
+    `architecture` is what analysis wrote about this codebase's components. Passing it
+    is what lets a module say it belongs to the "Worker Face Tracking Engine" rather
+    than only to `service`, which is true of half the repository. Optional, so a
+    knowledge base written before the architecture pass existed still assembles.
     """
+    grouped = assign(architecture, [row.name for row in rows]) if architecture else {}
     modules = [
         ModuleOut(
             path=row.path,
             name=row.name,
             kind=row.kind or "",
             role=row.role or "",
+            service=grouped.get(row.name, ""),
             language=row.language or "",
             file_count=row.file_count or 0,
             loc=row.loc or 0,
@@ -85,7 +93,7 @@ class ModuleService:
             return ModulesOut(available=False)
 
         rows = await self.modules.list_by_kb(kb.id, include_tests=True)
-        return assemble(rows, kb.commit_sha)
+        return assemble(rows, kb.commit_sha, kb.architecture_json)
 
 
 __all__ = ["ModuleService", "assemble"]
