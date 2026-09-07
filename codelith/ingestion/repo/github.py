@@ -5,6 +5,7 @@ import git
 
 from codelith.config import get_settings
 from codelith.ingestion.repo.base import BaseRepoIngester, CloneResult
+from codelith.ingestion.scratch import track
 
 
 class GitHubRepoIngester(BaseRepoIngester):
@@ -21,6 +22,8 @@ class GitHubRepoIngester(BaseRepoIngester):
         clone_kwargs["depth"] = 1  # shallow clone for speed
 
         repo = git.Repo.clone_from(url_or_path, **clone_kwargs)
+
+        track(dest)
 
         file_count = sum(1 for _ in dest.rglob("*") if _.is_file())
         commit_sha = repo.head.commit.hexsha

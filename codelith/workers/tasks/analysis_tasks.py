@@ -3,6 +3,7 @@
 import structlog
 
 from codelith.db.session import AsyncSessionLocal
+from codelith.ingestion.scratch import discard as discard_clones
 from codelith.observability.metrics import job_total, time_job
 from codelith.observability.tracing import workflow_span
 from codelith.workers import runner
@@ -130,6 +131,12 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
 
             finally:
                 set_token(None)
+                # The checkout was working material. Success, cancellation and failure
+                # all reach here, and all three are done with it — a run that failed
+                # halfway has no more claim on a gigabyte of disk than one that
+                # finished. Only directories this process cloned are removed; a
+                # `local` source is the user's own folder and is never registered.
+                discard_clones()
                 save_trace_artifacts(tracer, sandbox.trace)
                 reset_tracer(trace_token)
                 reset_artifact_writer(artifact_token)

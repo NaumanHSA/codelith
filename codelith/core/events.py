@@ -91,6 +91,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:  # pragma: no cover - never stop the app booting over cleanup
         logger.warning("page_reconciliation_failed", exc_info=True)
 
+    # Clones left by runs that are over.
+    #
+    # Analysis now removes its own checkout when it finishes, but nothing did before,
+    # and every run since the first left a full copy of the repository behind — one
+    # per run, not one per project, and untouched by deleting the project. An install
+    # that has read a few repositories can be carrying gigabytes it has no way to name.
+    #
+    # Startup is the one moment this is safe: work runs on a thread inside this
+    # process, so a process that is still starting owns no job, and every clone under
+    # the scratch root belongs to a run that has ended. Only directories named as a
+    # UUID go — `uploads/` lives under the same root and holds the only copy of an
+    # uploaded archive.
+    try:
+        from codelith.ingestion.scratch import sweep
+
+        if reclaimed := sweep():
+            logger.info("reclaimed_stale_clones", directories=reclaimed)
+    except Exception:  # pragma: no cover - never stop the app booting over cleanup
+        logger.warning("clone_sweep_failed", exc_info=True)
+
     yield
     logger.info("application_shutdown")
     await engine.dispose()

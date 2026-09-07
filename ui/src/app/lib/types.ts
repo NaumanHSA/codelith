@@ -518,12 +518,15 @@ export interface DriftPageAtRisk {
   reason: string
 }
 
-/** A component that appeared, went, or became something else. */
+/** A component that appeared, went, was renamed, or became something else. */
 export interface DriftService {
   name: string
-  change: 'added' | 'removed' | 'retyped'
+  change: 'added' | 'removed' | 'renamed' | 'retyped'
   type_before: string
   type_after: string
+  /** Only on `renamed`. Service names are the model's words and two readings do not
+   *  always agree on them, so a rename is the common case, not the rare one. */
+  name_before: string
 }
 
 /** An edge that appeared, went, or changed its verb. */

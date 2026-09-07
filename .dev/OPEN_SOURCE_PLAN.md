@@ -140,17 +140,40 @@ and Cursor, install options, license, support.
 Needs a model. LM Studio supplies the fast and embedding tiers; the quality tier runs
 on OpenAI.
 
-`[ ]` **5.1** Remove the two existing codebases.
+`[x]` **5.1** Remove the two existing codebases.
 
-`[ ]` **5.2** Add and analyse: `codelith` itself, `neurosurfer`, `watchtower`.
+`[x]` **5.2** Add and analyse: `codelith` itself, `neurosurfer`, `watchtower`.
 
-`[ ]` **5.3** Re-take the screenshots against that data.
+`[x]` **5.3** Re-take the screenshots against that data.
 
-`[ ]` **5.4** Confirm the two things that have never run on real data: narrative
+`[x]` **5.4** Confirm the two things that have never run on real data: narrative
 provenance, which is empty until an analysis runs with the recording writer, and
 drift's architecture diff, which needs two readings of one repository.
 
 ---
+
+**What 5.4 found.** Both paths work, and one of them was wrong.
+
+*Narrative provenance* is sound: all 36 narratives across the three codebases carry
+the modules they were written from, stored and served.
+
+*Drift's architecture diff* ran for the first time against two readings of Codelith
+five commits apart. The module and entity halves were exactly right — `codelith/core`
+rewritten at +134 lines, `VECTOR_DIMENSIONS` gone, the `k8s/` files gone. The service
+half was noise: it keyed on service *name*, and names are the model's words, so the
+same components came back renamed between runs. It reported **9 services appeared, 8
+went, 12 connections broke** for a diff whose real content was two new files.
+
+Services are now paired on the modules they contain, which come from the code. The
+same comparison reads **2 appeared, 1 went, 7 renamed, 2 connections broke**, and the
+seven renames are all obviously the same component: "HTTP API" → "Codelith API",
+"Command Line Interface" → "CLI", "Background Worker" → "Async Workflow Worker".
+
+**Also found and fixed:** analysis never deleted its clone. Not on completion, not on
+project deletion — one full copy of the repository per *run*, for ever, while the file
+viewer's own docstring said "analysis discards the checkout". This install had 32
+directories and 1.8 GB for 4 projects. Clones are now discarded when the job ends and
+swept at startup; a `local` source is the user's own folder and is never touched.
 
 ## Deliberately not doing
 

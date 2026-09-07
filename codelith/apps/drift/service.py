@@ -58,12 +58,14 @@ class EntityChange:
 
 @dataclass(slots=True)
 class ServiceChange:
-    """A component that appeared, went, or became something else."""
+    """A component that appeared, went, was renamed, or became something else."""
 
     name: str
-    change: str  # added | removed | retyped
+    change: str  # added | removed | renamed | retyped
     type_before: str = ""
     type_after: str = ""
+    #: Set only on `renamed`, so a reader can see what it used to be called.
+    name_before: str = ""
 
 
 @dataclass(slots=True)
@@ -127,16 +129,84 @@ class DriftReport:
         # decision somebody made.
         gone = sum(1 for x in self.services if x.change == "removed")
         new = sum(1 for x in self.services if x.change == "added")
+        renamed = sum(1 for x in self.services if x.change == "renamed")
         if new:
             bits.append(f"{new} service(s) appeared")
         if gone:
             bits.append(f"{gone} service(s) went")
+        # Last, and named for what it is. A rename is the model choosing different
+        # words for the same thing, and putting it beside "appeared" and "went" is
+        # what made this sentence describe a rewrite that never happened.
+        if renamed:
+            bits.append(f"{renamed} renamed")
         cut = sum(1 for r in self.relations if r.change == "removed")
         if cut:
             bits.append(f"{cut} connection(s) broke")
         if self.pages_at_risk:
             bits.append(f"**{len(self.pages_at_risk)} written page(s) now describe code that moved**")
         return ", ".join(bits) + "."
+
+
+#: How much of the smaller service's modules must be shared before two services from
+#: different readings are considered the same one under a new name. High enough that
+#: two genuinely different components are not merged; low enough to survive a service
+#: that gained modules in the same commit that renamed it.
+_SAME_SERVICE = 0.6
+
+
+def _pair_services(left, right):
+    """
+    Match the services of two readings. Returns `(pairs, only_left, only_right)`.
+
+    Exact names first — when the model happens to agree with itself, that is the
+    answer. Everything left over is matched on module membership, best overlap first,
+    each service used once. Module names come from the code, so they are the same in
+    both readings whatever the model decided to call the thing containing them.
+
+    Greedy rather than optimal: an assignment problem here would be a dozen nodes and
+    the difference would never be visible, while the failure mode of greedy — pairing
+    a strong match before a slightly stronger one — produces the same set of pairs in
+    every case this has been run against.
+    """
+    by_name = {s.name: s for s in right}
+    pairs = [(a, by_name[a.name]) for a in left if a.name in by_name]
+    matched_right = {id(b) for _, b in pairs}
+    rest_left = [a for a in left if a.name not in by_name]
+    rest_right = [b for b in right if id(b) not in matched_right]
+
+    scored = []
+    for a in rest_left:
+        mods_a = set(a.modules)
+        if not mods_a:
+            continue
+        for b in rest_right:
+            mods_b = set(b.modules)
+            if not mods_b:
+                continue
+            shared = len(mods_a & mods_b)
+            if not shared:
+                continue
+            # Against the smaller set, not the union: a service that kept its whole
+            # membership and gained five more modules is still that service.
+            score = shared / min(len(mods_a), len(mods_b))
+            if score >= _SAME_SERVICE:
+                scored.append((score, shared, a, b))
+
+    # Strongest first, then by how much evidence backs it, then by name so the result
+    # does not depend on dictionary order.
+    scored.sort(key=lambda t: (-t[0], -t[1], t[2].name, t[3].name))
+    used_left: set[int] = set()
+    used_right: set[int] = set()
+    for _score, _shared, a, b in scored:
+        if id(a) in used_left or id(b) in used_right:
+            continue
+        used_left.add(id(a))
+        used_right.add(id(b))
+        pairs.append((a, b))
+
+    only_left = [a for a in rest_left if id(a) not in used_left]
+    only_right = [b for b in rest_right if id(b) not in used_right]
+    return pairs, only_left, only_right
 
 
 #: How much a module's size has to move before it is worth mentioning. Below this it
@@ -207,30 +277,54 @@ class DriftService:
             return
         report.architecture_comparable = True
 
-        was = {s.name: s for s in left.services}
-        now = {s.name: s for s in right.services}
-        for name in sorted(set(was) | set(now)):
-            a, b = was.get(name), now.get(name)
-            if a is None:
+        # Names are the model's words, not the code's, and two readings of an
+        # unchanged repository do not agree on them: "HTTP API" one run and
+        # "Codelith API" the next. Keyed on name alone, that reported nine services
+        # added and eight removed across a diff whose only real change was two new
+        # files — a headline that was almost entirely rename noise.
+        #
+        # So services are paired on the modules they contain, which come from the
+        # code. `_pair_services` matches exact names first and falls back to module
+        # membership, and what it cannot pair really did appear or go.
+        pairs, only_left, only_right = _pair_services(left.services, right.services)
+
+        for a, b in pairs:
+            if a.name != b.name:
                 report.services.append(
-                    ServiceChange(name=name, change="added", type_after=b.type)
-                )
-            elif b is None:
-                report.services.append(
-                    ServiceChange(name=name, change="removed", type_before=a.type)
+                    ServiceChange(
+                        name=b.name, change="renamed", name_before=a.name,
+                        type_before=a.type, type_after=b.type,
+                    )
                 )
             elif a.type != b.type:
                 # Worth reporting: an "api" that became a "worker" is a rewrite, not
                 # a rename, and the diagram would otherwise look unchanged.
                 report.services.append(
                     ServiceChange(
-                        name=name, change="retyped", type_before=a.type, type_after=b.type
+                        name=a.name, change="retyped", type_before=a.type, type_after=b.type
                     )
                 )
+        for b in only_right:
+            report.services.append(
+                ServiceChange(name=b.name, change="added", type_after=b.type)
+            )
+        for a in only_left:
+            report.services.append(
+                ServiceChange(name=a.name, change="removed", type_before=a.type)
+            )
+        report.services.sort(key=lambda x: (x.change, x.name))
+
+        # Relations are drawn between service *names*, so an edge whose endpoints were
+        # merely renamed would read as one cut and another opened. Rewrite the old
+        # map into the new names before comparing, and only genuine edges move.
+        renamed = {a.name: b.name for a, b in pairs if a.name != b.name}
 
         # Keyed on the pair, so a relation whose verb changed reads as one edge
         # reworded rather than as one removed and another added.
-        old_edges = {(r.source, r.target): r.kind for r in left.relations}
+        old_edges = {
+            (renamed.get(r.source, r.source), renamed.get(r.target, r.target)): r.kind
+            for r in left.relations
+        }
         new_edges = {(r.source, r.target): r.kind for r in right.relations}
         for pair in sorted(set(old_edges) | set(new_edges)):
             source, target = pair

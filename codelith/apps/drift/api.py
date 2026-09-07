@@ -47,6 +47,9 @@ class ServiceChangeOut(BaseModel):
     change: str
     type_before: str = ""
     type_after: str = ""
+    #: Set only on `renamed`. The studio shows it as "was X"; without it a rename
+    #: is indistinguishable from a service nobody recognises.
+    name_before: str = ""
 
 
 class RelationChangeOut(BaseModel):
@@ -143,6 +146,7 @@ async def get_drift(
             ServiceChangeOut(
                 name=x.name, change=x.change,
                 type_before=x.type_before, type_after=x.type_after,
+                name_before=x.name_before,
             )
             for x in report.services
         ],

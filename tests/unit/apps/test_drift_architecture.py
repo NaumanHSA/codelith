@@ -148,3 +148,132 @@ class TestTheSummary:
         report = diff(app("a"), app("a", "b"))
         assert report.is_empty is False
         assert "Nothing structural changed" not in report.summary()
+
+
+def svc(name: str, modules: list[str], type_: str = "service") -> dict:
+    return {"name": name, "type": type_, "modules": modules}
+
+
+def mapped(*services: dict, relations: list[dict] | None = None) -> dict:
+    return {"services": list(services), "relations": relations or []}
+
+
+class TestServicesAreMatchedByWhatIsInThem:
+    """
+    Service names are the model's words, and two readings of an unchanged repository
+    do not agree on them: "HTTP API" one run, "Codelith API" the next. Keyed on name,
+    a diff of two readings three commits apart reported nine services added and eight
+    removed — a headline that was almost entirely rename noise.
+
+    Module names come from the code, so they are the same in both readings whatever
+    the model called the thing containing them. That is the identity being matched on.
+    """
+
+    def test_a_renamed_service_is_a_rename_not_a_replacement(self):
+        out = diff(
+            mapped(svc("HTTP API", ["app.api", "app.routes"], "api")),
+            mapped(svc("Codelith API", ["app.api", "app.routes"], "api")),
+        )
+        assert [(s.change, s.name, s.name_before) for s in out.services] == [
+            ("renamed", "Codelith API", "HTTP API")
+        ]
+
+    def test_a_rename_survives_the_service_gaining_modules(self):
+        """The commit that renames a thing is often the commit that grew it."""
+        out = diff(
+            mapped(svc("Worker", ["app.jobs", "app.queue"])),
+            mapped(svc("Async Workflow Worker", ["app.jobs", "app.queue", "app.retry"])),
+        )
+        assert [s.change for s in out.services] == ["renamed"]
+
+    def test_two_different_services_are_not_merged(self):
+        """Sharing nothing means they are not the same thing under a new name."""
+        out = diff(
+            mapped(svc("Cache", ["app.cache"])),
+            mapped(svc("Mailer", ["app.mail"])),
+        )
+        assert sorted((s.change, s.name) for s in out.services) == [
+            ("added", "Mailer"),
+            ("removed", "Cache"),
+        ]
+
+    def test_a_service_with_no_modules_cannot_be_matched(self):
+        """No evidence of identity, so the honest answer is added and removed."""
+        out = diff(mapped(svc("A", [])), mapped(svc("B", [])))
+        assert sorted(s.change for s in out.services) == ["added", "removed"]
+
+    def test_a_genuinely_new_service_still_reads_as_added(self):
+        out = diff(
+            mapped(svc("API", ["app.api"])),
+            mapped(svc("API", ["app.api"]), svc("Worker", ["app.jobs"])),
+        )
+        assert [(s.change, s.name) for s in out.services] == [("added", "Worker")]
+
+    def test_an_exact_name_match_wins_over_a_module_match(self):
+        """When the model agrees with itself, that is the answer."""
+        out = diff(
+            mapped(svc("API", ["app.api"]), svc("Old", ["app.jobs"])),
+            mapped(svc("API", ["app.api", "app.jobs"]), svc("New", ["app.jobs"])),
+        )
+        changes = {(s.change, s.name) for s in out.services}
+        assert ("renamed", "New") in changes
+        assert not any(s.name == "API" for s in out.services)
+
+    def test_each_service_is_used_once(self):
+        """Two candidates cannot both claim the same partner."""
+        out = diff(
+            mapped(svc("One", ["a", "b"])),
+            mapped(svc("Two", ["a", "b"]), svc("Three", ["a", "b"])),
+        )
+        assert sorted(s.change for s in out.services) == ["added", "renamed"]
+
+
+class TestRelationsFollowTheRename:
+    def test_an_edge_between_renamed_services_is_not_reported_as_cut(self):
+        """
+        The bug this closes: renaming both ends of an edge reported the connection
+        broken and a new one opened, when nothing about the wiring changed.
+        """
+        out = diff(
+            mapped(
+                svc("HTTP API", ["app.api"], "api"),
+                svc("Store", ["app.db"], "data_access"),
+                relations=[{"source": "HTTP API", "target": "Store", "kind": "reads"}],
+            ),
+            mapped(
+                svc("Codelith API", ["app.api"], "api"),
+                svc("Persistence", ["app.db"], "data_access"),
+                relations=[{"source": "Codelith API", "target": "Persistence", "kind": "reads"}],
+            ),
+        )
+        assert out.relations == []
+        assert sorted(s.change for s in out.services) == ["renamed", "renamed"]
+
+    def test_a_real_cut_is_still_reported_across_a_rename(self):
+        out = diff(
+            mapped(
+                svc("HTTP API", ["app.api"], "api"),
+                svc("Store", ["app.db"], "data_access"),
+                relations=[{"source": "HTTP API", "target": "Store", "kind": "reads"}],
+            ),
+            mapped(
+                svc("Codelith API", ["app.api"], "api"),
+                svc("Store", ["app.db"], "data_access"),
+                relations=[],
+            ),
+        )
+        assert [(r.source, r.target, r.change) for r in out.relations] == [
+            ("Codelith API", "Store", "removed")
+        ]
+
+
+class TestTheSentenceNamesARenameAsARename:
+    def test_renames_are_not_counted_as_appearances(self):
+        out = diff(
+            mapped(svc("HTTP API", ["app.api"], "api")),
+            mapped(svc("Codelith API", ["app.api"], "api")),
+        )
+        sentence = out.summary()
+        assert "1 renamed" in sentence
+        assert "appeared" not in sentence
+        assert "went" not in sentence

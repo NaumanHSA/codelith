@@ -27,6 +27,9 @@ const CHANGE_TONE: Record<string, string> = {
   shrank: 'text-ink-mid',
   retyped: 'text-hot-ink',
   reworded: 'text-hot-ink',
+  // A rename is the model's wording, not the codebase moving. Muted on purpose:
+  // it belongs in the list, and it is not the line anybody came here to read.
+  renamed: 'text-ink-dim',
 }
 
 function Delta({ n }: { n: number }) {
@@ -39,7 +42,7 @@ function Delta({ n }: { n: number }) {
   )
 }
 
-/** A service that appeared, went, or is now a different kind of thing. */
+/** A service that appeared, went, was renamed, or is now a different kind of thing. */
 function ServiceRow({ s }: { s: DriftService }) {
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-rule px-3 py-2 last:border-b-0">
@@ -47,7 +50,9 @@ function ServiceRow({ s }: { s: DriftService }) {
         {s.change}
       </span>
       <span className="font-mono text-[12px] font-semibold text-ink">{s.name}</span>
-      {s.change === 'retyped' ? (
+      {s.change === 'renamed' ? (
+        <span className="tag text-ink-dim">was {s.name_before}</span>
+      ) : s.change === 'retyped' ? (
         <span className="tag text-ink-dim">
           {s.type_before || 'untyped'} to {s.type_after || 'untyped'}
         </span>
