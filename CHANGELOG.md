@@ -39,6 +39,13 @@ All notable changes to Codelith are recorded here. The format follows
 
 ### Changed
 
+- **The source page's file list is a real tree.** It was one flat group per directory
+  with every row at the same indent, on the reasoning that a repository is two levels
+  deep. `controller/app/repositories` is four and Codelith goes deeper, so the shape of
+  the project had to be read out of the paths one row at a time. Directories now nest,
+  indent, collapse and carry guide lines, single-child chains draw as one row
+  (`db/repositories` rather than three levels holding one thing each), and filtering
+  opens whatever it matched.
 - **The knowledge graph groups by components derived from your codebase.** It grouped
   by `ModuleRole`, which is twelve fixed words assigned by matching directory names
   against a hint table, so every repository showed the same `SERVICE` / `API` / `TEST`
