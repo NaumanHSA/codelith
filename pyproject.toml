@@ -83,7 +83,7 @@ dependencies = [
     # 1.x: `Server` still has the decorators
     # only. Porting is a deliberate piece of work, not something a resolver should do on
     # our behalf, which is what `>=1.0.0` allowed.
-    "mcp>=1.24.0,<2.0",
+    "mcp>=1.24.0,<3.0",
 
     # UI / tracing output
     "rich>=13.0.0",
