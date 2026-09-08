@@ -3,18 +3,40 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-ff6b35?style=flat-square"></a>
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-ff6b35?style=flat-square">
-  <a href="https://github.com/NaumanHSA/codelith/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/NaumanHSA/codelith/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="MCP: 8 tools" src="https://img.shields.io/badge/MCP-8%20tools-14120f?style=flat-square">
+  <a href="https://naumanhsa.github.io/codelith/"><img alt="Docs" src="https://img.shields.io/badge/docs-online-ff6b35?style=flat-square&logo=readthedocs&logoColor=white"></a>
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-ff6b35?style=flat-square&logo=python&logoColor=white">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-ff6b35?style=flat-square"></a>
+  <a href="https://github.com/NaumanHSA/codelith/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/NaumanHSA/codelith/ci.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white"></a>
+  <a href="#-installing"><img alt="Install" src="https://img.shields.io/badge/install-from%20source%20%C2%B7%20Docker-14120f?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/languages/"><img alt="Languages" src="https://img.shields.io/badge/reads-Python%20%C2%B7%20TypeScript%20%C2%B7%20Go%20%C2%B7%20Java-14120f?style=flat-square"></a>
+  <a href="https://naumanhsa.github.io/codelith/getting-started/models/"><img alt="Models" src="https://img.shields.io/badge/models-LM%20Studio%20%C2%B7%20Ollama%20%C2%B7%20vLLM%20%C2%B7%20OpenAI-14120f?style=flat-square"></a>
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/knowledge-base/"><img alt="Storage" src="https://img.shields.io/badge/storage-one%20SQLite%20file-14120f?style=flat-square"></a>
+  <a href="https://naumanhsa.github.io/codelith/mcp/"><img alt="MCP" src="https://img.shields.io/badge/MCP-8%20tools-14120f?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://naumanhsa.github.io/codelith/apps/"><img alt="Apps" src="https://img.shields.io/badge/apps-Documentation%20%C2%B7%20Ask%20the%20code%20%C2%B7%20What%20changed%20%C2%B7%20Before%20you%20edit-ff6b35?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/NaumanHSA/codelith"><img alt="Stars" src="https://img.shields.io/github/stars/NaumanHSA/codelith?style=flat-square&logo=github&logoColor=white&color=55504a"></a>
+  <a href="https://github.com/NaumanHSA/codelith/issues"><img alt="Issues" src="https://img.shields.io/github/issues/NaumanHSA/codelith?style=flat-square&logo=github&logoColor=white&color=55504a"></a>
+  <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-read-55504a?style=flat-square"></a>
   <img alt="Runs offline" src="https://img.shields.io/badge/runs-fully%20offline-2f9e44?style=flat-square">
 </p>
 
 <p align="center">
-  <a href="https://naumanhsa.github.io/codelith/"><b>Documentation</b></a> ·
+  <a href="https://naumanhsa.github.io/codelith/getting-started/install/"><b>Quick start</b></a> ·
   <a href="https://naumanhsa.github.io/codelith/how-it-works/analysis/">How analysis works</a> ·
-  <a href="https://naumanhsa.github.io/codelith/how-it-works/knowledge-base/">What the knowledge base holds</a> ·
-  <a href="https://naumanhsa.github.io/codelith/mcp/">MCP</a>
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/knowledge-base/">The knowledge base</a> ·
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/chunks-and-retrieval/">Chunks &amp; retrieval</a> ·
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/code-graph/">The code graph</a> ·
+  <a href="https://naumanhsa.github.io/codelith/apps/">The apps</a> ·
+  <a href="https://naumanhsa.github.io/codelith/mcp/">MCP</a> ·
+  <a href="https://naumanhsa.github.io/codelith/reference/configuration/">Configuration</a>
 </p>
 
 ---
