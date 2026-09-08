@@ -1,7 +1,7 @@
 # Codelith — where the work stands
 
-*Snapshot: 2 September 2026, on `main` after Roadmap phases 0–5. Update the numbers
-when they stop being true.*
+*Snapshot: 8 September 2026, on `main` after the open-source release work. Update the
+numbers when they stop being true.*
 
 **This is the planning document.** The phase plans that built the product (analyse/compose,
 the site, the UX overhaul, the substrate, Ask, the Codelith rename) all completed and were
@@ -31,14 +31,15 @@ features (see *Deliberately not built*).
 | | |
 |---|---|
 | First commit | 8 June 2026 |
-| Commits | 134 |
-| Python | 235 files |
-| Studio (TS/TSX) | 65 files |
-| Tests | 57 files — **933 unit passing, 1 skipped**; **184 integration passing**. The whole suite runs in **32 seconds against a temporary SQLite file** and starts nothing |
-| Migrations | **1** — fourteen squashed to one baseline when the second database went |
-| HTTP routes | 67 |
+| Commits | 217 |
+| Python | 283 files |
+| Studio (TS/TSX) | 84 files |
+| Tests | 78 files — **1301 unit passing, 2 skipped**; **204 integration passing**. The whole suite runs in **under a minute against a temporary SQLite file** and starts nothing |
+| Migrations | **5** — fourteen were squashed to one baseline when the second database went; four have landed since |
+| HTTP routes | 90 (82 under `/api/v1`) |
 | Apps on `main` | 3 — Quality is built but parked on `feat/qa` |
 | Services to run | **none.** One SQLite file under `~/.codelith` |
+| Ways to run it | `make dev` for two dev servers, or `make docker` for one container serving both on `:8000` |
 | Lint | **ruff clean** across `codelith/`, `tests/` and `alembic/`, enforced in CI |
 | Languages analysed | Python, JavaScript, TypeScript, Go, Java |
 | Languages checked by Quality | Python only (on `feat/qa`) |

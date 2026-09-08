@@ -89,7 +89,15 @@ if the base imports an app, or if one app imports another. Known exceptions live
 ```bash
 make dev                             # API on :8000. Nothing to start first
 cd ui && pnpm install && pnpm dev    # studio on :5173 — needs Node >= 20.19
+
+make docker                          # or: one container, studio served on :8000
 ```
+
+`make docker` is what the README leads with, and it is one service — `codelith` —
+not the Postgres/Redis/Neo4j/MinIO stack this used to be. The model stays on the
+host: compose maps `host.docker.internal`, and the studio says so at the field where
+a model endpoint is typed. `docker/grafana/` and `docker/prometheus.yml` are config
+for scraping the metrics the app exports; nothing in compose starts them.
 
 `.env` is optional — every setting has a working default and `.env.example` documents
 them. The database is a file under `~/.codelith` (or `CODELITH_HOME`), created on first
@@ -132,13 +140,20 @@ codelith/                 the importable package (distribution name: codelith)
   api/v1/          Route handlers (thin) — mounts each app's router
   core/            Security, logging, exceptions, middleware
     cancellation.py  CancellationToken + JobCancelled
+    studio.py        Serves the built studio, mounted last so it shadows nothing
+    runtime.py       Whether we are inside a container (the model form needs it)
   db/              SQLAlchemy session + repositories
+    bootstrap.py     Schema on first run; migrations before create_all, never after
   models/          ORM models — ALL of them, including each app's
   schemas/         Pydantic v2 request/response
   services/        Shared business logic only (auth, audit, job, project, source,
                    knowledge). An app's services live with the app
   knowledge/       THE BASE — KB vocabulary, builder, retrieval, questions,
                    artefacts, tools, preflight, doc-type roles
+    lexical.py       Finds code by name — exact, restyled, misspelled, described.
+                     The half an embedding cannot do; fused with vectors on rank
+    services.py      Groups modules by the components analysis named for *this*
+                     codebase, so the graph is not twelve fixed words everywhere
   languages/       Language abstraction — taxonomy, LanguageProvider, registry
     providers/       python, typescript, go, java
   agents/
@@ -150,10 +165,11 @@ codelith/                 the importable package (distribution name: codelith)
     ask/             service (answers), threads (persistence), api
     documentation/   agents, workflows, services, tasks, formatters, api
     drift/           service (two readings compared), api
-    qa/              tools + runner, impact, coverage, dependencies, drift,
-                     testgen, deep (its own analysis pass), api
+                   (qa/ is NOT here — parked on `feat/qa`, see the top of this file)
   mcp/             The KB over MCP — a second transport, not an app
   ingestion/       Repo cloning + file parsers
+    scratch.py       Clones are working files: discarded when the job ends, and
+                     swept at startup. Never touches a `local` source's own folder
   memory/          Vector store, the code graph in SQL
   llm/             LLM client, model router, prompt templates
   tools/           Agent tools (file, git, search, diagram)
