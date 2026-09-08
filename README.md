@@ -18,10 +18,6 @@
 </p>
 
 <p align="center">
-  <a href="https://naumanhsa.github.io/codelith/apps/"><img alt="Apps" src="https://img.shields.io/badge/apps-Documentation%20%C2%B7%20Ask%20the%20code%20%C2%B7%20What%20changed%20%C2%B7%20Before%20you%20edit-ff6b35?style=flat-square"></a>
-</p>
-
-<p align="center">
   <a href="https://github.com/NaumanHSA/codelith"><img alt="Stars" src="https://img.shields.io/github/stars/NaumanHSA/codelith?style=flat-square&logo=github&logoColor=white&color=55504a"></a>
   <a href="https://github.com/NaumanHSA/codelith/issues"><img alt="Issues" src="https://img.shields.io/github/issues/NaumanHSA/codelith?style=flat-square&logo=github&logoColor=white&color=55504a"></a>
   <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-read-55504a?style=flat-square"></a>

@@ -1,4 +1,9 @@
 version: 2
+
+# Ten open pull requests on the day the repository went public is how people learn to
+# ignore the bot — including on the update that eventually matters. Everything here is
+# aimed at one reviewable PR per ecosystem per cycle, and at not proposing changes that
+# are already known to break the build.
 updates:
   - package-ecosystem: "pip"
     directory: "/"
@@ -10,6 +15,26 @@ updates:
       # learn to ignore the bot, including on the update that mattered.
       python-minor:
         update-types: ["minor", "patch"]
+      # And one for the majors, together. They still deserve reading — that is why
+      # they are not silenced — but they do not each deserve their own thread.
+      python-major:
+        update-types: ["major"]
+    ignore:
+      # Both of these are pinned on purpose, with the reason written next to the pin
+      # in `pyproject.toml`. Dependabot cannot read a comment, so it proposed them
+      # anyway; merging either breaks the build.
+      #
+      #   bcrypt <5   — passlib 1.7.4 probes its backend with a >72-byte password,
+      #                 which bcrypt 5.0 rejects.
+      #   mcp <2.0    — `langchain-mcp-adapters` requires it, and 2.x removed the
+      #                 decorators `codelith/mcp/server.py` is built on.
+      #
+      # Minor and patch updates still come through. Only the majors are refused, and
+      # the day a pin is lifted this entry goes with it.
+      - dependency-name: "bcrypt"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/ui"
@@ -19,8 +44,27 @@ updates:
     groups:
       npm-minor:
         update-types: ["minor", "patch"]
+      npm-major:
+        update-types: ["major"]
+
+  - package-ecosystem: "npm"
+    # The root manifest, which vendors mermaid-cli and d2 so a job never needs the
+    # network. It was not covered before, so its updates arrived one PR at a time.
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    groups:
+      tools:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 3
+    groups:
+      # All of them in one. Ungrouped, a month where five actions each cut a major
+      # produced five pull requests that a reviewer reads as one decision anyway.
+      actions:
+        patterns: ["*"]
