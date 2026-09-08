@@ -62,6 +62,16 @@ name, read a file, find callers, or list facts — and everything a tool returns
 appended to the bundle, so the citation check covers it exactly like pre-loaded
 evidence.
 
+**Not every question is searched.** A gate runs before retrieval and can decide the
+answer is not in this repository — the one thing the router structurally cannot say,
+because everything handed to it is routed. It judges against what analysis found this
+codebase to *be*, not against a general idea of what a programming question sounds
+like: a codebase about elections makes "which countries are reconciled" a question
+about its data, and a codebase about compilers does not. It reads the last few turns
+too, so a follow-up that names nothing on its own is still read in the conversation it
+belongs to. Every uncertain path answers "search it" — see
+[`ASK_SCOPE_GATE`](reference/configuration.md#ask-the-code).
+
 The suggested questions come from `question_seeder`, not from a template.
 
 ---

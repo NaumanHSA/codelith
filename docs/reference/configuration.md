@@ -69,6 +69,19 @@ What one reading costs, and where it stops.
 | `SITE_MAX_PAGES_PER_JOB` | `8` |
 | `SITE_MAX_SECTIONS` | `8` |
 
+## Ask the code
+
+| Setting | Default | Notes |
+|---|---|---|
+| `ASK_SCOPE_GATE` | `true` | Judge whether a question is about this repository before searching it |
+
+Off, every question is answered from the source files least unlike it — including
+"what is the capital of France". On, a question that names nothing this codebase is
+made of costs one small model call, which is shown the components analysis named, the
+overview it wrote, and the last few turns of the conversation. Turn it off if your
+model declines real questions: a question it lets through only costs a search that
+finds nothing.
+
 ## Diagrams
 
 Off by default. Both renderers are vendored by the root `package.json`, so a job never

@@ -401,6 +401,9 @@ export interface ChatMessage {
     intents?: string[]
     routed_by?: string
     sources?: ChatSource[]
+    /** Stored with the answer, so a reply that searched nothing still says so when
+     *  the conversation is reopened a week later. */
+    scope?: ChatScope
   }
   citations: string[]
   /** Citations the model produced that did not resolve, and were demoted. */
@@ -425,9 +428,20 @@ export interface ChatThreadSummary {
   last_message_at: string | null
 }
 
+/** What the scope gate decided about a question, before anything was searched.
+ *  `code` is the normal path; the other two mean the codebase was never read. */
+export interface ChatScope {
+  verdict: 'code' | 'chat' | 'off_topic'
+  reason: string
+  /** `vocabulary` · `shape` · `llm` · `fallback` · `disabled`. A decision reached
+   *  without a model and one reached after a model failed are not the same claim. */
+  decided_by?: string
+}
+
 /** One frame of a streamed answer. */
 export type ChatEvent =
   | { type: 'thread'; thread_id: number; title: string }
+  | ({ type: 'scope' } & ChatScope)
   | {
       type: 'evidence'
       counts: Record<string, number>

@@ -19,6 +19,11 @@ The `search_queries` field is the part a phrase table could never produce. "how 
 run this locally" is a poor embedding query; "uvicorn entrypoint, docker compose
 services, Makefile dev target" is a good one. Rewriting the question into the
 vocabulary the *code* uses is most of what makes retrieval work.
+
+`JUDGE_SCOPE` runs before all of that and answers a question the router cannot: not
+*which* store, but whether any of them should be read. Same two safeguards — it is
+shown what this repository is about in the words analysis chose, and nothing it
+returns is trusted beyond three known verdicts. See `codelith/knowledge/scope.py`.
 """
 
 from __future__ import annotations
@@ -71,7 +76,57 @@ ROUTE_QUESTION = PromptTemplate(
     ),
 )
 
-__all__ = ["ROUTE_QUESTION"]
+JUDGE_SCOPE = PromptTemplate(
+    system=(
+        "You decide whether a question should be answered from a particular "
+        "codebase, before anything is searched.\n\n"
+        "Return ONLY a JSON object, no prose and no markdown fences:\n"
+        "{\n"
+        '  "verdict": "code" | "chat" | "off_topic",\n'
+        '  "reason": "one short sentence",\n'
+        '  "reply": ""\n'
+        "}\n\n"
+        "The three verdicts:\n"
+        "  code      — the repository could plausibly hold the answer. Anything "
+        "about how this system works, what it contains, how to run, build, test, "
+        "configure or change it — and anything about the subject matter this "
+        "particular codebase is written to handle.\n"
+        "  chat      — about you, or about this conversation: a greeting, thanks, "
+        "what you can do, what was said earlier. There is nothing to search for.\n"
+        "  off_topic — general knowledge, current affairs, another codebase, or a "
+        "task unrelated to this repository. Searching would return the source files "
+        "least unlike the question, which is worse than answering nothing.\n\n"
+        "How to read the question:\n"
+        "  - Read it the way this conversation reads it. A short follow-up takes "
+        "its subject from the turns above: after two turns about a table of "
+        "countries, 'and France?' is `code`.\n"
+        "  - The repository's own subject matter is its business. A codebase "
+        "written to handle elections makes questions about countries and votes "
+        "questions about its data. Compare the question against what this "
+        "repository is described as being — not against a general idea of what a "
+        "programming question sounds like.\n"
+        "  - When it could go either way, answer `code`. A search that comes back "
+        "with nothing costs seconds; refusing a real question about somebody's own "
+        "code is the failure that matters, and they cannot tell it from a product "
+        "that is simply broken.\n\n"
+        "The `reply` field:\n"
+        "  - An empty string when the verdict is `code`. Nothing is shown.\n"
+        "  - Otherwise one or two sentences, addressed to the asker. For `chat`, "
+        "answer them briefly and say what they can ask about here. For "
+        "`off_topic`, say plainly that this is not something you answer from this "
+        "repository, and name something it does answer.\n"
+        "  - Never answer an off-topic question itself, not even partly. You are "
+        "the way in to one codebase, not a general assistant."
+    ),
+    user=(
+        "$profile\n\n"
+        "Earlier in this conversation:\n$history\n\n"
+        "Question: $question\n\n"
+        "Return the JSON object."
+    ),
+)
+
+__all__ = ["JUDGE_SCOPE", "ROUTE_QUESTION"]
 
 THREAD_TITLE = PromptTemplate(
     system=(

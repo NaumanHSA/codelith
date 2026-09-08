@@ -54,6 +54,11 @@ export function AssistantMessage({
 }) {
   const sources = message.evidence?.sources ?? []
   const counts = message.evidence?.counts ?? {}
+  /* An answer with no sources is ambiguous on its own: the search may have found
+     nothing, or it may never have run. Saying which is the difference between "your
+     repository does not cover this" and "that was not a question about it". */
+  const scope = message.evidence?.scope
+  const unsearched = scope && scope.verdict !== 'code'
 
   return (
     <div className="min-w-0">
@@ -80,6 +85,15 @@ export function AssistantMessage({
                 </span>
               )}
             </button>
+          )}
+
+          {unsearched && (
+            <span className="text-ink-dim" title={scope?.reason || undefined}>
+              <span className="mr-1 text-ink-dim">○</span>
+              {scope?.verdict === 'off_topic'
+                ? 'not a question about this repository — the code was not searched'
+                : 'answered without searching the code'}
+            </span>
           )}
 
           {!!message.stripped?.length && (

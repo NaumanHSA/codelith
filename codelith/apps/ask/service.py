@@ -15,6 +15,13 @@ reader has no means of telling them apart.
 One retrieval pass, one answer. No agentic loop — an agent that re-queries until
 satisfied is a larger thing, and this should be measured before anything cleverer is
 built on top of it.
+
+**Not every question goes to the code.** `ScopeGate` runs first and can answer
+"none of the stores" — the one thing the router structurally cannot say, because
+everything handed to it is routed. Asked for the capital of France it used to return
+the three chunks whose embeddings sat closest to a country, and answer from them, in
+the same confident voice it uses for a real citation. See
+`codelith/knowledge/scope.py`.
 """
 
 from __future__ import annotations
@@ -28,9 +35,12 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from codelith.config import get_settings
+from codelith.core.cancellation import JobCancelled
 from codelith.core.exceptions import ValidationError
 from codelith.knowledge.constants import KBStatus
 from codelith.knowledge.questions import EvidenceBundle, QuestionRouter
+from codelith.knowledge.scope import ScopeGate, ScopeVerdict, load_profile
 from codelith.knowledge.tools import TOOL_SCHEMAS, CodebaseTools
 from codelith.llm.client import ToolsUnsupported, stream_completion, stream_tool_completion
 from codelith.llm.context_manager import count_text_tokens
@@ -151,18 +161,41 @@ class AskService:
         history: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """
-        Retrieve, then answer, emitting events as it goes.
+        Judge, retrieve, then answer, emitting events as it goes.
 
-        Events: `evidence` once retrieval is done, `token` per delta, `usage` and
-        `done` at the end. The evidence event lands first on purpose — it gives the
-        reader something true to look at during the seconds before the first token,
-        and it is the part they can check.
+        Events: `scope` once the question has been judged, `evidence` once retrieval
+        is done, `token` per delta, `usage` and `done` at the end. The evidence event
+        lands early on purpose — it gives the reader something true to look at during
+        the seconds before the first token, and it is the part they can check.
+
+        A question the gate does not send to the code produces `scope` and then the
+        answer, with no `evidence` event between them. That absence is the honest
+        shape of what happened: nothing was retrieved, so there is nothing to show.
         """
         question = (question or "").strip()
         if not question:
             raise ValidationError("Ask something — an empty question has no answer.")
 
         kb = await self._usable_kb(project.id)
+
+        verdict = await self._scope(project, kb, question, history or [])
+        yield {
+            "type": "scope",
+            "verdict": verdict.verdict,
+            "reason": verdict.reason,
+            "decided_by": verdict.decided_by,
+        }
+        if not verdict.searches_code:
+            logger.info(
+                "question_not_searched",
+                project_id=project.id,
+                verdict=verdict.verdict,
+                decided_by=verdict.decided_by,
+            )
+            for event in self._without_searching(verdict):
+                yield event
+            return
+
         router = QuestionRouter(self.db, kb.id, project.id, project_name=project.name)
         bundle = await router.gather(question)
 
@@ -379,6 +412,56 @@ class AskService:
         """Tokens all tool results together may add to the transcript."""
         window = getattr(spec, "context_window", None) or 32_768
         return int(window * _TOOL_SHARE)
+
+    async def _scope(
+        self, project, kb: KnowledgeBase, question: str, history: list[dict]
+    ) -> ScopeVerdict:
+        """
+        Whether this question is about this codebase, before anything is searched.
+
+        Behind a setting rather than behind an edit to this file: the gate's one bad
+        outcome is a real question declined, that judgement is made by whichever
+        model the reader is running locally, and somebody who does not trust theirs
+        with it needs a way to switch it off that is not a release.
+
+        Any failure here answers "search the code" — including a failure to read the
+        profile, which is a database call and can go wrong for reasons that have
+        nothing to do with the question. The gate exists to improve a working
+        feature, and it must never be the reason one stops working.
+        """
+        if not get_settings().ASK_SCOPE_GATE:
+            return ScopeVerdict(decided_by="disabled", reason="the scope gate is switched off")
+        try:
+            profile = await load_profile(self.db, kb, project.name)
+        except JobCancelled:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("scope_profile_unavailable", error=str(exc))
+            return ScopeVerdict(decided_by="fallback", reason="the profile could not be read")
+        return await ScopeGate(profile).judge(question, history)
+
+    def _without_searching(self, verdict: ScopeVerdict) -> list[dict]:
+        """
+        The events for a question that was not sent to the code.
+
+        The reply was written by the gate in the same call that judged the question,
+        so nothing more is spent here: a second call to produce one sentence would
+        make the questions that least deserve it the slowest to come back. It is one
+        `token` event, so the studio renders it down the path it renders every other
+        answer, and `done` carries no citations because nothing was retrieved to
+        cite.
+        """
+        text = verdict.reply
+        return [
+            {"type": "token", "text": text},
+            {
+                "type": "usage",
+                "prompt_tokens": 0,
+                "answer_tokens": count_text_tokens(text),
+                "context_window": select_spec("write").context_window,
+            },
+            {"type": "done", "text": text, "citations": [], "stripped": []},
+        ]
 
     async def _usable_kb(self, project_id: int) -> KnowledgeBase:
         """

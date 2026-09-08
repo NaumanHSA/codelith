@@ -111,12 +111,18 @@ async def ask(
     async def events() -> AsyncIterator[str]:
         chunks: list[str] = []
         evidence: dict = {}
+        # Kept beside the evidence rather than in it: a question the gate did not
+        # send to the code produces no `evidence` event at all, and merging the two
+        # at the end is what lets a stored answer still say why it searched nothing.
+        scope: dict = {}
         yield _event({"type": "thread", "thread_id": thread_id, "title": thread.title})
 
         try:
             async for item in AskService(db).stream(project, req.question, history):
                 if item["type"] == "token":
                     chunks.append(item["text"])
+                elif item["type"] == "scope":
+                    scope = {k: v for k, v in item.items() if k != "type"}
                 elif item["type"] == "evidence":
                     evidence = {k: v for k, v in item.items() if k != "type"}
                 elif item["type"] == "done":
@@ -125,7 +131,7 @@ async def ask(
                     await chat.add_answer(
                         thread,
                         item["text"],
-                        evidence=evidence,
+                        evidence={**evidence, "scope": scope} if scope else evidence,
                         citations=item.get("citations", []),
                         stripped=item.get("stripped", []),
                     )
@@ -139,7 +145,11 @@ async def ask(
             # a partial answer is worth more than a blank turn.
             if chunks:
                 await chat.add_answer(
-                    thread, "".join(chunks), evidence=evidence, citations=[], stripped=[]
+                    thread,
+                    "".join(chunks),
+                    evidence={**evidence, "scope": scope} if scope else evidence,
+                    citations=[],
+                    stripped=[],
                 )
                 await db.commit()
             yield _event({"type": "stopped"})

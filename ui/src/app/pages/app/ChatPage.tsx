@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
-import type { ChatMessage, ChatSource, ChatThread, KnowledgeBase, Project } from '../../lib/types'
+import type {
+  ChatMessage,
+  ChatScope,
+  ChatSource,
+  ChatThread,
+  KnowledgeBase,
+  Project,
+} from '../../lib/types'
 import { AssistantMessage, UserMessage } from '../../components/chat/Message'
 import SourcesPanel from '../../components/chat/SourcesPanel'
 import RepositoryPicker from '../../components/chat/RepositoryPicker'
@@ -36,6 +43,9 @@ interface Live {
   answer: string
   sources: ChatSource[]
   counts: Record<string, number>
+  /** What the gate made of the question. Absent until it has decided, which is the
+   *  only moment the page can honestly say whether the code is being searched. */
+  scope?: ChatScope
 }
 
 export default function ChatPage() {
@@ -189,6 +199,20 @@ export default function ChatPage() {
                     { replace: true },
                   )
                 }
+                break
+              case 'scope':
+                setLive(l =>
+                  l
+                    ? {
+                        ...l,
+                        scope: {
+                          verdict: event.verdict,
+                          reason: event.reason,
+                          decided_by: event.decided_by,
+                        },
+                      }
+                    : l,
+                )
                 break
               case 'evidence':
                 setLive(l => (l ? { ...l, sources: event.sources, counts: event.counts } : l))
@@ -544,11 +568,15 @@ export default function ChatPage() {
                         content: live.answer,
                         citations: [],
                         stripped: [],
-                        evidence: { sources: live.sources, counts: live.counts },
+                        evidence: {
+                          sources: live.sources,
+                          counts: live.counts,
+                          scope: live.scope,
+                        },
                       }}
                     />
                   ) : (
-                    <Retrieving counts={live.counts} />
+                    <Retrieving counts={live.counts} scope={live.scope} />
                   )}
                 </>
               )}
@@ -615,8 +643,24 @@ export default function ChatPage() {
  * question with a model, then embeds, then traverses. Saying what is happening
  * is better than a spinner that could mean anything.
  */
-function Retrieving({ counts }: { counts: Record<string, number> }) {
+function Retrieving({
+  counts,
+  scope,
+}: {
+  counts: Record<string, number>
+  scope?: ChatScope
+}) {
   const found = Object.entries(counts)
+  /* Three stages, and they are three different things happening. The gate reads the
+     question first, so "Searching the codebase…" was a claim about work that had not
+     started — and for a question the gate declines, work that never starts at all. */
+  const label = found.length
+    ? `Reading ${found.map(([k, v]) => `${v} ${k}`).join(', ')}…`
+    : !scope
+      ? 'Reading the question…'
+      : scope.verdict === 'code'
+        ? 'Searching the codebase…'
+        : 'Answering without searching the code…'
   return (
     <div className="flex items-center gap-2.5">
       {/* Three dots out of phase. One pulsing dot is indistinguishable from a
@@ -631,11 +675,7 @@ function Retrieving({ counts }: { counts: Record<string, number> }) {
           />
         ))}
       </span>
-      <span className="text-[12px] text-ink-dim">
-        {found.length
-          ? `Reading ${found.map(([k, v]) => `${v} ${k}`).join(', ')}…`
-          : 'Searching the codebase…'}
-      </span>
+      <span className="text-[12px] text-ink-dim">{label}</span>
       {/* The counts arrive before the answer does, so this line changes as evidence
           lands — the movement above says "running", this says what it is doing. */}
     </div>

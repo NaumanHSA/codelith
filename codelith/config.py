@@ -165,6 +165,18 @@ class Settings(BaseSettings):
     # Concurrent section-writing LLM calls.
     COMPOSITION_SECTION_CONCURRENCY: int = 4
 
+    # ── Ask (the second app on the same knowledge base) ───────────────────────
+    #: Whether a question is checked against what this repository is about before
+    #: the code is searched. Without it, "what is the capital of France" is answered
+    #: from the three source files least unlike a country.
+    #:
+    #: A switch rather than a constant because the judgement is made by whichever
+    #: model is configured locally, and its one bad outcome — a real question about
+    #: somebody's own code, declined — is worse than the behaviour it replaces.
+    #: Anyone whose model gets it wrong can turn it off without waiting for a
+    #: release. See `codelith/knowledge/scope.py`.
+    ASK_SCOPE_GATE: bool = True
+
     # OAuth2 (Phase 4)
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

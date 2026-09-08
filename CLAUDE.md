@@ -49,7 +49,10 @@ reach does not require that app.
    write the requested documents from the stored KB, retrieve-then-write per section.
    Never re-reads the repository.
 3. **Ask** (`codelith/apps/ask/service.py`) — the second app on the same KB, proving
-   the pattern: it needed nothing from the doc pipeline.
+   the pattern: it needed nothing from the doc pipeline. A question is gated by
+   `codelith/knowledge/scope.py` before it is routed: retrieval always returns
+   *something*, so without it "what is the capital of France" is answered from the
+   three chunks least unlike a country.
 
 An app is defined by *what it reads from the knowledge base* and, optionally, *what it
 derives for itself*. Quality was the first with two stages — it parsed the checkout for
@@ -149,9 +152,13 @@ codelith/                 the importable package (distribution name: codelith)
   services/        Shared business logic only (auth, audit, job, project, source,
                    knowledge). An app's services live with the app
   knowledge/       THE BASE — KB vocabulary, builder, retrieval, questions,
-                   artefacts, tools, preflight, doc-type roles
+                   scope, artefacts, tools, preflight, doc-type roles
     lexical.py       Finds code by name — exact, restyled, misspelled, described.
                      The half an embedding cannot do; fused with vectors on rank
+    scope.py         Whether a question is about this codebase at all — the answer
+                     `questions.py` cannot give, since everything handed to it is
+                     routed. Compares against what analysis found this repo to be,
+                     reads the last turns, and fails open on every uncertain path
     services.py      Groups modules by the components analysis named for *this*
                      codebase, so the graph is not twelve fixed words everywhere
   languages/       Language abstraction — taxonomy, LanguageProvider, registry
