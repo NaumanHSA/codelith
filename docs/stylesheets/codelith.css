@@ -1,0 +1,350 @@
+/* ------------------------------------------------------------------ *
+ * The studio's theme, on the documentation.
+ *
+ * Material ships a good structure and a palette that looks like every
+ * other Material site. The tokens below are the ones in
+ * `ui/src/styles/theme.css`, mapped onto the variables Material actually
+ * reads, so the docs and the product are recognisably one thing:
+ * warm paper, near-black ink, one hot orange, hairline rules, and the
+ * graph-paper grid behind it all.
+ *
+ * Light only, deliberately. The studio has no dark variant yet; shipping
+ * one here would make the docs and the app disagree about what the
+ * product looks like.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --paper: #f4f3ef;
+  --panel: #ffffff;
+  --sunk: #eceae4;
+  --ink: #14120f;
+  --ink-mid: #55504a;
+  --ink-dim: #8a847c;
+  --rule: #dcd8d0;
+  --hot: #ff6b35;
+  --hot-press: #e8551f;
+  --hot-ink: #c2400c;
+  --hot-wash: #fff0e9;
+  --hot-edge: #ffc7ac;
+  --grid-line: rgba(20, 18, 15, 0.045);
+
+  --code-bg: #14120f;
+  --code-rule: #2e2820;
+  --code-text: #ded5c8;
+
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Material's own variables, pointed at the tokens above. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--hot);
+  --md-primary-fg-color--light: var(--hot-edge);
+  --md-primary-fg-color--dark: var(--hot-press);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+
+  --md-accent-fg-color: var(--hot-ink);
+  --md-accent-fg-color--transparent: var(--hot-wash);
+
+  --md-default-bg-color: var(--paper);
+  --md-default-fg-color: var(--ink);
+  --md-default-fg-color--light: var(--ink-mid);
+  --md-default-fg-color--lighter: var(--ink-dim);
+  --md-default-fg-color--lightest: var(--rule);
+
+  --md-typeset-color: var(--ink);
+  --md-typeset-a-color: var(--hot-ink);
+
+  --md-code-bg-color: var(--sunk);
+  --md-code-fg-color: var(--ink);
+
+  --md-footer-bg-color: var(--ink);
+  --md-footer-bg-color--dark: #0d0c0a;
+
+  --md-text-font-family: var(--sans);
+  --md-code-font-family: var(--mono);
+}
+
+/* ── The graph paper ──────────────────────────────────────────────── */
+/* Behind everything, at the same 32px pitch and the same near-invisible
+   weight the studio uses. Fixed, so it reads as paper the content sits on
+   rather than as a texture that scrolls with it. */
+body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-attachment: fixed;
+}
+
+.md-main__inner {
+  margin-top: 1.5rem;
+}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+/* Ink rather than orange. The accent is for one thing at a time, and a
+   header band of it would make everything else on the page compete. */
+.md-header {
+  background-color: var(--ink);
+  box-shadow: none;
+  border-bottom: 1px solid var(--ink);
+}
+
+.md-header--shadow {
+  box-shadow: 0 0 0.2rem rgba(20, 18, 15, 0.1);
+}
+
+.md-header__title {
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.md-tabs {
+  background-color: var(--ink);
+}
+
+.md-search__form {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+.md-search__form:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Type ─────────────────────────────────────────────────────────── */
+/* Headings are monospace: it is the product's voice, and it makes a
+   heading read as a label on a drawing rather than as magazine prose. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4 {
+  font-family: var(--mono);
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.md-typeset h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.6em;
+}
+
+.md-typeset h2 {
+  font-size: 1.2rem;
+  margin-top: 2.2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--rule);
+}
+
+.md-typeset h3 {
+  font-size: 1rem;
+  margin-top: 1.8em;
+}
+
+.md-typeset {
+  font-size: 0.78rem;
+  line-height: 1.7;
+}
+
+/* ── Rules, tables, quotes ────────────────────────────────────────── */
+.md-typeset hr {
+  border-bottom: 1px solid var(--rule);
+}
+
+.md-typeset table:not([class]) {
+  background-color: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 0.72rem;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+}
+
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.md-typeset blockquote {
+  border-left: 2px solid var(--hot);
+  color: var(--ink-mid);
+}
+
+/* ── Code ─────────────────────────────────────────────────────────── */
+/* Blocks are the studio's dark code surface; inline code stays on paper,
+   because a dark chip mid-sentence reads as a button. */
+.md-typeset pre > code {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  border: 1px solid var(--code-rule);
+  border-radius: 2px;
+}
+
+.md-typeset code {
+  background-color: var(--sunk);
+  color: var(--hot-ink);
+  border-radius: 2px;
+  padding: 0.1em 0.35em;
+  font-size: 0.86em;
+}
+
+.md-typeset pre > code .hll,
+.md-typeset .highlight span.filename {
+  background-color: var(--sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* Pygments, against the dark block. Deliberately few colours: the point of
+   a snippet here is the shape of the code, not a rainbow. */
+.md-typeset pre > code .k,
+.md-typeset pre > code .kn,
+.md-typeset pre > code .kd { color: #ff9d6e; }
+.md-typeset pre > code .s,
+.md-typeset pre > code .s1,
+.md-typeset pre > code .s2 { color: #9ecf9e; }
+.md-typeset pre > code .m,
+.md-typeset pre > code .mi { color: #e6b566; }
+.md-typeset pre > code .c,
+.md-typeset pre > code .c1,
+.md-typeset pre > code .cm { color: #857c72; font-style: italic; }
+.md-typeset pre > code .nf,
+.md-typeset pre > code .nc { color: #f3e8d8; }
+.md-typeset pre > code .nd { color: #c9b8a8; }
+
+.md-clipboard {
+  color: var(--ink-dim);
+}
+
+.md-clipboard:hover {
+  color: var(--hot);
+}
+
+/* ── Navigation ───────────────────────────────────────────────────── */
+.md-nav {
+  font-size: 0.7rem;
+}
+
+.md-nav__title {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.md-nav__link--active,
+.md-nav__link:focus,
+.md-nav__link:hover {
+  color: var(--hot-ink);
+}
+
+.md-sidebar {
+  font-family: var(--mono);
+}
+
+/* ── Admonitions ──────────────────────────────────────────────────── */
+/* Square, hairline, no drop shadow — the same panel the studio draws. */
+.md-typeset .admonition,
+.md-typeset details {
+  background-color: var(--panel);
+  border: 1px solid var(--rule);
+  border-left-width: 2px;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 0.72rem;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background-color: var(--sunk);
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Material colours each flavour from its own variables, and those selectors are
+   more specific than a bare `.admonition-title`. Naming the flavour here is what
+   makes the paper palette win over the stock blue. */
+.md-typeset .admonition.note > .admonition-title,
+.md-typeset details.note > summary {
+  background-color: var(--sunk);
+  color: var(--ink);
+}
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: var(--rule);
+  border-left-color: var(--ink-dim);
+}
+.md-typeset .admonition.note > .admonition-title::before,
+.md-typeset details.note > summary::before {
+  background-color: var(--ink-mid);
+}
+
+.md-typeset .admonition.warning > .admonition-title,
+.md-typeset details.warning > summary {
+  background-color: var(--hot-wash);
+  color: var(--hot-ink);
+}
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-color: var(--rule);
+  border-left-color: var(--hot);
+}
+.md-typeset .admonition.warning > .admonition-title::before,
+.md-typeset details.warning > summary::before {
+  background-color: var(--hot);
+}
+
+.md-typeset .admonition.tip > .admonition-title,
+.md-typeset details.tip > summary {
+  background-color: #edf8f2;
+  color: #1f7a4d;
+}
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: var(--rule);
+  border-left-color: #1f7a4d;
+}
+.md-typeset .admonition.tip > .admonition-title::before,
+.md-typeset details.tip > summary::before {
+  background-color: #1f7a4d;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+.md-footer-meta {
+  background-color: #0d0c0a;
+}
+
+.md-footer__inner {
+  padding: 0.6rem 0;
+}
+
+/* ── Figures ──────────────────────────────────────────────────────── */
+.md-typeset img {
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background-color: var(--panel);
+}
+
+/* The banner is a full-bleed graphic with its own frame; a second border
+   around it reads as a mistake. */
+.md-typeset img[alt^="Codelith"] {
+  border: none;
+  background: none;
+}

@@ -154,6 +154,12 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
 ]
+# The documentation site. Separate from `dev` because building the docs is not part of
+# running the tests, and a contributor fixing a bug should not install a theme to do it.
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+]
 
 [tool.ruff]
 target-version = "py311"

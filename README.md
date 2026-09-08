@@ -10,6 +10,13 @@
   <img alt="Runs offline" src="https://img.shields.io/badge/runs-fully%20offline-2f9e44?style=flat-square">
 </p>
 
+<p align="center">
+  <a href="https://naumanhsa.github.io/codelith/"><b>Documentation</b></a> ·
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/analysis/">How analysis works</a> ·
+  <a href="https://naumanhsa.github.io/codelith/how-it-works/knowledge-base/">What the knowledge base holds</a> ·
+  <a href="https://naumanhsa.github.io/codelith/mcp/">MCP</a>
+</p>
+
 ---
 
 ## 🧭 What this is
@@ -150,7 +157,7 @@ the ids are not guessable.
 |---|---|
 | `list_codebases` | What has been analysed, with commit and size |
 | **`before_edit`** | **What an edit would touch. Call this first** |
-| `search_code` | Semantic search over the source |
+| `search_code` | Search the source, by meaning or by name |
 | `read_file` | A file as the knowledge base holds it |
 | `find_callers` | Who calls a symbol. **No embedding encodes this** |
 | `find_dependents` | Which files import a file |
@@ -266,6 +273,13 @@ publishing; firing it is a maintainer decision, and this README will say so when
 happens rather than before.
 
 ---
+
+## 📖 Documentation
+
+This README is the pitch. The **[documentation site](https://naumanhsa.github.io/codelith/)**
+is the mechanism: the ten stages of one analysis, every table in the knowledge base, how
+source is chunked and found again, what the code graph can and cannot answer, and what
+each language provider extracts.
 
 ## 🤝 Contributing
 

@@ -1,0 +1,92 @@
+site_name: Codelith
+site_description: Read a codebase once, then ask it anything. Local-first code intelligence with an MCP server.
+site_url: https://naumanhsa.github.io/codelith/
+repo_url: https://github.com/NaumanHSA/codelith
+repo_name: NaumanHSA/codelith
+edit_uri: edit/main/docs/
+copyright: Apache-2.0
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  favicon: assets/codelith-logo.svg
+  logo: assets/codelith-logo.svg
+  font: false # Bundled stacks only. The product's claim is that nothing leaves the
+              # machine; a docs site that phones Google for a typeface undercuts the
+              # first thing it says about itself.
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  palette:
+    scheme: default
+    primary: custom
+    accent: custom
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/codelith.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Link to this section
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Install: getting-started/install.md
+      - Your first analysis: getting-started/first-analysis.md
+      - Models: getting-started/models.md
+  - How it works:
+      - Analysis: how-it-works/analysis.md
+      - The knowledge base: how-it-works/knowledge-base.md
+      - Chunks and retrieval: how-it-works/chunks-and-retrieval.md
+      - The code graph: how-it-works/code-graph.md
+      - Languages: how-it-works/languages.md
+  - The apps: apps.md
+  - MCP: mcp.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - HTTP API: reference/http-api.md
+      - CLI: reference/cli.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/NaumanHSA/codelith
+      name: Codelith on GitHub
+
+# A link that does not resolve is a broken promise in a document whose whole job is
+# to be trusted, so the build fails on one rather than warning.
+strict: true
