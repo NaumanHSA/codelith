@@ -5,7 +5,7 @@
   "//": "mermaid-cli renders generated diagrams to PNG locally. Installed rather than npx'd so a job never needs the network at runtime, which is the product's core claim.",
   "//d2": "d2 renders diagrams built from the code graph. Same reason as above: vendored so a job never needs the network.",
   "dependencies": {
-    "@mermaid-js/mermaid-cli": "^11.4.2",
+    "@mermaid-js/mermaid-cli": "^11.17.0",
     "@terrastruct/d2": "^0.1.33"
   }
 }
