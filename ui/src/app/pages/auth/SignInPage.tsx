@@ -13,13 +13,28 @@ import AuthLayout from './AuthLayout'
  * `scripts/seed_dev.py` creates, which is why it needs a real role rather than a
  * read-only one: a guest who cannot create a project or start an analysis cannot
  * test anything. Override the pair with VITE_GUEST_EMAIL / VITE_GUEST_PASSWORD.
- *
- * Rendered only in dev builds, so it never reaches a `pnpm build` artifact.
  */
 const GUEST = {
   email: (import.meta.env.VITE_GUEST_EMAIL as string | undefined) ?? 'admin@codelith.dev',
   password: (import.meta.env.VITE_GUEST_PASSWORD as string | undefined) ?? 'admin1234',
 }
+
+/**
+ * Whether to offer it at all.
+ *
+ * On under `pnpm dev`, and otherwise only when somebody sets `VITE_GUEST_LOGIN=1` at
+ * build time. It was keyed on `import.meta.env.DEV` alone, which reads as "local
+ * only" and is not: `DEV` is false in every `pnpm build`, including the build the API
+ * serves at its own root. So on the one machine where the button was wanted it was
+ * the machine's build that removed it, and the button appeared to have been deleted.
+ *
+ * The flag stays opt-in because this is a *credentialled* button, not a guest
+ * session. `APP_HOST` is `0.0.0.0` by default, so a build carrying it hands one-click
+ * admin to anyone who can reach the port — which is the whole network, not the
+ * person who built it.
+ */
+const GUEST_LOGIN =
+  import.meta.env.DEV || ['1', 'true'].includes(String(import.meta.env.VITE_GUEST_LOGIN ?? ''))
 
 export default function SignInPage() {
   const { signIn } = useAuth()
@@ -114,7 +129,7 @@ export default function SignInPage() {
         </Button>
       </form>
 
-      {import.meta.env.DEV && (
+      {GUEST_LOGIN && (
         <div className="mt-5 border-t border-rule pt-4">
           <Button
             variant="ghost"
@@ -131,8 +146,11 @@ export default function SignInPage() {
               'Sign in as guest'
             )}
           </Button>
+          {/* The account, not the word "guest". It signs in with real credentials and
+              real permissions, and a caption saying so is what keeps it from being
+              read as an anonymous session. */}
           <p className="tag mt-2 text-center text-ink-dim">
-            dev only · seeded account {GUEST.email}
+            local testing · seeded account {GUEST.email}
           </p>
         </div>
       )}
