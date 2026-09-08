@@ -3,8 +3,21 @@ set -e
 
 cd "$(dirname "$0")"
 
-API_HOST="${APP_HOST:-0.0.0.0}"
-API_PORT="${APP_PORT:-8000}"
+# Host and port come from `.env` when the shell does not set them.
+#
+# They used to default here instead, which meant `.env` said one port and this said
+# another and only one of them was true — the application read the file, this script
+# read its own default, and the studio was served somewhere the settings did not
+# mention. The shell still wins, so `APP_PORT=8080 ./dev.sh` overrides for one run.
+from_env_file() {
+    [ -f .env ] || return 0
+    sed -n "s/^[[:space:]]*$1=[[:space:]]*\([^#[:space:]]*\).*/\1/p" .env | tail -1
+}
+
+API_HOST="${APP_HOST:-$(from_env_file APP_HOST)}"
+API_PORT="${APP_PORT:-$(from_env_file APP_PORT)}"
+API_HOST="${API_HOST:-0.0.0.0}"
+API_PORT="${API_PORT:-8000}"
 
 # Absolute, not ".". `conda run` executes from its own temporary directory, so a
 # relative PYTHONPATH resolves somewhere unrelated and `codelith` becomes whatever else
