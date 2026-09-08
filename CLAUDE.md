@@ -96,8 +96,8 @@ make docker                          # or: one container, studio served on :8000
 `make docker` is what the README leads with, and it is one service — `codelith` —
 not the Postgres/Redis/Neo4j/MinIO stack this used to be. The model stays on the
 host: compose maps `host.docker.internal`, and the studio says so at the field where
-a model endpoint is typed. `docker/grafana/` and `docker/prometheus.yml` are config
-for scraping the metrics the app exports; nothing in compose starts them.
+a model endpoint is typed. The app still serves `/metrics` in Prometheus format;
+point your own scraper at it if you want one.
 
 `.env` is optional — every setting has a working default and `.env.example` documents
 them. The database is a file under `~/.codelith` (or `CODELITH_HOME`), created on first
