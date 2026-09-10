@@ -63,8 +63,10 @@ docker-compose.infra.local.yml
 /test_codegraph/
 /.codegraph/
 
-# Phase run artifacts (large, regenerable)
-.dev/runs/
+# Working notes — plans, status, roadmaps, scorecards. Kept on disk and out of the
+# repository: they are a running commentary on unfinished work, and what is worth
+# publishing out of them belongs in `docs/` written for a reader instead.
+.dev/
 
 # Pre-redesign studio, kept for reference until the new UI settles.
 ui_backup/

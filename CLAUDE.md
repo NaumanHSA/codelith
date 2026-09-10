@@ -26,7 +26,8 @@ settle — an app maturing against two neighbours still changing shape is an app
 rebuilt twice. Do not re-add it to `main` piecemeal; when it returns it returns from
 that branch. What went with it: `codelith/apps/qa/`, its registry entry, its router
 mount, `tests/unit/apps/test_qa_*.py`, and the studio's Quality page and rail section.
-`.dev/QA_AGENT_PLAN.md` stays as the record of what was deliberately not built.
+The record of what was deliberately not built is kept with the working notes, outside
+the repository.
 
 `codelith/mcp/` is **not** an app. It adds nothing of its own — it is a second
 transport over the base, so other agents (Claude Code, Cursor) can query the knowledge
@@ -186,7 +187,6 @@ codelith/                 the importable package (distribution name: codelith)
   observability/   OpenTelemetry + Prometheus
 
 ui/                React studio (Vite) — see ui/README.md
-.dev/              STATUS.md + the two records worth keeping
 ```
 
 ## UI Conventions

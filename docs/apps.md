@@ -128,5 +128,4 @@ surface with no test, an offline dependency audit, derived layering rules — an
 deliberately taken back out until Documentation and Ask settle. An app maturing against
 two neighbours still changing shape is an app rebuilt twice.
 
-It lives on the `feat/qa` branch, and `.dev/QA_AGENT_PLAN.md` is the record of what was
-deliberately not built.
+It lives on the `feat/qa` branch, which is where it returns from when it returns.
