@@ -99,7 +99,7 @@ dependencies = [
     # Ingestion - Parsers
     "tree-sitter>=0.23.0",
     "tree-sitter-python>=0.23.0",
-    "tree-sitter-javascript>=0.23.0",
+    "tree-sitter-javascript>=0.25.0",
     "tree-sitter-typescript>=0.23.0",
     "pdfplumber>=0.11.0",
     "python-docx>=1.1.0",
