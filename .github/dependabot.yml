@@ -11,18 +11,18 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     groups:
-      # One PR for the routine bumps. Fifteen separate ones a week is how people
-      # learn to ignore the bot, including on the update that mattered.
+      # Majors only, because minor and patch are ignored below. They still deserve
+      # reading — that is why they are not silenced — but they do not each deserve
+      # their own thread.
       #
-      # `patterns` is not decoration. Written with `update-types` alone this grouped
-      # nothing: five separate pip PRs arrived on 2026-09-21 while the npm groups —
-      # same shape, same file — grouped eleven updates into one. Every working
-      # example in GitHub's own documentation names a pattern, so this one does too.
-      python-minor:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-      # And one for the majors, together. They still deserve reading — that is why
-      # they are not silenced — but they do not each deserve their own thread.
+      # There is no `python-minor` group any more and adding one back will not do
+      # what it looks like it does. Grouping does not reach pip here at all:
+      # measured on 2026-09-26, one Dependabot run produced a single grouped npm
+      # pull request and four separate pip ones out of this same `groups:` block,
+      # with `patterns: ["*"]` on both. npm has lock files and receives *version*
+      # updates, which group; pip has only `>=` ranges in `pyproject.toml` and
+      # receives *requirement* updates, which do not. A lock file would change that,
+      # and is the only thing that would.
       python-major:
         patterns: ["*"]
         update-types: ["major"]
@@ -39,14 +39,33 @@ updates:
       #                 `>=3.16.0` floor and that ceiling have no version between
       #                 them, so the set it produced was unresolvable.
       #
-      # Minor and patch updates still come through. Only the majors are refused, and
-      # the day a pin is lifted this entry goes with it.
+      # Only the majors are refused for these three, and the day a pin is lifted its
+      # entry goes with it.
       - dependency-name: "bcrypt"
         update-types: ["version-update:semver-major"]
       - dependency-name: "mcp"
         update-types: ["version-update:semver-major"]
       - dependency-name: "openai"
         update-types: ["version-update:semver-major"]
+
+      # And every floor raise, from everything.
+      #
+      # Without a lock file a `>=` requirement can receive nothing else: a new
+      # release never violates `>=`, so there is no fix in any of these — only the
+      # declared minimum moving up to whatever shipped last week. Nine such pull
+      # requests arrived in five days and not one of them changed a version anybody
+      # installs, because `pip install codelith` already resolves to the newest
+      # release the ceilings allow. What they do change is the floor, which is the
+      # oldest version this is claimed to work on, and moving that up is a promise
+      # being narrowed rather than a bug being fixed.
+      #
+      # Majors still come through, and that is the entry that matters: a major is a
+      # real compatibility question, and it is how `langchain-openai`'s `openai<3`
+      # conflict surfaced. Security updates are a separate channel and are not
+      # affected by this.
+      - dependency-name: "*"
+        update-types:
+          ["version-update:semver-patch", "version-update:semver-minor"]
 
   - package-ecosystem: "npm"
     directory: "/ui"
