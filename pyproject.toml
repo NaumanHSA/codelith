@@ -42,7 +42,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
 
     # Database
-    "sqlalchemy[asyncio]>=2.0.36",
+    "sqlalchemy[asyncio]>=2.0.54",
     # The same schema on SQLite, and SQLAlchemy's async engine needs a driver for it.
     "aiosqlite>=0.20.0",
     "alembic>=1.14.0",
@@ -63,7 +63,13 @@ dependencies = [
     "pydantic-settings>=2.6.0",
 
     # LLM
-    "openai>=1.57.0",
+    # <3, and not by our choice either. `langchain-openai` requires `openai<3.0.0`,
+    # so a floor above that resolves to nothing installable — Dependabot proposed
+    # `>=3.16.0` and the set it produces has no solution. The 3.0 break itself is
+    # httpx → httpx2 and would not touch us: we build `AsyncOpenAI` with a base URL
+    # and a key and never pass `http_client`. The ceiling goes the day
+    # `langchain-openai` lifts its own.
+    "openai>=1.57.0,<3",
     "tiktoken>=0.7.0",
     "langchain-openai>=0.2.0",
 
@@ -97,10 +103,14 @@ dependencies = [
     "pygithub>=2.5.0",
 
     # Ingestion - Parsers
-    "tree-sitter>=0.23.0",
-    "tree-sitter-python>=0.23.0",
-    "tree-sitter-javascript>=0.23.0",
-    "tree-sitter-typescript>=0.23.0",
+    #
+    # No tree-sitter here, and it is worth saying why it is absent rather than
+    # leaving the next person to wonder. Four `tree-sitter*` packages were declared
+    # and imported by nothing: the Python provider parses with `ast`, and the other
+    # three parse with regex. They were installed on every machine that ever ran
+    # this, and found by Dependabot, which proposed raising a floor on a parser the
+    # code has never called. When a provider is moved onto tree-sitter the
+    # dependency comes back with it — added by the change that uses it.
     "pdfplumber>=0.11.0",
     "python-docx>=1.1.0",
     "pyyaml>=6.0.2",
@@ -123,7 +133,7 @@ dependencies = [
     # Graph DB
 
     # Logging & Observability
-    "structlog>=24.4.0",
+    "structlog>=26.1.0",
     "opentelemetry-sdk>=1.28.0",
     "opentelemetry-exporter-otlp>=1.28.0",
     "prometheus-client>=0.21.0",
@@ -131,7 +141,7 @@ dependencies = [
     # Utilities
     "httpx>=0.28.0",
     "tenacity>=9.0.0",
-    "python-slugify>=8.0.4",
+    "python-slugify>=9.0.0",
 ]
 
 [project.urls]

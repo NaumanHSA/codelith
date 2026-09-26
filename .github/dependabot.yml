@@ -13,11 +13,18 @@ updates:
     groups:
       # One PR for the routine bumps. Fifteen separate ones a week is how people
       # learn to ignore the bot, including on the update that mattered.
+      #
+      # `patterns` is not decoration. Written with `update-types` alone this grouped
+      # nothing: five separate pip PRs arrived on 2026-09-21 while the npm groups —
+      # same shape, same file — grouped eleven updates into one. Every working
+      # example in GitHub's own documentation names a pattern, so this one does too.
       python-minor:
+        patterns: ["*"]
         update-types: ["minor", "patch"]
       # And one for the majors, together. They still deserve reading — that is why
       # they are not silenced — but they do not each deserve their own thread.
       python-major:
+        patterns: ["*"]
         update-types: ["major"]
     ignore:
       # Both of these are pinned on purpose, with the reason written next to the pin
@@ -28,12 +35,17 @@ updates:
       #                 which bcrypt 5.0 rejects.
       #   mcp <2.0    — `langchain-mcp-adapters` requires it, and 2.x removed the
       #                 decorators `codelith/mcp/server.py` is built on.
+      #   openai <3   — `langchain-openai` requires `openai<3.0.0`. The proposed
+      #                 `>=3.16.0` floor and that ceiling have no version between
+      #                 them, so the set it produced was unresolvable.
       #
       # Minor and patch updates still come through. Only the majors are refused, and
       # the day a pin is lifted this entry goes with it.
       - dependency-name: "bcrypt"
         update-types: ["version-update:semver-major"]
       - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "openai"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
