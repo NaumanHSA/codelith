@@ -60,7 +60,7 @@ dependencies = [
     # [email] is required: codelith/schemas/auth.py uses EmailStr, and without the extra
     # the app fails to import at startup.
     "pydantic[email]>=2.10.0",
-    "pydantic-settings>=2.6.0",
+    "pydantic-settings>=2.15.0",
 
     # LLM
     # <3, and not by our choice either. `langchain-openai` requires `openai<3.0.0`,
