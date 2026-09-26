@@ -6,7 +6,8 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
-    "baseUrl": ".",
+    // No `baseUrl`: TypeScript 7 removed the option. These paths are already
+    // resolved relative to this file, which is all baseUrl was doing here.
     "paths": {
       "@/*": ["./src/*"]
     },
