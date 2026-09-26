@@ -69,7 +69,7 @@ dependencies = [
     # httpx → httpx2 and would not touch us: we build `AsyncOpenAI` with a base URL
     # and a key and never pass `http_client`. The ceiling goes the day
     # `langchain-openai` lifts its own.
-    "openai>=1.57.0,<3",
+    "openai>=1.109.1,<3",
     "tiktoken>=0.7.0",
     "langchain-openai>=0.2.0",
 
