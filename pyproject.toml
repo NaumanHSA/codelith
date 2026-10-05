@@ -117,7 +117,7 @@ dependencies = [
     # Renders the static HTML export. Same flavour the studio reads with
     # (react-markdown + remark-gfm), so an exported page matches what was on screen.
     # Already present transitively via rich; declared because we import it directly.
-    "markdown-it-py>=3.0.0",
+    "markdown-it-py>=4.2.0",
     "openapi-spec-validator>=0.7.1",
 
     # Vector search runs in this process over the embeddings stored in SQLite, and
