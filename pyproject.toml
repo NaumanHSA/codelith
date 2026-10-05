@@ -128,7 +128,7 @@ dependencies = [
     # have torch and transformers installed for other work. Nothing Codelith actually
     # depends on pulls numpy in, so a clean `pip install -e .` would have installed a
     # product whose retrieval fails on the first search.
-    "numpy>=1.26",
+    "numpy>=2.4.6",
 
     # Graph DB
 
