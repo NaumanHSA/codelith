@@ -48,6 +48,8 @@ updates:
       - dependency-name: "openai"
         update-types: ["version-update:semver-major"]
 
+      - dependency-name: "pydantic-settings"
+
       # And every floor raise, from everything.
       #
       # Without a lock file a `>=` requirement can receive nothing else: a new
