@@ -162,7 +162,7 @@ dev = [
     "httpx>=0.28.0",
     "factory-boy>=3.3.1",
     "ruff>=0.8.0",
-    "mypy>=1.13.0",
+    "mypy>=2.4.0",
 ]
 # The documentation site. Separate from `dev` because building the docs is not part of
 # running the tests, and a contributor fixing a bug should not install a theme to do it.
