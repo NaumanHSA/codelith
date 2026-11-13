@@ -74,7 +74,7 @@ dependencies = [
     "langchain-openai>=0.2.0",
 
     # Agent Workflows
-    "langgraph>=0.2.60",
+    "langgraph>=1.2.12",
     "langchain-core>=0.3.25",
     "langchain-mcp-adapters>=0.1.0",
     # <2, and no longer by our choice. `langchain-mcp-adapters` requires `mcp<2.0.0`,
