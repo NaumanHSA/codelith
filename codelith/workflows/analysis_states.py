@@ -19,6 +19,8 @@ class AnalysisState(TypedDict, total=False):
     project: Any
     job: Any
     sandbox: Any
+    #: Read everything from scratch instead of keeping what did not change.
+    force: bool
 
     # ── Ingestion (repo_analyzer) ─────────────────────────────────────────────
     ingestion_result: dict
@@ -34,6 +36,9 @@ class AnalysisState(TypedDict, total=False):
     kb_id: int
     commit_sha: str | None
     extraction_stats: dict
+    #: What this reading may take from the previous one, and what each stage took.
+    #: Started by the structured extractor; see `knowledge/incremental.py`.
+    reuse: dict
 
     # ── Semantic index ────────────────────────────────────────────────────────
     #: Node and edge counts from the code graph. Empty when Neo4j was unreachable —

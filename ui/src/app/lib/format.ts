@@ -164,6 +164,14 @@ export function formatDateTime(iso: string | null | undefined): string {
 
 export const shortSha = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : '-')
 
+/** The language most of a codebase's files are written in, from what its first
+ *  source's probe counted. Null before a source has been probed. */
+export function primaryLanguage(project: {
+  sources: { config_json: { probe?: { languages?: Record<string, number> } } | null }[] | null
+}): string | null {
+  return languageShares(project.sources?.[0]?.config_json?.probe?.languages)[0]?.name ?? null
+}
+
 /** Language byte/file counts → percentage shares, largest first. */
 export function languageShares(
   languages: Record<string, number> | null | undefined,
@@ -175,4 +183,17 @@ export function languageShares(
   return entries
     .map(([name, count]) => ({ name, count, pct: (count / total) * 100 }))
     .sort((a, b) => b.count - a.count)
+}
+
+/** A size in bytes, as a person reads it: 940 B, 12.4 KB, 3.1 MB. */
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let v = n / 1024
+  let u = 0
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024
+    u++
+  }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[u]}`
 }

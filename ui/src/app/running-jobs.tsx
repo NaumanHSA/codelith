@@ -3,6 +3,7 @@ import {
 } from 'react'
 import { api } from './lib/api'
 import { isTerminal, type Job, type JobStatus, type JobType } from './lib/types'
+import { progressStages } from './lib/narrate'
 
 /* ------------------------------------------------------------------ *
  * A running job must be visible from anywhere.
@@ -18,6 +19,22 @@ export interface TrackedJob {
   projectName?: string
   jobType: JobType
   status: JobStatus
+  /** The stage running now, by agent name, for the run dock. */
+  stage?: string | null
+  /** Stages done of those that report, for the dock's bar. */
+  done?: number
+  total?: number
+}
+
+/** Where a job has got to, from the steps every poll already returns. */
+function progressOf(job: Job): Pick<TrackedJob, 'stage' | 'done' | 'total'> {
+  const stages = progressStages(job.job_type)
+  const steps = job.steps ?? []
+  return {
+    stage: steps.find(s => s.status === 'running')?.name ?? null,
+    done: steps.filter(s => s.status === 'completed' && stages.includes(s.name)).length,
+    total: stages.length,
+  }
 }
 
 interface Value {
@@ -54,11 +71,18 @@ function readSeeds(): Seed[] {
  * produced a new array, a new context value, and a re-render of every consumer —
  * every three seconds, app-wide, for as long as any job was tracked.
  */
-function withStatus(prev: TrackedJob[], id: number, status: JobStatus): TrackedJob[] {
+function withStatus(prev: TrackedJob[], id: number, status: JobStatus, job?: Job): TrackedJob[] {
   const i = prev.findIndex(j => j.id === id)
-  if (i === -1 || prev[i].status === status) return prev
+  if (i === -1) return prev
+  const progress = job ? progressOf(job) : {}
+  const cur = prev[i]
+  if (
+    cur.status === status &&
+    (!job || (cur.stage === progress.stage && cur.done === progress.done && cur.total === progress.total))
+  )
+    return prev
   const copy = [...prev]
-  copy[i] = { ...copy[i], status }
+  copy[i] = { ...cur, status, ...progress }
   return copy
 }
 
@@ -102,6 +126,7 @@ export function RunningJobsProvider({ children }: { children: ReactNode }) {
               projectName: s.projectName,
               jobType: s.jobType,
               status: job.status,
+              ...progressOf(job),
             })
           } catch {
             // Deleted, or the server is unreachable. Either way it is not something
@@ -182,10 +207,10 @@ export function RunningJobsProvider({ children }: { children: ReactNode }) {
               // the outcome, then stop polling this job.
               seeds.current.delete(id)
               persist()
-              setJobs(prev => withStatus(prev, id, job.status))
+              setJobs(prev => withStatus(prev, id, job.status, job))
               setTimeout(() => live && untrack(id), 8000)
             } else {
-              setJobs(prev => withStatus(prev, id, job.status))
+              setJobs(prev => withStatus(prev, id, job.status, job))
             }
           } catch {
             // A job that 404s or a dropped connection should not wedge

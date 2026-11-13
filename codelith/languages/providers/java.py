@@ -24,11 +24,15 @@ from codelith.knowledge.constants import EntityKind
 from codelith.languages.base import (
     CallRef,
     DetectedEntity,
+    FlowFacts,
     ImportRef,
+    Issue,
     LanguageProvider,
     ModuleRef,
+    RunInfo,
     Symbol,
 )
+from codelith.languages.providers import _pattern_qa as pattern_qa
 from codelith.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 _TYPE_DECL = re.compile(
@@ -153,6 +157,7 @@ class JavaProvider(LanguageProvider):
     display_name = "Java"
     extensions = (".java",)
     manifest_files = ("pom.xml", "build.gradle", "build.gradle.kts")
+    lock_files = ("gradle.lockfile",)
 
     # ── Symbols ───────────────────────────────────────────────────────────────
 
@@ -392,6 +397,42 @@ class JavaProvider(LanguageProvider):
                     record(match.group(1), match.group(2))
         return out
 
+    has_rules = True
+    qa_rules = pattern_qa.labels(pattern_qa.JAVA)
+
+    def flow_facts(self, relative_path: str, source: str) -> FlowFacts | None:
+        return pattern_qa.flow_facts(source, "java")
+
+    def inspect(self, relative_path: str, source: str) -> list[Issue]:
+        return pattern_qa.scan(source, pattern_qa.JAVA, self.is_test_file(relative_path))
+
+    def run_info(self, relative_path: str, source: str, siblings: frozenset[str]) -> RunInfo | None:
+        name = PurePosixPath(relative_path).name
+        if name == "pom.xml":
+            mvn = "./mvnw" if "mvnw" in siblings else "mvn"
+            version = re.search(
+                r"<(?:maven\.compiler\.release|maven\.compiler\.source|java\.version|release)>\s*([\d.]+)\s*<", source
+            )
+            return RunInfo(
+                runtime="Java",
+                version=version.group(1) if version else None,
+                install=[f"{mvn} -q install -DskipTests"],
+                run=[(f"{mvn} package", "builds the project")],
+                test=[f"{mvn} test"],
+            )
+        if name in ("build.gradle", "build.gradle.kts"):
+            gradle = "./gradlew" if "gradlew" in siblings else "gradle"
+            version = re.search(r"(?:JavaLanguageVersion\.of\(|sourceCompatibility\s*=\s*['\"]?(?:JavaVersion\.VERSION_)?)([\d._]+)", source)
+            info = RunInfo(
+                runtime="Java",
+                version=version.group(1).replace("_", ".") if version else None,
+                install=[f"{gradle} build -x test"],
+                test=[f"{gradle} test"],
+            )
+            if re.search(r"\bapplication\b", source):
+                info.run.append((f"{gradle} run", "runs the application"))
+            return info
+        return None
 
 _TYPE_KINDS = {
     "class": SymbolKind.CLASS,
@@ -419,6 +460,7 @@ def _visibility(keyword: str | None) -> Visibility:
 
 def _line_of(source: str, offset: int) -> int:
     return source.count("\n", 0, offset) + 1
+
 
 
 __all__ = ["JavaProvider"]

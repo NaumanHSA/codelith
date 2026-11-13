@@ -80,6 +80,13 @@ class TestResult:
     #: in a request and answers as whatever it has loaded, so this is how a
     #: misconfigured local endpoint becomes visible instead of silently working.
     served_model: str | None = None
+    #: What a chat endpoint accepts beyond a plain message, each probed with a real
+    #: call: `temperature` (a non-default one), `tools` (a function the model may
+    #: call), `reasoning` (it spent reasoning tokens, or is a known reasoning family).
+    #: `None` where the probe could not tell. Empty for embedding tiers.
+    capabilities: dict[str, bool | None] | None = None
+    #: Why a capability probe came back false, in the endpoint's own words.
+    capability_detail: dict[str, str] | None = None
 
     def as_json(self) -> dict:
         return {
@@ -87,6 +94,8 @@ class TestResult:
             "detail": self.detail,
             "dimensions": self.dimensions,
             "served_model": self.served_model,
+            "capabilities": self.capabilities,
+            "capability_detail": self.capability_detail,
             "at": datetime.now(UTC).isoformat(timespec="seconds"),
         }
 
@@ -313,6 +322,7 @@ async def test_spec(spec: ModelSpec, *, embedding: bool) -> TestResult:
             max_completion_tokens=2000,
         )
         served = getattr(reply, "model", None)
+        capabilities, why = await _capabilities(client, spec, reply)
         detail = "Answered."
         # LM Studio ignores the requested model name and replies as whatever it has
         # loaded. Saying so turns a silently wrong endpoint into a visible one.
@@ -322,11 +332,93 @@ async def test_spec(spec: ModelSpec, *, embedding: bool) -> TestResult:
                 "This endpoint serves whatever it has loaded, so the model name here "
                 "is not what decides which model runs."
             )
-        return TestResult(ok=True, detail=detail, served_model=served)
+        return TestResult(
+            ok=True,
+            detail=detail,
+            served_model=served,
+            capabilities=capabilities,
+            capability_detail=why or None,
+        )
     except Exception as exc:
         return TestResult(ok=False, detail=_humanise(exc))
     finally:
         await client.close()
+
+
+#: A function no model needs, offered so the endpoint has to accept a tool list.
+_PROBE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "noop",
+        "description": "Does nothing. Never needs to be called.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
+
+def _refusal(exc: Exception) -> str:
+    """The part of an endpoint's error worth showing beside a capability."""
+    return str(exc).strip().splitlines()[0][:220]
+
+
+async def _capabilities(client, spec: ModelSpec, first) -> tuple[dict[str, bool | None], dict[str, str]]:
+    """
+    What this endpoint accepts beyond a plain message, asked with real calls.
+
+    The plain test above sends neither a temperature nor a tool, which is why a model
+    could pass it and then fail every real answer: gpt-6-luna rejects
+    `temperature: 0.2` and refuses function tools on chat completions. Both are now
+    asked here, once, at test time, so the studio can say so before an answer fails.
+
+    A failure for any other reason (a timeout, a rate limit) is `None`, not `False`:
+    it says nothing about whether the parameter is supported.
+    """
+    caps: dict[str, bool | None] = {"temperature": None, "tools": None, "reasoning": None}
+    why: dict[str, str] = {}
+
+    def refused(text: str, *words: str) -> bool:
+        text = text.lower()
+        return ("400" in text or "unsupported" in text or "invalid" in text) and any(
+            w in text for w in words
+        )
+
+    try:
+        await client.chat.completions.create(
+            model=spec.model,
+            messages=[{"role": "user", "content": _PROBE}],
+            temperature=0.2,
+            max_completion_tokens=2000,
+        )
+        caps["temperature"] = True
+    except Exception as exc:  # noqa: BLE001 - every failure is an answer here
+        if refused(str(exc), "temperature"):
+            caps["temperature"] = False
+            why["temperature"] = _refusal(exc)
+
+    try:
+        await client.chat.completions.create(
+            model=spec.model,
+            messages=[{"role": "user", "content": _PROBE}],
+            tools=[_PROBE_TOOL],
+            max_completion_tokens=2000,
+        )
+        caps["tools"] = True
+    except Exception as exc:  # noqa: BLE001
+        if refused(str(exc), "tool", "function"):
+            caps["tools"] = False
+            why["tools"] = _refusal(exc)
+
+    usage = getattr(first, "usage", None)
+    details = getattr(usage, "completion_tokens_details", None) if usage else None
+    spent = getattr(details, "reasoning_tokens", None) if details else None
+    if isinstance(spent, int) and spent > 0:
+        caps["reasoning"] = True
+    elif spec.is_reasoning_model:
+        caps["reasoning"] = True
+    elif isinstance(spent, int):
+        caps["reasoning"] = False
+
+    return caps, why
 
 
 def _humanise(exc: Exception) -> str:

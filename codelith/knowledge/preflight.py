@@ -70,6 +70,24 @@ def reach_weight(reached_files: int, documented_pages: int = 0) -> int:
     return min(max(reached_files, 0), REACH_CEILING) + max(documented_pages, 0) * 5
 
 
+def risk_level(weight: int, tested: bool) -> str:
+    """
+    `low` | `moderate` | `high`, from a `reach_weight` and whether a test reaches it.
+
+    Untested is an amplifier rather than a level of its own: a leaf nothing imports is
+    safe to change whether or not a test covers it, and a file eleven others reach
+    with no test is the case worth stopping for. One function, so the pre-flight and
+    the repository-wide ranking (`knowledge/risk.py`) cannot disagree.
+    """
+    if weight == 0:
+        return "low"
+    if weight >= 25 or (weight >= 8 and not tested):
+        return "high"
+    if weight >= 8 or not tested:
+        return "moderate"
+    return "low"
+
+
 @dataclass(frozen=True, slots=True)
 class Caller:
     """Something that calls into the target."""
@@ -120,6 +138,8 @@ class Preflight:
     documented_in: list[CitedBy] = field(default_factory=list)
     #: Facts the analysis extracted from these files — routes, env vars, entrypoints.
     facts: list[str] = field(default_factory=list)
+    #: Open QA findings in these files (`knowledge/findings.py`), most severe first.
+    findings: list = field(default_factory=list)
 
     @property
     def found(self) -> bool:
@@ -140,14 +160,7 @@ class Preflight:
         """
         if not self.found:
             return "unknown"
-        weight = self.weight
-        if weight == 0:
-            return "low"
-        if weight >= 25 or (weight >= 8 and not self.tests):
-            return "high"
-        if weight >= 8 or not self.tests:
-            return "moderate"
-        return "low"
+        return risk_level(self.weight, bool(self.tests))
 
     def headline(self) -> str:
         """One sentence, for a reader who will act on nothing else."""
@@ -223,6 +236,12 @@ class Preflight:
             ]
         if self.facts:
             out += ["Declares:", *(f"  {f}" for f in self.facts[:_SAMPLE]), ""]
+        if self.findings:
+            out += [
+                "Open QA findings here (fix them while you are in the file, or leave them as they are):",
+                *(f"  {k.brief().lstrip('- ')}" for k in self.findings[:_SAMPLE]),
+                "",
+            ]
 
         return "\n".join(out).rstrip() + "\n"
 
@@ -234,6 +253,7 @@ class PreflightService:
         self.db = db
         self.kb_id = kb_id
         self.project_id = project_id
+        self._known: list | None = None
 
     async def inspect(self, target: str) -> Preflight:
         target = (target or "").strip()
@@ -248,7 +268,21 @@ class PreflightService:
         await self._graph(report)
         await self._documentation(report)
         await self._facts(report)
+        await self._findings(report)
         return report
+
+    async def _findings(self, report: Preflight) -> None:
+        """What QA found here and nobody dismissed. Read once per service: a review asks per file."""
+        from codelith.knowledge.findings import FindingsReader
+
+        try:
+            if self._known is None:
+                self._known = await FindingsReader(self.db, self.project_id).open()
+        except Exception as exc:  # pragma: no cover - defensive: never lose a pre-flight over QA
+            logger.warning("preflight_findings_failed", target=report.target, error=str(exc))
+            self._known = []
+        files = set(report.files)
+        report.findings = [k for k in self._known if k.path in files]
 
     # ── resolution ────────────────────────────────────────────────────────────
 
@@ -389,4 +423,5 @@ __all__ = [
     "REACH_CEILING",
     "Reached",
     "reach_weight",
+    "risk_level",
 ]

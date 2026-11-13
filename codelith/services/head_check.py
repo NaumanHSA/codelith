@@ -57,6 +57,10 @@ class HeadCheck:
     branch: str | None = None
     #: Why the check could not answer, in words the operator can act on.
     reason: str | None = None
+    #: How many commits the repository is ahead of the last reading. Known for a local
+    #: repository, where the history is on disk; None for a hosted one, which would
+    #: need a fetch to count.
+    behind: int | None = None
 
     @property
     def short_analysed(self) -> str:
@@ -78,12 +82,14 @@ class HeadCheck:
         if not self.changed:
             return (
                 f"The repository is still at {self.short_analysed}, the same commit as "
-                "the last reading. Analysing again will rebuild the same knowledge "
-                "base — it will not give drift a second point to compare."
+                "the last reading, so there is nothing new to read and no second "
+                "reading for drift to compare."
             )
+        count = f" ({self.behind} commit{'s' if self.behind != 1 else ''})" if self.behind else ""
         return (
-            f"The repository has moved on: {self.short_analysed} → {self.short_current}. "
-            "Analysing will store a second reading, and drift can compare the two."
+            f"The repository has moved on: {self.short_analysed} → {self.short_current}{count}. "
+            "Reading it again reads only the files that changed and keeps the rest, and "
+            "drift can compare the two readings."
         )
 
 
@@ -129,6 +135,9 @@ async def head_check(
         )
 
     if isinstance(current, str):
+        behind = None
+        if current != analysed_commit and source_type not in _REMOTE:
+            behind = await asyncio.to_thread(commits_between, url_or_path, analysed_commit, current)
         return HeadCheck(
             checked=True,
             never_analysed=False,
@@ -136,6 +145,7 @@ async def head_check(
             analysed_commit=analysed_commit,
             current_commit=current,
             branch=branch,
+            behind=behind,
         )
 
     # `_current_head` hands back the failure rather than raising it — see its
@@ -149,6 +159,22 @@ async def head_check(
         branch=branch,
         reason=str(current),
     )
+
+
+def commits_between(path: str, older: str, newer: str) -> int | None:
+    """
+    Commits reachable from `newer` and not from `older`, in a local repository: how far
+    the code has moved since a reading. None when either is not in the history (a
+    rewritten branch, a reading of another clone), because a wrong count is worse than
+    none.
+    """
+    try:
+        import git
+
+        repo = git.Repo(Path(path).expanduser().resolve(), search_parent_directories=True)
+        return int(repo.git.rev_list("--count", f"{older}..{newer}").strip())
+    except Exception:
+        return None
 
 
 def _current_head(source_type: str, url_or_path: str, branch: str | None) -> str | Exception:

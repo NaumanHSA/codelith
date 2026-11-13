@@ -65,6 +65,10 @@ class TestItServesTheApplication:
         assert r.status_code == 200
         assert "<title>studio</title>" in r.text
 
+    def test_the_shell_is_revalidated_every_time(self, client) -> None:
+        """It names the build's hashed assets; a cached shell is the previous studio."""
+        assert client.get("/app/projects/1/graph").headers["cache-control"] == "no-cache"
+
     def test_a_real_file_is_served_as_itself(self, client) -> None:
         assert client.get("/favicon.svg").text == "<svg/>"
 

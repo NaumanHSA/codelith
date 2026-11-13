@@ -309,7 +309,13 @@ class ScopeGate:
             question=question,
         )
         try:
-            raw = await chat_completion(messages, spec=select_spec("plan"), max_tokens=300)
+            # No output cap of its own, though the verdict is a few dozen tokens. A
+            # reasoning model spends its budget thinking before it writes anything:
+            # measured with qwen3.5-9b, a 300-token cap went 290 tokens on reasoning
+            # and stopped with `finish_reason: length` and no content. The gate then
+            # failed open on every question, and "what is the capital of France" was
+            # searched again, with nothing in the logs but an unparseable reply.
+            raw = await chat_completion(messages, spec=select_spec("plan"))
         except JobCancelled:
             # Stopping is not a gate failure. Swallowing it here would answer the
             # question the reader just cancelled.

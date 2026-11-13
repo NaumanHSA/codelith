@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = 64
 
     # ── Analysis (Phase 1: build the knowledge base) ──────────────────────────
+    # How often local codebases with "read every commit" on are checked for a new
+    # commit (`services/auto_read.py`). 0 turns the loop off.
+    AUTO_READ_INTERVAL_SECONDS: float = 15.0
     # Modules sent to the summarizer, largest first. Bounds cost on big repos.
     ANALYSIS_MAX_SUMMARISED_MODULES: int = 40
     # Source characters shown to the summarizer per module.
@@ -176,6 +179,21 @@ class Settings(BaseSettings):
     #: Anyone whose model gets it wrong can turn it off without waiting for a
     #: release. See `codelith/knowledge/scope.py`.
     ASK_SCOPE_GATE: bool = True
+
+    #: How many functions a Thorough QA run hands to the model, chosen by risk. Each
+    #: costs one call, and each claim that survives the quote check one more. See
+    #: `codelith/apps/qa/checks/review.py`.
+    QA_REVIEW_TARGETS: int = 10
+    #: How many functions a Run tests QA run designs tests for, chosen by risk among those
+    #: no test reaches, after any suspected finding worth reproducing. Each costs a call
+    #: to write, and a failing one up to three more to judge and correct. See
+    #: `codelith/apps/qa/designed.py`.
+    QA_DESIGN_TARGETS: int = 5
+
+    #: How many readings per codebase keep their files (newest first). 0 keeps every
+    #: reading's: content is stored once across readings, so a re-reading costs only
+    #: what changed. Older readings beyond the limit keep everything but their files.
+    KEEP_SOURCE_READINGS: int = 0
 
     # OAuth2 (Phase 4)
     GOOGLE_CLIENT_ID: str = ""

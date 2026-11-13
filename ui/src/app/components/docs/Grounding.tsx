@@ -38,7 +38,7 @@ export function Grounding({ page }: { page: SitePageDetail }) {
         className="flex w-full items-center justify-between gap-3 text-left"
         aria-expanded={open}
       >
-        <span className="tag text-ink-dim">Grounding</span>
+        <span className="text-[12px] font-medium text-ink-dim">Grounding</span>
         <span className="flex items-center gap-3 text-xs">
           <span className={tone}>
             {pct}% of {checked} checked paragraph{checked === 1 ? '' : 's'}
@@ -75,7 +75,7 @@ export function Grounding({ page }: { page: SitePageDetail }) {
                     {p.unknown.map(name => (
                       <code
                         key={name}
-                        className="rounded bg-sunk px-1 text-[11px] text-warn"
+                        className="rounded bg-sunk px-1 text-[12px] text-warn"
                       >
                         {name}
                       </code>

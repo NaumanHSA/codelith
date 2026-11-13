@@ -17,7 +17,7 @@ export function SkeletonPanel({ rows = 4 }: { rows?: number }) {
     <div className="plate p-3" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading</span>
       <div className="mb-3 flex items-center gap-2">
-        <span className="skel block size-2 rotate-45" />
+        <span className="skel block size-2 rounded-full" />
         <SkeletonLine w="120px" h={9} />
       </div>
       <div className="flex flex-col gap-2">
@@ -50,14 +50,14 @@ export function EmptyState({
 }) {
   return (
     <div
-      className={`bp-hatch flex flex-col items-center border border-rule text-center ${
+      className={`flex flex-col items-center rounded-xl border border-dashed border-line-2 bg-panel text-center ${
         compact ? 'px-4 py-8' : 'px-6 py-14'
       }`}
     >
-      <span className="mb-3 block size-4 rotate-45 border border-rule bg-panel" />
+      <span className="mb-3 block size-4 rounded-full border border-rule bg-panel" />
       <h3 className="text-[13px] font-bold tracking-tight text-ink">{title}</h3>
       {body && (
-        <p className="mt-1.5 max-w-[46ch] font-sans text-[12px] leading-relaxed text-ink-mid">
+        <p className="mt-1.5 max-w-[46ch] text-[13px] leading-relaxed text-ink-mid">
           {body}
         </p>
       )}
@@ -77,14 +77,14 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className={`flex flex-col items-start gap-2 border border-bad/35 bg-bad-wash ${
+      className={`flex flex-col items-start gap-2 rounded-xl border border-bad/35 bg-bad-wash ${
         compact ? 'px-3 py-2.5' : 'px-4 py-5'
       }`}
     >
       <span className="tag flex items-center gap-1.5 text-bad">
-        <span className="block size-[6px] rotate-45 bg-bad" /> Something went wrong
+        <span className="block size-[6px] rounded-full bg-bad" /> Something went wrong
       </span>
-      <p className="font-sans text-[12.5px] leading-relaxed text-ink">{message}</p>
+      <p className="text-[12.5px] leading-relaxed text-ink">{message}</p>
       {onRetry && (
         <Button variant="ghost" onClick={onRetry}>
           ↻ Try again

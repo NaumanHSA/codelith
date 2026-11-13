@@ -82,6 +82,16 @@ class ProjectService:
         await self.repo.delete(project_id)
         await self.db.commit()
 
+        # Its readings' file lists went with it; the content only they used goes now.
+        try:
+            from codelith.db.repositories.knowledge.source_repo import SourceRepository
+
+            freed = await SourceRepository(self.db).sweep()
+            await self.db.commit()
+            logger.info("source_swept", project_id=project_id, blobs=freed)
+        except Exception as exc:  # pragma: no cover - the codebase is gone either way
+            logger.warning("source_sweep_failed", project_id=project_id, error=str(exc))
+
         # The code graph lives outside Postgres, so no cascade reaches it. Left
         # behind, it would answer questions about a project that no longer exists —
         # and the next project to reuse the id would inherit them. Non-fatal: the

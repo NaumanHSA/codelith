@@ -35,6 +35,7 @@ from codelith.apps.documentation.services.site_service import SiteService
 from codelith.config import get_settings
 from codelith.core.cancellation import JobCancelled
 from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge import incremental
 from codelith.knowledge.roles import suggest_doc_types
 from codelith.knowledge.sites import (
     KNOWN_DOC_TYPES,
@@ -83,7 +84,19 @@ class SitePlannerAgent(BaseAgent):
             known_files = await self._known_files(repos, kb_id)
             existing = await sites.sites.get_with_pages(project.id)
 
-            site_map = await self._propose(
+            # With the structure unchanged the last reading's proposal was made from
+            # the same inventory. The merge and the staleness check below still run:
+            # they are about this commit's files, not the proposal.
+            reuse = state.get("reuse") or {}
+            kept_map = None
+            if incremental.structure_unchanged(reuse):
+                previous = await repos.bases.get_by_id(reuse["from_kb"])
+                candidate = dict((previous.site_map_json if previous else None) or {})
+                if candidate.get("sections"):
+                    kept_map = candidate
+                    await self._emit_log("info", "Structure unchanged; kept the last reading's site plan")
+
+            site_map = kept_map or await self._propose(
                 project=project,
                 architecture_map=state.get("architecture_map") or {},
                 modules=modules,
@@ -175,6 +188,7 @@ class SitePlannerAgent(BaseAgent):
             )
 
             return {
+                "reuse": incremental.note(reuse, site_plan_kept=kept_map is not None),
                 "site_map": site_map,
                 "site_pages": counts.total_pages,
                 "site_stale": staleness["stale"],

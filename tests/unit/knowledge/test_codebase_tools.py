@@ -57,7 +57,9 @@ class TestSchemas:
             fn = schema["function"]
             assert fn["name"] and fn["description"]
             assert fn["parameters"]["type"] == "object"
-            assert fn["parameters"]["required"]
+            # A tool may take nothing (trace_flow without an entry lists the ways in),
+            # but whatever it requires has to be declared.
+            assert set(fn["parameters"]["required"]) <= set(fn["parameters"]["properties"])
 
     def test_every_declared_tool_has_a_handler(self) -> None:
         """A schema the model can call and nothing implements is a promise that

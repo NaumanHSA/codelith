@@ -119,7 +119,11 @@ class TestReasoningModels:
     """
 
     @pytest.mark.parametrize(
-        "model", ["gpt-5-mini", "gpt-5", "o3-mini", "o4-mini", "GPT-5-Pro"]
+        "model",
+        # `gpt-6-luna` is the measured case: recognised by a prefix list that stopped
+        # at gpt-5, it was sent a temperature and rejected every call. `gpt-7` is
+        # here so the next generation is covered before it exists.
+        ["gpt-5-mini", "gpt-5", "o3-mini", "o4-mini", "GPT-5-Pro", "gpt-5.6-luna", "gpt-6-luna", "gpt-7"],
     )
     def test_openai_reasoning_families_are_recognised(self, settings_factory, model) -> None:
         settings_factory(MODEL_QUALITY_PROVIDER="openai", MODEL_QUALITY=model)

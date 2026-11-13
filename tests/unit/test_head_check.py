@@ -44,8 +44,8 @@ class TestTheAnswer:
 
     async def test_the_summary_says_why_it_matters(self, monkeypatch) -> None:
         """
-        "Nothing changed" on its own reads as trivia. The reason to care is that the
-        run costs the same and leaves you with one reading rather than two.
+        "Nothing changed" on its own reads as trivia. The reason to care is that there
+        is nothing new to read, and drift still has one reading rather than two.
         """
         check = await _check(monkeypatch, SHA_OLD)
 

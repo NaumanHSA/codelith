@@ -17,13 +17,20 @@ from pathlib import PurePosixPath
 from codelith.knowledge.constants import EntityKind
 from codelith.languages.base import (
     CallRef,
+    Declared,
     DetectedEntity,
+    FlowFacts,
     ImportRef,
+    Issue,
     LanguageProvider,
     ModuleRef,
+    RunInfo,
     Symbol,
 )
+from codelith.languages.providers import _python_deps as python_deps
 from codelith.languages.providers import _python_entities as python_entities
+from codelith.languages.providers import _python_qa as python_qa
+from codelith.languages.providers import _python_routes as python_routes
 from codelith.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 #: `@router.get("/x")`, `@app.post("/y")` — FastAPI/Flask-style routing decorators.
@@ -66,6 +73,7 @@ class PythonProvider(LanguageProvider):
         "pyproject.toml", "requirements.txt", "requirements.in",
         "setup.py", "setup.cfg", "Pipfile", "poetry.lock", "uv.lock",
     )
+    lock_files = ("poetry.lock", "uv.lock", "Pipfile.lock", "pdm.lock")
 
     # ── Symbols ───────────────────────────────────────────────────────────────
 
@@ -277,6 +285,32 @@ class PythonProvider(LanguageProvider):
                     )
                 )
         return refs
+
+    def resolve_import_all(
+        self, ref: ImportRef, from_path: str, known_files: frozenset[str]
+    ) -> list[str]:
+        """
+        `from pkg import orders, users` imports the package and, when `orders` and
+        `users` are modules rather than names defined in it, those two files as well.
+        Without them the files a router mounts look imported by nobody, and `from . import x`
+        reached only the package's `__init__.py`.
+        """
+        found = super().resolve_import_all(ref, from_path, known_files)
+        for name in ref.names:
+            if name == "*":
+                continue
+            sub = self.resolve_import(
+                ImportRef(
+                    target=f"{ref.target}.{name}" if ref.target else name,
+                    line=ref.line,
+                    level=ref.level,
+                ),
+                from_path,
+                known_files,
+            )
+            if sub and sub not in found:
+                found.append(sub)
+        return found
 
     def resolve_import(
         self, ref: ImportRef, from_path: str, known_files: frozenset[str]
@@ -504,6 +538,90 @@ class PythonProvider(LanguageProvider):
                 )
             )
         return out
+
+
+    has_rules = True
+    qa_rules = python_qa.LABELS
+
+    def inspect(self, relative_path: str, source: str) -> list[Issue]:
+        return python_qa.inspect(relative_path, source, self.is_test_file(relative_path))
+
+    def flow_facts(self, relative_path: str, source: str) -> FlowFacts | None:
+        return python_routes.flow_facts(source)
+
+    ecosystem = "PyPI"
+
+    def declared(self, relative_path: str, source: str) -> list[Declared]:
+        return python_deps.declared(relative_path, source)
+
+    def locked(self, relative_path: str, source: str) -> dict[str, str]:
+        return python_deps.locked(relative_path, source)
+
+    def imported_packages(self, relative_path: str, source: str) -> list[tuple[str, int]]:
+        return [(r, line) for r, line in python_deps.import_roots(source) if not python_deps.is_builtin(r)]
+
+    def normalise_package(self, name: str) -> str:
+        return python_deps.normalise(name)
+
+    def provides(self, package: str, imported: str) -> bool:
+        return python_deps.provides(package, imported)
+
+    def never_imported(self, package: str) -> bool:
+        return bool(python_deps.NOT_IMPORTED.match(python_deps.normalise(package)))
+
+    def syntax_needs(self, relative_path: str, source: str) -> list[tuple[str, str, int]]:
+        return python_deps.syntax_needs(source)
+
+    def run_info(self, relative_path: str, source: str, siblings: frozenset[str]) -> RunInfo | None:
+        name = PurePosixPath(relative_path).name
+        if name in ("requirements.txt", "requirements.in"):
+            return RunInfo(runtime="Python", install=[f"pip install -r {name}"])
+        if name != "pyproject.toml":
+            return None
+        try:
+            import tomllib
+
+            data = tomllib.loads(source)
+        except Exception:
+            return None
+        project = data.get("project") if isinstance(data.get("project"), dict) else {}
+        tool = data.get("tool") if isinstance(data.get("tool"), dict) else {}
+        poetry = tool.get("poetry") if isinstance(tool.get("poetry"), dict) else None
+
+        version = project.get("requires-python")
+        if not version and poetry:
+            version = (poetry.get("dependencies") or {}).get("python")
+        info = RunInfo(runtime="Python", version=str(version) if version else None)
+
+        extras = project.get("optional-dependencies") if isinstance(project.get("optional-dependencies"), dict) else {}
+        groups = data.get("dependency-groups") if isinstance(data.get("dependency-groups"), dict) else {}
+        if "uv.lock" in siblings:
+            info.install.append("uv sync")
+        elif poetry is not None or "poetry.lock" in siblings:
+            info.install.append("poetry install")
+        elif project or data.get("build-system"):
+            dev = next((k for k in ("dev", "develop", "test", "tests") if k in extras), None)
+            info.install.append(f'pip install -e ".[{dev}]"' if dev else "pip install -e .")
+
+        scripts = project.get("scripts") or (poetry or {}).get("scripts") or {}
+        if isinstance(scripts, dict):
+            for command, target in list(scripts.items())[:8]:
+                info.run.append((str(command), f"runs {target}"))
+
+        declared: list[str] = [d for d in project.get("dependencies") or [] if isinstance(d, str)]
+        for values in list(extras.values()) + list(groups.values()):
+            if isinstance(values, list):
+                declared += [d for d in values if isinstance(d, str)]
+        if poetry:
+            for section in ("dependencies", "dev-dependencies"):
+                declared += list((poetry.get(section) or {}).keys())
+            for group in (poetry.get("group") or {}).values():
+                if isinstance(group, dict):
+                    declared += list((group.get("dependencies") or {}).keys())
+        names = {(_REQUIREMENT.match(d.strip()) or [None, ""])[1].lower() for d in declared if d.strip()}
+        if "pytest" in names or "pytest" in tool:
+            info.test.append("pytest")
+        return info
 
 
 __all__ = ["PythonProvider"]

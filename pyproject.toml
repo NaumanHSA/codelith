@@ -140,6 +140,8 @@ dependencies = [
 
     # Utilities
     "httpx>=0.28.0",
+    # Version constraints compared the way pip compares them (QA's dependency audit).
+    "packaging>=24.0",
     "tenacity>=9.0.0",
     "python-slugify>=9.0.0",
 ]

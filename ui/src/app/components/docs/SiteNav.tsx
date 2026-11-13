@@ -49,11 +49,10 @@ export default function SiteNav({
     // Bordered like the document container it sits beside, rather than bleeding into
     // the shell's rail. These are the site's files; against the reading column they
     // should read as a peer of it, not as chrome.
-    <nav className={`flex flex-col ${bare ? '' : 'border border-rule bg-panel'}`}>
-      <div className="flex items-center gap-2 border-b border-rule px-3 py-2">
-        <span className="tag truncate text-ink-dim">{section.title}</span>
-        <span className="h-px flex-1 bg-rule" />
-        <span className="tag shrink-0 text-ink-dim">{section.pages.length}</span>
+    <nav className={`flex flex-col ${bare ? '' : 'rounded-xl overflow-hidden border border-rule bg-panel'}`}>
+      <div className="flex items-center gap-2 border-b border-rule px-3.5 py-2.5">
+        <span className="truncate text-[13px] font-semibold text-ink">{section.title}</span>
+        <span className="ml-auto shrink-0 font-mono text-[11.5px] text-ink-dim">{section.pages.length}</span>
       </div>
 
       {section.pages.map(page => {
@@ -100,7 +99,7 @@ export default function SiteNav({
               active ? 'bg-hot-wash' : 'hover:bg-sunk/70'
             }`}
           >
-            {active && <span className="absolute top-0 left-0 h-full w-[3px] bg-hot" />}
+            {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r bg-hot" />}
 
             <Tooltip content={page.intent} className="min-w-0 flex-1">
               <button
@@ -122,7 +121,7 @@ export default function SiteNav({
               </button>
             </Tooltip>
 
-            {busy && <span className="tag shrink-0 text-hot-ink">writing…</span>}
+            {busy && <span className="text-[12px] font-medium shrink-0 text-hot-ink">Writing…</span>}
 
             <Menu items={items} label={`Actions for ${page.title}`} />
           </div>
@@ -130,7 +129,7 @@ export default function SiteNav({
       })}
 
       {section.pages.length === 0 && (
-        <p className="px-3 py-2 text-[10.5px] leading-snug text-ink-dim">
+        <p className="px-3 py-2 text-[11.5px] leading-snug text-ink-dim">
           Nothing planned in this section yet.
         </p>
       )}

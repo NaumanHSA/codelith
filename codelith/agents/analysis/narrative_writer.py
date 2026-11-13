@@ -28,6 +28,7 @@ from codelith.agents.base import BaseAgent
 from codelith.config import get_settings
 from codelith.core.cancellation import JobCancelled
 from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge import incremental
 from codelith.knowledge.constants import EntityKind, ModuleRole, NarrativeTopic
 from codelith.knowledge.narratives import ROLE_TRIGGERS, coerce_topics, required_topics
 from codelith.llm.prompts.analysis_prompts import NARRATIVE, TOPIC_GUIDANCE, TOPIC_SELECTION
@@ -60,8 +61,19 @@ class NarrativeWriterAgent(BaseAgent):
 
             modules = await repos.modules.list_by_kb(kb_id, include_tests=True)
             entity_kinds = await repos.entities.kind_breakdown(kb_id)
+
+            # What the last reading wrote, by topic. With the structure unchanged its
+            # topic list stands too, which saves the selection call.
+            reuse = state.get("reuse") or {}
+            previous: dict[str, Any] = {}
+            if incremental.active(reuse):
+                previous = {n.topic: n for n in await repos.narratives.list_by_kb(reuse["from_kb"])}
+            keep_topics = None
+            if incremental.structure_unchanged(reuse) and previous:
+                keep_topics = [NarrativeTopic(t) for t in previous if t in NarrativeTopic._value2member_map_]
+
             topics = await self._choose_topics(
-                project, architecture_map, modules, entity_kinds
+                project, architecture_map, modules, entity_kinds, keep=keep_topics
             )
 
             await self._emit_log(
@@ -83,6 +95,26 @@ class NarrativeWriterAgent(BaseAgent):
                 topic: self._relevant_modules(topic, modules) for topic in topics
             }
 
+            # A narrative is kept when it was written from the same modules, none of
+            # whose files changed, and the same facts. Everything else is written.
+            kept = {
+                topic: previous[str(topic)]
+                for topic in topics
+                if str(topic) in previous
+                and self._still_true(
+                    previous[str(topic)], modules_by_topic[topic], facts_by_topic[topic], reuse
+                )
+            }
+            for topic, narrative in kept.items():
+                await repos.narratives.upsert(kb_id, topic, narrative.content_md, narrative.source_refs_json or {})
+            if kept:
+                await self._emit_log(
+                    "info",
+                    f"Kept {len(kept)} narrative(s) from the last reading",
+                    kept=[str(t) for t in kept],
+                )
+            to_write = [t for t in topics if t not in kept]
+
             semaphore = asyncio.Semaphore(get_settings().ANALYSIS_SUMMARY_CONCURRENCY)
 
             async def write(topic: NarrativeTopic) -> tuple[NarrativeTopic, str | None]:
@@ -95,7 +127,7 @@ class NarrativeWriterAgent(BaseAgent):
                         facts_by_topic[topic][0],
                     )
 
-            results = await asyncio.gather(*(write(x) for x in topics), return_exceptions=True)
+            results = await asyncio.gather(*(write(x) for x in to_write), return_exceptions=True)
 
             for outcome in results:
                 if isinstance(outcome, JobCancelled):
@@ -104,7 +136,7 @@ class NarrativeWriterAgent(BaseAgent):
             written = skipped = failed = 0
             # gather preserves order, so results line up with `topics` — which lets a
             # failure name the topic that caused it instead of vanishing into a count.
-            for topic, outcome in zip(topics, results, strict=True):
+            for topic, outcome in zip(to_write, results, strict=True):
                 if isinstance(outcome, BaseException):
                     await self._emit_log(
                         "error",
@@ -126,6 +158,7 @@ class NarrativeWriterAgent(BaseAgent):
                             "generated_by": self.name,
                             "modules": [m.name for m in modules_by_topic[topic]],
                             "facts": facts_by_topic[topic][1],
+                            "facts_digest": self._facts_digest(facts_by_topic[topic][0]),
                         },
                     )
                     save_text_artifact(f"narrative_writer.{topic}", content)
@@ -141,12 +174,46 @@ class NarrativeWriterAgent(BaseAgent):
                 {"written": written, "skipped": skipped, "failed": failed},
             )
 
-            return {"narratives_written": written, "narrative_failures": failed}
+            return {
+                "narratives_written": written + len(kept),
+                "narrative_failures": failed,
+                "reuse": incremental.note(reuse, narratives_kept=len(kept), narratives_written=written),
+            }
+
+    # ── Reuse ─────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _facts_digest(text: str) -> str:
+        """The facts a narrative was given, fingerprinted. The first line is the count of
+        every kind in the codebase, which moves with any change anywhere; the lines
+        after it are the facts this topic is about."""
+        import hashlib
+
+        body = "\n".join(text.splitlines()[1:])
+        return hashlib.blake2b(body.encode("utf-8", "replace"), digest_size=10).hexdigest()
+
+    def _still_true(self, narrative, modules, facts: tuple[str, list[str]], reuse: dict) -> bool:
+        refs = narrative.source_refs_json or {}
+        if refs.get("modules") != [m.name for m in modules]:
+            return False
+        if not all(incremental.files_unchanged(reuse, m.files_json) for m in modules):
+            return False
+        digest = refs.get("facts_digest")
+        if digest is not None:
+            return digest == self._facts_digest(facts[0])
+        # Written before narratives recorded a fingerprint of their facts: the kinds
+        # and their counts are the best evidence there is.
+        return refs.get("facts") == facts[1]
 
     # ── Topic selection ───────────────────────────────────────────────────────
 
     async def _choose_topics(
-        self, project, architecture_map: dict, modules, entity_kinds: dict[str, int]
+        self,
+        project,
+        architecture_map: dict,
+        modules,
+        entity_kinds: dict[str, int],
+        keep: list[NarrativeTopic] | None = None,
     ) -> list[NarrativeTopic]:
         """
         Floor first, then whatever the selector can justify on top of it.
@@ -162,8 +229,11 @@ class NarrativeWriterAgent(BaseAgent):
         present_kinds = [k for k, count in entity_kinds.items() if count]
 
         floor = required_topics(roles, present_kinds, [m.name for m in modules])
-        proposed = await self._propose_topics(
-            project, architecture_map, modules, roles, entity_kinds
+        # `keep`: the last reading's topics, when nothing structural moved since.
+        proposed = (
+            keep
+            if keep is not None
+            else await self._propose_topics(project, architecture_map, modules, roles, entity_kinds)
         )
 
         extra = [t for t in proposed if t not in floor]

@@ -13,6 +13,7 @@ from typing import Any
 
 from codelith.agents.base import BaseAgent
 from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge import incremental
 from codelith.knowledge.constants import KBStatus
 from codelith.knowledge.roles import suggest_doc_types
 from codelith.tracing.artifacts import save_artifact
@@ -61,6 +62,9 @@ class KBPersisterAgent(BaseAgent):
                 # is missing" is answerable from the KB rather than by querying Neo4j
                 # and finding nothing.
                 "graph": state.get("graph_stats") or {},
+                # What this reading kept from the last one rather than redoing: the
+                # evidence that re-reading after a small commit was cheap.
+                "reuse": incremental.summary(state.get("reuse")),
             }
 
             reasons = self._degradation_reasons(state, modules, topics, missing_summaries)

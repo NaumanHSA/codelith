@@ -61,6 +61,106 @@ class Symbol:
 
 
 @dataclass(slots=True)
+class RunInfo:
+    """
+    What one manifest says about installing, running and testing the code, in terms
+    every language shares. Commands are as run from the manifest's own folder.
+    """
+
+    #: "Python", "Node.js", "Go", "Java".
+    runtime: str | None = None
+    #: The version the manifest asks for, as written: `>=3.11`, `1.22`, `17`.
+    version: str | None = None
+    install: list[str] = field(default_factory=list)
+    #: `(command, what it does)`.
+    run: list[tuple[str, str]] = field(default_factory=list)
+    test: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Issue:
+    """
+    A problem a provider found in one file, in terms every language shares.
+
+    The QA app turns these into findings; this layer only says what is wrong, where,
+    and why. `area` is one of `security`, `leakage`, `errors`, `breaks`,
+    `performance`, `config`, `tests`; `severity` one of `critical`, `high`,
+    `medium`, `low`, `info`; `confidence` `confirmed` for an exact pattern and
+    `likely` for a heuristic that is usually right.
+    """
+
+    rule: str
+    area: str
+    severity: str
+    line: int
+    title: str
+    #: Why it matters, in a sentence or two.
+    message: str
+    #: What to do about it.
+    fix: str
+    end_line: int | None = None
+    confidence: str = "confirmed"
+
+
+@dataclass(slots=True)
+class Declared:
+    """One dependency a manifest declares."""
+
+    name: str
+    #: The version asked for, as written; empty when none is.
+    spec: str
+    #: Only for development: tests, linting, docs.
+    dev: bool
+    line: int | None
+    #: OSV's name for the ecosystem: `PyPI`, `npm`, `Go`, `Maven`.
+    ecosystem: str
+
+
+@dataclass(slots=True)
+class Guards:
+    """What requires a signed-in caller before a route's handler runs, in one file."""
+
+    #: Handler qualname (`Class.*` for every method of a class) to what guards it.
+    handlers: dict[str, str] = field(default_factory=dict)
+    #: Router variable to what guards every route registered on it.
+    routers: dict[str, str] = field(default_factory=dict)
+    #: What guards every request to the app, when this file sets that up.
+    app: str | None = None
+    #: Type aliases that require a signed-in caller wherever a parameter uses them
+    #: (`AdminUser = Annotated[User, Depends(get_current_admin)]`), to what they wrap.
+    aliases: dict[str, str] = field(default_factory=dict)
+    #: Handler qualname to the type names its parameters use, for the aliases above,
+    #: which are usually declared in another file.
+    uses: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Sink:
+    """A call that does something dangerous with a value its function was handed."""
+
+    #: `sql`, `shell`, `code`, `file`, `url`, `log` or `deserialize`.
+    kind: str
+    line: int
+    #: The enclosing function's qualname.
+    function: str
+    #: That function's parameters whose values reach the call.
+    params: list[str]
+    call: str
+
+
+@dataclass(slots=True)
+class FlowFacts:
+    """What QA needs from one file to follow a request through it."""
+
+    guards: Guards = field(default_factory=Guards)
+    sinks: list[Sink] = field(default_factory=list)
+    #: Names of the models routes in this file answer with.
+    response_models: set[str] = field(default_factory=set)
+    #: Data models declared here: name to `(field, line)`.
+    models: dict[str, list[tuple[str, int]]] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class DetectedEntity:
     """
     A discrete fact a provider spotted in source — a route, an env var, an
@@ -136,6 +236,9 @@ class LanguageProvider(ABC):
     extensions: tuple[str, ...] = ()
     #: Dependency/manifest files worth reading during analysis.
     manifest_files: tuple[str, ...] = ()
+    #: Files recording the exact versions the manifests resolved to. Kept with the
+    #: reading for comparison and for the dependency audit; never parsed for facts.
+    lock_files: tuple[str, ...] = ()
     #: Directories to skip *in addition to* the shared defaults in the registry.
     extra_ignored_dirs: frozenset[str] = frozenset()
 
@@ -191,6 +294,68 @@ class LanguageProvider(ABC):
         """
         return []
 
+    def inspect(self, relative_path: str, source: str) -> list[Issue]:
+        """
+        Problems in one file: injection, swallowed errors, blocking calls in async code
+        and the rest, as this language writes them. Default is none, which QA reports
+        as "no rules for this language" rather than as a clean file.
+        """
+        return []
+
+    #: Whether `inspect` has rules at all, so QA can say a language went unchecked.
+    has_rules: bool = False
+    #: Each rule's short name, the same for every finding of it: how findings are
+    #: grouped, and what a report lists the rule as.
+    qa_rules: dict[str, str] = {}
+
+    def flow_facts(self, relative_path: str, source: str) -> FlowFacts | None:
+        """
+        Guards, sinks and response models in one file, for following requests through
+        the recorded calls. `None` when this language cannot say, which QA reports.
+        """
+        return None
+
+    # -- Dependencies, for QA's audit -------------------------------------------------
+
+    #: OSV's name for this language's package ecosystem, when it has one.
+    ecosystem: str | None = None
+
+    def declared(self, relative_path: str, source: str) -> list[Declared]:
+        """What one of `manifest_files` declares, with the version asked for."""
+        return []
+
+    def locked(self, relative_path: str, source: str) -> dict[str, str]:
+        """What one of `lock_files` pins: normalised package name to version."""
+        return {}
+
+    def imported_packages(self, relative_path: str, source: str) -> list[tuple[str, int]]:
+        """`(package, line)` for the outside packages a source file imports: not the
+        language's own library. Local modules are told apart by QA, which sees them all."""
+        return []
+
+    def normalise_package(self, name: str) -> str:
+        return name
+
+    def provides(self, package: str, imported: str) -> bool:
+        """Whether a declared package is what an import name comes from."""
+        return self.normalise_package(package) == self.normalise_package(imported)
+
+    def never_imported(self, package: str) -> bool:
+        """A package installed to be run or loaded by name: never "unused"."""
+        return False
+
+    def syntax_needs(self, relative_path: str, source: str) -> list[tuple[str, str, int]]:
+        """`(feature, minimum version, line)` for syntax newer than it looks."""
+        return []
+
+    def run_info(self, relative_path: str, source: str, siblings: frozenset[str]) -> RunInfo | None:
+        """
+        What one of `manifest_files` says about installing, running and testing the
+        code. `siblings` are the names of the files beside it, which decide things
+        like the package manager (a `pnpm-lock.yaml` means pnpm). Default is nothing.
+        """
+        return None
+
     # ── Graph ─────────────────────────────────────────────────────────────────
     #
     # "What imports what" is a traversal, not a similarity, so vector search cannot
@@ -213,6 +378,19 @@ class LanguageProvider(ABC):
         Returning a path that is not in `known_files` is a bug: it invents a node.
         """
         return None
+
+    def resolve_import_all(
+        self, ref: ImportRef, from_path: str, known_files: frozenset[str]
+    ) -> list[str]:
+        """
+        Every repository file one import statement brings in, the file `resolve_import`
+        finds first. Most languages import one file per statement, which is the default;
+        a provider whose statements can name several modules at once (Python's
+        `from pkg import a, b`, where `a` and `b` are files) adds them, or the files those
+        modules live in would seem to have no importers.
+        """
+        target = self.resolve_import(ref, from_path, known_files)
+        return [target] if target else []
 
     def external_package(self, ref: ImportRef) -> str | None:
         """
@@ -244,6 +422,12 @@ class LanguageProvider(ABC):
 
 
 __all__ = [
+    "Declared",
+    "FlowFacts",
+    "Guards",
+    "Issue",
+    "Sink",
+    "RunInfo",
     "LanguageProvider",
     "Symbol",
     "ModuleRef",

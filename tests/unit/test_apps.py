@@ -127,7 +127,10 @@ class TestAPlannedApp:
         for app in APPS:
             assert app.needs, app.id
 
-    def test_quality_is_not_registered_while_it_is_parked(self) -> None:
-        """Quality lives on `feat/qa` until documentation and Ask settle. A registry
-        entry for something `main` cannot serve is a promise the studio breaks."""
-        assert "qa" not in APPS_BY_ID
+    def test_qa_is_registered_built_and_served(self) -> None:
+        """QA came back to `main`, rebuilt (November 2026). A registry entry is a promise
+        the studio makes, so it is kept only with the routes that serve it."""
+        from codelith.api.v1.router import v1_router
+
+        assert APPS_BY_ID["qa"].built
+        assert any("/qa/runs" in getattr(r, "path", "") for r in v1_router.routes)

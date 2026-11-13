@@ -16,6 +16,7 @@ from typing import Any
 
 from codelith.agents.base import BaseAgent
 from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge import incremental
 from codelith.knowledge.constants import EntityKind, ModuleRole
 from codelith.llm.prompts.analysis_prompts import ARCHITECTURE_SYNTHESIS
 from codelith.tracing.artifacts import save_artifact, save_input_artifact
@@ -40,6 +41,22 @@ class ArchitectureSynthesizerAgent(BaseAgent):
             project = state["project"]
             kb_id = state["kb_id"]
             repos = KnowledgeRepositories.for_session(self.db)
+
+            # The same modules, none re-summarised, no manifest touched: the last
+            # reading's map was written from exactly what this one would be.
+            reuse = state.get("reuse") or {}
+            if incremental.structure_unchanged(reuse) and reuse.get("architecture_ok"):
+                previous = await repos.bases.get_by_id(reuse["from_kb"])
+                kept_map = (previous.architecture_json if previous else None) or {}
+                if kept_map:
+                    await self._emit_log("info", "Structure unchanged; kept the last reading's architecture map")
+                    t.outputs(services=len(kept_map.get("services", []) or []), kept=True)
+                    await self._update_step(self.name, "completed", {"kept": True})
+                    return {
+                        "architecture_map": kept_map,
+                        "architecture_degraded": False,
+                        "reuse": incremental.note(reuse, architecture_kept=True),
+                    }
 
             modules = await repos.modules.list_by_kb(kb_id)
             routes = await repos.entities.list_by_kind(kb_id, EntityKind.ROUTE)
@@ -83,7 +100,11 @@ class ArchitectureSynthesizerAgent(BaseAgent):
                 self.name, "completed", {"services": services, "degraded": degraded}
             )
 
-            return {"architecture_map": architecture_map, "architecture_degraded": degraded}
+            return {
+                "architecture_map": architecture_map,
+                "architecture_degraded": degraded,
+                "reuse": incremental.note(reuse, architecture_kept=False),
+            }
 
     # ── Internals ─────────────────────────────────────────────────────────────
 

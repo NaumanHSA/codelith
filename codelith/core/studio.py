@@ -85,7 +85,11 @@ def mount_studio(app: FastAPI) -> bool:
         if path and root in candidate.parents and candidate.is_file():
             return FileResponse(candidate)
 
-        return FileResponse(root / "index.html")
+        # The shell must be asked for every time. It names the hashed assets of the
+        # build it came from, and without this a browser may keep an old copy for
+        # hours after an update — and with it the old studio. `no-cache` is a cheap
+        # revalidation (304 when unchanged), not a refetch.
+        return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})
 
     logger.info("studio_mounted", path=str(root))
     return True

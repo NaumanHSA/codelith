@@ -66,6 +66,15 @@ class GraphBuilderAgent(BaseAgent):
             roles = {m.path: m.role for m in modules}
 
             graph = build_code_graph(files, module_roles=roles)
+            # Project files (manifests, env templates, Dockerfiles, CI) are files of the
+            # reading too. Nothing in them is parsed into the graph, but the map, the file
+            # tree and every count of files should include them.
+            parsed = {f["path"] for f in graph.files}
+            for kept in await KnowledgeRepositories.for_session(self.db).sources.files(kb_id, project_only=True):
+                if kept.path not in parsed:
+                    graph.files.append(
+                        {"path": kept.path, "language": kept.language, "module_key": None, "loc": kept.lines}
+                    )
             save_artifact("graph_builder.counts", graph.counts())
 
             try:

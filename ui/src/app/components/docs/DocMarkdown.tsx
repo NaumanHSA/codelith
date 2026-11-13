@@ -25,17 +25,23 @@ function Mermaid({ code }: { code: string }) {
     let live = true
     import('mermaid')
       .then(async ({ default: mermaid }) => {
+        // Mermaid wants literal colours, so they are read from the theme at render
+        // time rather than written here. Written here, they stayed light when the
+        // studio went dark, and every diagram became a white box on a dark page.
+        const token = (name: string) =>
+          getComputedStyle(document.documentElement).getPropertyValue(name).trim()
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'strict',
           theme: 'base',
           fontFamily: 'JetBrains Mono, monospace',
           themeVariables: {
-            primaryColor: '#fff0e9',
-            primaryBorderColor: '#ff6b35',
-            primaryTextColor: '#14120f',
-            lineColor: '#8a847c',
-            background: '#ffffff',
+            darkMode: true,
+            primaryColor: token('--hot-wash'),
+            primaryBorderColor: token('--hot'),
+            primaryTextColor: token('--ink'),
+            lineColor: token('--ink-dim'),
+            background: token('--panel'),
           },
         })
         const { svg } = await mermaid.render(idRef.current, code)
@@ -48,14 +54,14 @@ function Mermaid({ code }: { code: string }) {
   }, [code])
 
   // A diagram that will not parse should still show its source, not vanish.
-  if (failed) return <pre className="overflow-x-auto bg-sunk p-3 text-[11px]">{code}</pre>
+  if (failed) return <pre className="overflow-x-auto bg-sunk p-3 text-[12px]">{code}</pre>
 
   return (
-    <div className="my-4 overflow-x-auto border border-rule bg-panel p-4">
+    <div className="rounded-xl my-4 overflow-x-auto border border-rule bg-panel p-4">
       {svg ? (
         <div dangerouslySetInnerHTML={{ __html: svg }} />
       ) : (
-        <span className="tag text-ink-dim">drawing diagram…</span>
+        <span className="text-[12px] font-medium text-ink-dim">Drawing diagram…</span>
       )}
     </div>
   )
@@ -110,21 +116,21 @@ const heading = (
             aria-label={`Rewrite ${text} with AI`}
             // Always visible. A hover-only control tells nobody the feature exists,
             // and on a touch screen there is no hover at all.
-            className={`tag shrink-0 border px-1.5 py-[2px] font-normal transition-colors ${
+            className={`text-[12px] font-medium rounded-md shrink-0 border px-1.5 py-[2px] font-normal transition-colors ${
               isBusy
-                ? 'border-hot bg-hot text-paper'
+                ? 'border-hot bg-hot text-on-hot'
                 : isSelected
                   ? 'border-hot bg-hot-wash text-hot-ink'
-                  : 'border-rule bg-panel text-ink-dim hover:border-hot hover:bg-hot-wash hover:text-hot-ink'
+                  : 'border-rule bg-panel text-ink-dim hover:border-hot hover:bg-hover hover:text-hot-ink'
             }`}
           >
             {isBusy ? (
               <span className="flex items-center gap-1">
                 <span className="anim-blink block size-[5px] rounded-full bg-paper" />
-                rewriting
+                Rewriting
               </span>
             ) : (
-              'rewrite'
+              'Rewrite'
             )}
           </button>
         )}

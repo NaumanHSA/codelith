@@ -54,6 +54,7 @@ What one reading costs, and where it stops.
 
 | Setting | Default | Notes |
 |---|---|---|
+| `AUTO_READ_INTERVAL_SECONDS` | `15` | How often local codebases with **Read every commit** on are checked for a new commit. `0` turns the check off |
 | `ANALYSIS_MAX_SUMMARISED_MODULES` | `40` | **The one worth knowing.** Beyond it, the largest modules are summarised and the rest get no prose |
 | `ANALYSIS_SUMMARY_CONCURRENCY` | `6` | Summaries in flight at once |
 | `ANALYSIS_MAX_NARRATIVES` | `12` | Cross-cutting topics per reading |
@@ -109,3 +110,16 @@ format regardless; point your own scraper at it if you want one.
 
 `JWT_*` for tokens. `GOOGLE_*` and `GITHUB_*` for OAuth, both optional and empty by
 default.
+
+## QA
+
+| Setting | Default | What it does |
+|---|---|---|
+| `QA_REVIEW_TARGETS` | `10` | How many functions a Thorough QA run hands to the quality model, chosen by risk. Each costs a call, and each claim that survives the quote check one more. |
+| `QA_DESIGN_TARGETS` | `5` | How many functions a Run tests QA run designs tests for: suspected findings to reproduce first, then the riskiest code no test reaches. Each costs a call to write, and a failing one up to three more to judge and correct. |
+
+## Kept source
+
+| Setting | Default | What it does |
+|---|---|---|
+| `KEEP_SOURCE_READINGS` | `0` | How many readings per codebase keep their files, newest first. `0` keeps every reading's: content is stored once across readings, so a re-reading costs only what changed. A reading beyond the limit keeps everything but its files, and the content nothing uses any more is freed. |

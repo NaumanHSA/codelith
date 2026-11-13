@@ -308,3 +308,54 @@ class TestModules:
         keys = {m["key"] for m in graph.modules}
         for entry in graph.files:
             assert entry["module_key"] in keys
+
+
+class TestImportingModulesFromAPackage:
+    """`from app.web import orders, users` imports two files, not only the package.
+    Read as the package alone, the files a router mounts looked imported by nobody, and
+    everything that ranks by importers (reach, the agent guide's "registered in") missed
+    the file that wires them in."""
+
+    ORDERS = "def place():\n    return 1\n"
+    MAIN = "from app.web import orders, users\nfrom app.web.orders import place\n"
+
+    def _files(self, *, with_init: bool) -> list[SourceFile]:
+        files = [
+            SourceFile(path="app/web/orders.py", content=self.ORDERS, language="python"),
+            SourceFile(path="app/web/users.py", content="X = 1\n", language="python"),
+            SourceFile(path="app/main.py", content=self.MAIN, language="python"),
+        ]
+        if with_init:
+            files.append(SourceFile(path="app/web/__init__.py", content="", language="python"))
+        return files
+
+    def test_each_named_module_is_an_edge(self) -> None:
+        graph = build_code_graph(self._files(with_init=False))
+        assert {e["dst"] for e in graph.imports if e["src"] == "app/main.py"} == {
+            "app/web/orders.py",
+            "app/web/users.py",
+        }
+
+    def test_the_package_is_still_imported_when_it_is_a_file(self) -> None:
+        graph = build_code_graph(self._files(with_init=True))
+        assert {e["dst"] for e in graph.imports if e["src"] == "app/main.py"} == {
+            "app/web/__init__.py",
+            "app/web/orders.py",
+            "app/web/users.py",
+        }
+
+    def test_a_name_defined_in_a_module_is_not_mistaken_for_one(self) -> None:
+        files = [
+            SourceFile(path="app/web/orders.py", content=self.ORDERS, language="python"),
+            SourceFile(path="app/a.py", content="from app.web.orders import place\n", language="python"),
+        ]
+        graph = build_code_graph(files)
+        assert [e["dst"] for e in graph.imports] == ["app/web/orders.py"]
+
+    def test_a_relative_import_of_a_sibling_reaches_it(self) -> None:
+        files = [
+            SourceFile(path="app/web/__init__.py", content="from . import orders\n", language="python"),
+            SourceFile(path="app/web/orders.py", content=self.ORDERS, language="python"),
+        ]
+        graph = build_code_graph(files)
+        assert ("app/web/__init__.py", "app/web/orders.py") in {(e["src"], e["dst"]) for e in graph.imports}

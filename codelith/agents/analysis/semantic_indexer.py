@@ -11,11 +11,11 @@ from __future__ import annotations
 from typing import Any
 
 from codelith.agents.base import BaseAgent
-from codelith.knowledge import embedding_guard
+from codelith.knowledge import embedding_guard, incremental
 from codelith.knowledge.builder import SourceFile, chunk_files, chunk_prose
 from codelith.llm.client import create_embeddings
 from codelith.llm.providers import embedding_spec
-from codelith.memory.vector_store import VectorStore
+from codelith.memory.vector_store import VectorStore, text_digest
 from codelith.tracing.artifacts import save_artifact
 
 
@@ -65,8 +65,29 @@ class SemanticIndexerAgent(BaseAgent):
                 # accumulators would be re-applied by their reducer.
                 return {"indexed_chunks": 0}
 
-            embeddings = await create_embeddings([c["content"] for c in chunks])
+            # A chunk the last reading embedded, with the same file and the same text,
+            # keeps its vector — when the same model made it. Only the rest is sent to
+            # the embedding model, which on a re-read is usually a handful of chunks.
+            reuse = state.get("reuse") or {}
+            known: dict[tuple[str, str], list[float]] = {}
+            if incremental.active(reuse) and reuse.get("vectors"):
+                known = await VectorStore(self.db).vectors_by_text(reuse["from_kb"])
+            keys = [(c["source_path"], text_digest(c["content"])) for c in chunks]
+            fresh_at = [i for i, k in enumerate(keys) if k not in known]
+            fresh = (
+                await create_embeddings([chunks[i]["content"] for i in fresh_at]) if fresh_at else []
+            )
+            by_index = dict(zip(fresh_at, fresh, strict=True))
+            embeddings = [by_index[i] if i in by_index else known[k] for i, k in enumerate(keys)]
+            copied = len(chunks) - len(fresh_at)
             failures = sum(1 for e in embeddings if e is None)
+            if copied:
+                await self._emit_log(
+                    "info",
+                    f"Kept {copied} vector(s) from the last reading; embedded {len(fresh_at)}",
+                    copied=copied,
+                    embedded=len(fresh_at),
+                )
 
             rows = [
                 {
@@ -119,6 +140,7 @@ class SemanticIndexerAgent(BaseAgent):
             return {
                 "indexed_chunks": stored,
                 "embed_failures": failures,
+                "reuse": incremental.note(reuse, vectors_copied=copied, vectors_embedded=len(fresh_at)),
                 "embedding_provenance": embedding_guard.record(
                     embedding_spec().model, width
                 ),

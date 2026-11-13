@@ -7,6 +7,13 @@ from codelith.knowledge import embedding_guard
 from codelith.models.chunk import CodeChunk
 
 
+def text_digest(text: str | None) -> str:
+    """A short fingerprint of a chunk's text, for finding the same chunk in another reading."""
+    import hashlib
+
+    return hashlib.blake2b((text or "").encode("utf-8", "replace"), digest_size=12).hexdigest()
+
+
 def _rank_by_cosine(
     rows: list[CodeChunk], query: list[float], limit: int
 ) -> list[CodeChunk]:
@@ -106,6 +113,21 @@ class VectorStore:
         self.session.add_all([CodeChunk(**c) for c in chunks])
         await self.session.flush()
         return len(chunks)
+
+    async def vectors_by_text(self, kb_id: int) -> dict[tuple[str, str], list[float]]:
+        """
+        A reading's vectors, keyed by the file and a digest of the chunk's text.
+
+        What a new reading of the same codebase reuses instead of embedding again: a
+        chunk with the same file and the same text gets the same vector from the same
+        model. Keyed by digest, not text, so holding a whole reading's keys stays small.
+        """
+        rows = await self.session.execute(
+            select(CodeChunk.source_path, CodeChunk.content, CodeChunk.embedding).where(
+                CodeChunk.kb_id == kb_id, CodeChunk.embedding.is_not(None)
+            )
+        )
+        return {(path, text_digest(content)): vector for path, content, vector in rows.all() if vector}
 
     async def delete_by_kb(self, kb_id: int) -> None:
         await self.session.execute(delete(CodeChunk).where(CodeChunk.kb_id == kb_id))

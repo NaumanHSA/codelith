@@ -67,24 +67,27 @@ export default function ModuleExplorer({
   return (
     <div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule bg-sunk/40 px-3 py-2">
-        <Chips label="role" values={roles} current={role} onPick={setRole} />
+        <Chips label="Role" values={roles} current={role} onPick={setRole} />
         {languages.length > 1 && (
-          <Chips label="language" values={languages} current={language} onPick={setLanguage} />
+          <Chips label="Language" values={languages} current={language} onPick={setLanguage} />
         )}
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="tag text-ink-dim">sort</span>
-          {(['size', 'files', 'name'] as Sort[]).map(option => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setSort(option)}
-              className={`tag px-1.5 py-[2px] ${
-                sort === option ? 'text-hot-ink underline' : 'text-ink-dim hover:text-ink'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[12.5px] text-ink-dim">Sort by</span>
+          <div className="flex gap-0.5 rounded-lg border border-rule bg-paper p-[3px]">
+            {(['size', 'files', 'name'] as Sort[]).map(option => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={sort === option}
+                onClick={() => setSort(option)}
+                className={`rounded-md px-2.5 py-0.5 text-[12.5px] font-medium transition-colors ${
+                  sort === option ? 'bg-sunk text-ink shadow-[inset_0_0_0_1px_var(--line-2)]' : 'text-ink-mid hover:text-ink'
+                }`}
+              >
+                {option.charAt(0).toUpperCase() + option.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -101,19 +104,15 @@ export default function ModuleExplorer({
       </ul>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-rule bg-sunk/40 px-3 py-1.5">
-        <span className="tag text-ink-dim">
+        <span className="text-[12px] text-ink-dim">
           {rows.length} of {data.modules.length} module
           {data.modules.length === 1 ? '' : 's'}
           {shownLoc > 0 && `, ${shownLoc.toLocaleString()} lines`}
         </span>
         {data.without_summary > 0 && (
-          <span className="tag text-warn">
-            {data.without_summary} never summarised
-          </span>
+          <span className="text-[12px] text-warn">{data.without_summary} never summarised</span>
         )}
-        {rows.length === 0 && (
-          <span className="tag text-ink-dim">nothing matches that filter</span>
-        )}
+        {rows.length === 0 && <span className="text-[12px] text-ink-dim">Nothing matches that filter</span>}
       </div>
     </div>
   )
@@ -132,28 +131,25 @@ function Chips({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1">
-      <span className="tag text-ink-dim">{label}</span>
-      <button
-        type="button"
-        onClick={() => onPick('')}
-        className={`tag px-1.5 py-[2px] ${
-          current ? 'text-ink-dim hover:text-ink' : 'text-hot-ink underline'
-        }`}
-      >
-        all
-      </button>
-      {values.map(value => (
-        <button
-          key={value}
-          type="button"
-          onClick={() => onPick(current === value ? '' : value)}
-          className={`tag px-1.5 py-[2px] ${
-            current === value ? 'text-hot-ink underline' : 'text-ink-dim hover:text-ink'
-          }`}
-        >
-          {value}
-        </button>
-      ))}
+      <span className="mr-0.5 text-[12.5px] text-ink-dim">{label}</span>
+      {['', ...values].map(value => {
+        const on = current === value
+        return (
+          <button
+            key={value || 'all'}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onPick(value && current === value ? '' : value)}
+            className={`rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors ${
+              on
+                ? 'border-hot-edge bg-hot-wash text-hot-ink'
+                : 'border-rule text-ink-mid hover:border-line-2 hover:text-ink'
+            }`}
+          >
+            {value ? value.charAt(0).toUpperCase() + value.slice(1) : 'All'}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -177,27 +173,23 @@ function Row({
         className="w-full px-3 py-2 text-left transition-colors hover:bg-sunk/50"
       >
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="font-mono text-[12px] font-semibold text-ink">{module.name}</span>
+          <span className="font-mono text-[13px] font-semibold text-ink">{module.name}</span>
           {module.role && (
             <span
-              className={`tag border px-1.5 py-[1px] ${
+              className={`rounded-md border px-1.5 py-[1px] text-[11.5px] font-medium ${
                 ROLE_TONE[module.role] ?? 'border-rule text-ink-mid'
               }`}
             >
               {module.role}
             </span>
           )}
-          {module.language && <span className="tag text-ink-dim">{module.language}</span>}
-          <span className="ml-auto flex shrink-0 items-baseline gap-2">
-            <span className="tag tabular-nums text-ink-dim">
+          {module.language && <span className="text-[12px] text-ink-dim">{module.language}</span>}
+          <span className="ml-auto flex shrink-0 items-baseline gap-3 font-mono text-[11.5px] tabular-nums">
+            <span className="text-ink-dim">
               {module.file_count} file{module.file_count === 1 ? '' : 's'}
             </span>
-            <span className="tag tabular-nums text-ink-mid">
-              {module.loc.toLocaleString()} loc
-            </span>
-            {module.symbols > 0 && (
-              <span className="tag tabular-nums text-ink-dim">{module.symbols} sym</span>
-            )}
+            <span className="text-ink-mid">{module.loc.toLocaleString()} lines</span>
+            {module.symbols > 0 && <span className="text-ink-dim">{module.symbols} symbols</span>}
           </span>
         </div>
 
@@ -206,14 +198,14 @@ function Row({
             one of them is expanded at once. */}
         {module.summary ? (
           <p
-            className={`mt-1 font-sans text-[11.5px] leading-relaxed text-ink-mid ${
+            className={`mt-1 text-[12.5px] leading-relaxed text-ink-mid ${
               open ? '' : 'line-clamp-2'
             }`}
           >
             {module.summary}
           </p>
         ) : (
-          <p className="mt-1 font-sans text-[11.5px] italic text-ink-dim">
+          <p className="mt-1 text-[12.5px] italic text-ink-dim">
             {module.is_test
               ? 'Test modules are not summarised.'
               : 'No summary was written for this module.'}
@@ -228,7 +220,7 @@ function Row({
               <Link
                 key={file}
                 to={`/app/projects/${projectId}/code?file=${encodeURIComponent(file)}`}
-                className="font-mono text-[11px] text-hot-ink hover:underline"
+                className="font-mono text-[12px] text-hot-ink hover:underline"
               >
                 {file}
               </Link>

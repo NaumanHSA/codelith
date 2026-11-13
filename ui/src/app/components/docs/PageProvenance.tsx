@@ -22,13 +22,13 @@ export default function PageProvenance({ page }: { page: SitePageDetail }) {
   if (!page.commit_sha && !files.length && !qa) return null
 
   return (
-    <section className="mt-6 border border-rule bg-panel">
+    <section className="rounded-xl overflow-hidden mt-6 border border-rule bg-panel">
       <button
         onClick={() => setOpen(o => !o)}
         className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 text-left transition-colors hover:bg-sunk/60"
       >
-        <span className="tag text-ink-dim">Provenance</span>
-        <span className="text-[11px] text-ink-mid">
+        <span className="text-[12px] font-medium text-ink-dim">Provenance</span>
+        <span className="text-[12px] text-ink-mid">
           written from {files.length} file{files.length === 1 ? '' : 's'} at{' '}
           <span className="text-ink">{shortSha(page.commit_sha)}</span>
           {page.updated_at ? ` · ${formatDateTime(page.updated_at)}` : ''}
@@ -36,20 +36,20 @@ export default function PageProvenance({ page }: { page: SitePageDetail }) {
         {page.qa_score != null && (
           <span className="ml-auto flex items-center gap-2">
             <Meter pct={page.qa_score * 10} segments={10} />
-            <span className="tag text-ink-dim">QA {page.qa_score}/10</span>
+            <span className="text-[12px] font-medium text-ink-dim">QA {page.qa_score}/10</span>
           </span>
         )}
-        <span className="tag shrink-0 text-ink-dim">{open ? '−' : '+'}</span>
+        <span className="text-[12px] font-medium shrink-0 text-ink-dim">{open ? '−' : '+'}</span>
       </button>
 
       {open && (
         <div className="border-t border-rule px-3 py-3">
           {files.length > 0 && (
             <>
-              <span className="tag block text-ink-dim">Source</span>
+              <span className="text-[12px] font-medium block text-ink-dim">Source</span>
               <ul className="mt-1.5 mb-3 space-y-0.5">
                 {files.map(f => (
-                  <li key={f} className="font-mono text-[11px] text-ink-mid">
+                  <li key={f} className="font-mono text-[12px] text-ink-mid">
                     {f}
                   </li>
                 ))}
@@ -59,13 +59,13 @@ export default function PageProvenance({ page }: { page: SitePageDetail }) {
 
           {qa && (
             <>
-              <span className="tag block text-ink-dim">Fact check</span>
+              <span className="text-[12px] font-medium block text-ink-dim">Fact check</span>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <Chip tone={qa.approved ? 'plain' : 'warn'}>
-                  {qa.approved ? 'approved' : 'flagged'}
+                  {qa.approved ? 'Approved' : 'Flagged'}
                 </Chip>
                 {claims > 0 && (
-                  <span className="tag text-ink-dim">
+                  <span className="text-[12px] font-medium text-ink-dim">
                     {qa.claims_passed ?? 0}/{claims} claims verified against source
                   </span>
                 )}
@@ -73,7 +73,7 @@ export default function PageProvenance({ page }: { page: SitePageDetail }) {
               {!!qa.issues?.length && (
                 <ul className="mt-2 space-y-1">
                   {qa.issues.slice(0, 5).map(issue => (
-                    <li key={issue} className="text-[11px] leading-snug text-ink-mid">
+                    <li key={issue} className="text-[12px] leading-snug text-ink-mid">
                       · {issue}
                     </li>
                   ))}
@@ -83,7 +83,7 @@ export default function PageProvenance({ page }: { page: SitePageDetail }) {
           )}
 
           {page.job_id && (
-            <p className="mt-3 text-[10.5px] text-ink-dim">
+            <p className="mt-3 text-[11.5px] text-ink-dim">
               Written by job #{page.job_id}
               {page.kb_id ? ` from knowledge base #${page.kb_id}` : ''}.
             </p>

@@ -237,6 +237,7 @@ class AskService:
             "text": answer.text,
             "citations": answer.citations,
             "stripped": answer.stripped,
+            "suggest_qa": _suggest_qa(bundle.plan),
         }
 
         logger.info(
@@ -631,6 +632,19 @@ class AskService:
 
 #: A repository path inside a block of evidence.
 _PATH_IN_TEXT = re.compile(rf"(?:[\w.-]+/)+[\w.-]+\.{_FILE_SUFFIX}", re.I)
+
+
+def _suggest_qa(plan) -> dict | None:
+    """
+    A QA run to offer under the answer: the areas the question was about that no run
+    has checked, else the ones checked only at an older reading. None when QA has
+    already looked at everything asked about.
+    """
+    if plan.qa_unchecked:
+        return {"areas": list(plan.qa_unchecked), "reason": "unchecked"}
+    if plan.qa_behind:
+        return {"areas": list(plan.qa_behind), "reason": "behind"}
+    return None
 
 
 def _with_extra_evidence(prompt: str, fetched: list) -> str:

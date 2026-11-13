@@ -74,22 +74,35 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
 
                 await job_svc.write_log(job_id, "coordinator", "info", "Analysis started")
 
-                # Cheap exit: a usable KB already exists and nothing was forced.
+                # Cheap exit: the code has not moved since the last reading and nothing
+                # was forced. It used to exit whenever *any* reading existed, so asking
+                # to analyse after new commits silently kept the old one. Now it asks
+                # where the repository is first (no clone: `git ls-remote` or
+                # `rev-parse`), and a new commit is read — incrementally, keeping
+                # whatever did not change (see `knowledge/incremental.py`).
                 if not force:
                     existing = await KnowledgeBaseRepository(db).get_latest_usable(project.id)
                     if existing is not None:
+                        moved = await _code_moved(project, existing.commit_sha)
+                        if not moved:
+                            await job_svc.write_log(
+                                job_id, "coordinator", "info",
+                                f"The code is still at {(existing.commit_sha or 'n/a')[:8]}, the "
+                                f"commit of knowledge base {existing.id}; nothing to read again. "
+                                "Read from scratch to rebuild it anyway.",
+                            )
+                            await job_svc.complete(job_id)
+                            job_total.labels(status="skipped").inc()
+                            return {
+                                "kb_id": existing.id,
+                                "kb_status": existing.status,
+                                "reused": True,
+                            }
                         await job_svc.write_log(
                             job_id, "coordinator", "info",
-                            f"Reusing knowledge base {existing.id} "
-                            f"(commit {existing.commit_sha or 'n/a'}) — pass force to rebuild",
+                            f"The code has moved since {(existing.commit_sha or 'n/a')[:8]}; "
+                            "reading it again and keeping what did not change",
                         )
-                        await job_svc.complete(job_id)
-                        job_total.labels(status="skipped").inc()
-                        return {
-                            "kb_id": existing.id,
-                            "kb_status": existing.status,
-                            "reused": True,
-                        }
 
                 with tracer(
                     kind="workflow",
@@ -98,7 +111,7 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
                     end_message="Analysis complete",
                 ) as t:
                     workflow = AnalysisWorkflow(
-                        project=project, job=job, db=db, sandbox=sandbox
+                        project=project, job=job, db=db, sandbox=sandbox, force=force
                     )
                     result = await workflow.run()
                     t.outputs(**{k: v for k, v in result.items() if k != "kb_stats"})
@@ -140,6 +153,29 @@ async def _run_analysis(job_id: int, force: bool) -> dict:
                 save_trace_artifacts(tracer, sandbox.trace)
                 reset_tracer(trace_token)
                 reset_artifact_writer(artifact_token)
+
+
+async def _code_moved(project, analysed_commit: str | None) -> bool:
+    """
+    Whether the repository has a commit the last reading did not see.
+
+    Anything the check cannot answer counts as moved: the operator asked to analyse,
+    and an incremental reading of unchanged code costs little, where silently keeping
+    a stale reading costs trust.
+    """
+    from codelith.services.head_check import head_check
+
+    sources = list(getattr(project, "sources", None) or [])
+    if not sources or not analysed_commit:
+        return True
+    source = sources[0]
+    check = await head_check(
+        source_type=source.source_type,
+        url_or_path=source.url_or_path,
+        branch=source.branch,
+        analysed_commit=analysed_commit,
+    )
+    return not check.checked or check.changed
 
 
 async def _mark_kb_cancelled(db, job_id: int) -> None:

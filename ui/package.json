@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "highlight.js": "^11.12.0",
+    "lucide-react": "^1.71.0",
     "mermaid": "^12.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -25,13 +26,16 @@
     "rehype-highlight": "^7.0.2",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "simple-icons": "^16.37.0",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.5.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^6.1.1",
     "oxfmt": "^0.70.0",
     "tailwindcss": "^4.3.3",

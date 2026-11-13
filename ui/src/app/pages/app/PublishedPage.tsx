@@ -62,7 +62,7 @@ function Card({
 
   return (
     <article
-      className={`border bg-panel ${live ? 'border-ok/40' : down ? 'border-rule opacity-70' : 'border-rule'}`}
+      className={`rounded-xl border bg-panel ${live ? 'border-ok/40' : down ? 'border-rule opacity-70' : 'border-rule'}`}
     >
       {/* The status band. A published site is a thing other people may be reading
           right now, and the page should say which of them are without being read. */}
@@ -74,10 +74,10 @@ function Card({
         {live ? (
           <span className="flex items-center gap-2 text-ok">
             <span className="live-dot block size-[7px] rounded-full bg-ok" />
-            <span className="tag">live</span>
+            <span className="text-[12px] font-medium">Live</span>
           </span>
         ) : (
-          <span className={`tag ${publication.status === 'failed' ? 'text-bad' : 'text-ink-dim'}`}>
+          <span className={`text-[12px] font-medium ${publication.status === 'failed' ? 'text-bad' : 'text-ink-dim'}`}>
             {down ? 'taken down' : publication.status}
           </span>
         )}
@@ -90,13 +90,13 @@ function Card({
         >
           {publication.project_name || `Project ${publication.project_id}`}
         </Link>
-        <span className="tag text-ink-dim">
+        <span className="text-[12px] font-medium text-ink-dim">
           {publication.target === 'live' ? 'live site' : publication.target}
         </span>
 
         {live && publication.published_at && (
-          <span className="tag ml-auto text-ink-dim">
-            built {relativeTime(publication.published_at)}
+          <span className="text-[12px] font-medium ml-auto text-ink-dim">
+            Built {relativeTime(publication.published_at)}
           </span>
         )}
       </header>
@@ -107,15 +107,15 @@ function Card({
             {/* The address gets the weight of the thing that was actually shared, and
                 Open reads as the action rather than as a link buried in a sentence. */}
             <div className="mb-3 flex flex-wrap items-stretch gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2 border border-rule bg-sunk/40 px-3 py-2">
-                <span className="block size-[6px] shrink-0 rotate-45 bg-hot" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">
+              <div className="rounded-lg flex min-w-0 flex-1 items-center gap-2 border border-rule bg-sunk/40 px-3 py-2">
+                <span className="block size-[6px] shrink-0 rounded-full bg-hot" />
+                <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-ink">
                   {url}
                 </span>
                 <button
                   type="button"
                   onClick={copy}
-                  className="tag shrink-0 text-ink-dim hover:text-hot-ink"
+                  className="text-[12px] font-medium shrink-0 text-ink-dim hover:text-hot-ink"
                 >
                   {copied ? 'copied' : 'copy'}
                 </button>
@@ -124,7 +124,7 @@ function Card({
                 href={url}
                 target="_blank"
                 rel="noreferrer"
-                className="tag inline-flex shrink-0 items-center gap-1.5 border border-hot bg-hot px-4 text-on-hot transition-colors hover:border-hot-press hover:bg-hot-press"
+                className="text-[12px] font-medium rounded-lg inline-flex shrink-0 items-center gap-1.5 border border-hot bg-hot px-4 text-on-hot transition-colors hover:border-hot-press hover:bg-hot-press"
               >
                 Open site →
               </a>
@@ -135,31 +135,31 @@ function Card({
                 the page reaches off this machine. */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               {build && (
-                <span className="tag text-ink-dim">
+                <span className="text-[12px] font-medium text-ink-dim">
                   {build.page_count} page{build.page_count === 1 ? '' : 's'} ·{' '}
                   {bytes(build.bytes_total)}
                 </span>
               )}
               {build?.commit_sha && (
-                <span className="tag text-ink-dim">from {shortSha(build.commit_sha)}</span>
+                <span className="text-[12px] font-medium text-ink-dim">From {shortSha(build.commit_sha)}</span>
               )}
-              {publication.is_current === true && <span className="tag text-ok">current</span>}
+              {publication.is_current === true && <span className="text-[12px] font-medium text-ok">Current</span>}
               {publication.is_current === false && (
-                <span className="tag text-warn">
-                  code has moved on
+                <span className="text-[12px] font-medium text-warn">
+                  Code has moved on
                   {publication.latest_commit ? ` (${shortSha(publication.latest_commit)})` : ''}
                 </span>
               )}
               {typeof verify.links === 'number' && (
-                <span className="tag text-ink-dim">{verify.links} links checked, none broken</span>
+                <span className="text-[12px] font-medium text-ink-dim">{verify.links} links checked, none broken</span>
               )}
               {verify.external_total === 0 && (
-                <span className="tag text-ok">nothing loads from the network</span>
+                <span className="text-[12px] font-medium text-ok">Nothing loads from the network</span>
               )}
             </div>
           </>
         ) : (
-          <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
+          <p className="text-[13px] leading-relaxed text-ink-mid">
             {down
               ? `Taken down ${publication.unpublished_at ? relativeTime(publication.unpublished_at) : ''}. The link no longer resolves and the files are gone.`
               : publication.status === 'failed'
@@ -251,14 +251,14 @@ export default function PublishedPage() {
   const liveCount = rows.filter(p => p.status === 'live').length
 
   return (
-    <div className="mx-auto max-w-[1200px] p-5">
+    <div className="w-full px-6 py-5">
       <header className="mb-5 flex flex-wrap items-end gap-4 border-b border-rule pb-3">
         <span className="text-[34px] leading-[0.8] font-bold tracking-tighter text-rule select-none">
           04
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-[19px] leading-tight font-bold tracking-tight text-ink">Published</h1>
-          <p className="mt-0.5 text-[11.5px] text-ink-dim">
+          <p className="mt-0.5 text-[12.5px] text-ink-dim">
             Documentation served at a URL other people can open.{' '}
             {liveCount
               ? `${liveCount} live right now.`
@@ -270,7 +270,7 @@ export default function PublishedPage() {
       {/* Said once, at the top, rather than beside every link. Anyone holding one of
           these URLs can read the site, and that is the honest description of what
           sharing means for somebody with no account on this machine. */}
-      <p className="mb-4 border border-rule bg-panel px-4 py-3 font-sans text-[12px] leading-relaxed text-ink-mid">
+      <p className="rounded-lg mb-4 border border-rule bg-panel px-4 py-3 text-[13px] leading-relaxed text-ink-mid">
         Each address carries its own secret, so it cannot be guessed, but{' '}
         <strong className="font-semibold text-ink">anyone holding the link can read it</strong>.
         Use <em>New link</em> to invalidate every copy of one that has been shared, or{' '}
@@ -278,12 +278,12 @@ export default function PublishedPage() {
       </p>
 
       {note && (
-        <p className="mb-4 border border-rule bg-sunk/40 px-4 py-2.5 font-sans text-[11.5px] text-ink-mid">
+        <p className="rounded-lg mb-4 border border-rule bg-sunk/40 px-4 py-2.5 text-[12.5px] text-ink-mid">
           {note}
         </p>
       )}
       {error && (
-        <p className="mb-4 border border-rule px-4 py-2.5 font-sans text-[11.5px] text-bad">
+        <p className="rounded-lg mb-4 border border-rule px-4 py-2.5 text-[12.5px] text-bad">
           {error}
         </p>
       )}

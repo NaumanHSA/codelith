@@ -109,6 +109,32 @@ APPS: tuple[App, ...] = (
         needs=("modules", "entities", "written pages"),
         route="/app/projects/{id}/drift",
     ),
+    App(
+        id="tour",
+        label="Tour",
+        blurb=(
+            "A guided walk for someone new to the code: what it is, how it is laid out, "
+            "where work comes in, one real request followed to its data, the core, the "
+            "helpers everything leans on and the files where an edit hurts. Each stop "
+            "lights its files on the knowledge graph."
+        ),
+        short="A walk through the code for someone new to it, each stop lit on the knowledge graph.",
+        needs=("code graph", "flows", "narratives", "entities"),
+        route="/app/projects/{id}/graph?tour=1",
+    ),
+    App(
+        id="qa",
+        label="QA",
+        blurb=(
+            "What a QA engineer checks, starting from what Codelith knows about the code: "
+            "security, data leakage, error handling, things that will break, performance, "
+            "configuration and deployment, and what no test reaches. Every finding points at "
+            "an exact line, says how sure it is, what it touches and how to fix it."
+        ),
+        short="Security, leaks, error handling, breakage, deployment and test gaps, each found on an exact line with what it touches.",
+        needs=("kept files", "code graph", "flows", "entities"),
+        route="/app/projects/{id}/qa",
+    ),
 )
 
 APPS_BY_ID = {f.id: f for f in APPS}

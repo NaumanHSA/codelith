@@ -129,7 +129,7 @@ export default function SiteToolbar({
           onChange={e => onVersion(e.target.value || null)}
           aria-label="Version"
           title="Read a frozen snapshot instead of the live site"
-          className="tag border border-rule bg-panel px-1.5 py-[4px] text-ink-mid focus:border-hot focus:outline-none"
+          className="text-[12px] font-medium rounded-md border border-rule bg-panel px-1.5 py-[4px] text-ink-mid focus:border-hot focus:outline-none"
         >
           <option value="">live</option>
           {versions.map(v => (
@@ -144,10 +144,10 @@ export default function SiteToolbar({
         <button
           onClick={() => setMenu(m => (m === 'snapshot' ? 'none' : 'snapshot'))}
           title="Freeze the site as it stands, under a label"
-          className={`tag inline-flex items-center gap-1.5 border px-3 py-[7px] transition-colors ${
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-[7px] text-[13px] font-medium transition-colors ${
             menu === 'snapshot'
-              ? 'border-ink bg-ink text-paper'
-              : 'border-ink bg-panel text-ink hover:border-hot hover:text-hot-ink'
+              ? 'border-line-2 bg-hover text-ink'
+              : 'border-line-2 bg-panel text-ink hover:border-hot hover:text-hot-ink'
           }`}
         >
           <CameraIcon />
@@ -162,7 +162,7 @@ export default function SiteToolbar({
       <button
         onClick={() => setMenu(m => (m === 'export' ? 'none' : 'export'))}
         title="Download the site as MkDocs, Docusaurus, HTML, Markdown or DOCX"
-        className={`tag inline-flex items-center gap-1.5 border px-3 py-[7px] transition-colors ${
+        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-[7px] text-[13px] font-medium transition-colors ${
           menu === 'export'
             ? 'border-hot-press bg-hot-press text-on-hot'
             : 'border-hot bg-hot text-on-hot hover:border-hot-press hover:bg-hot-press'
@@ -173,16 +173,16 @@ export default function SiteToolbar({
       </button>
 
       {menu !== 'none' && (
-        <div className="absolute top-full right-0 z-30 mt-1 w-[300px] border border-rule bg-panel shadow-lg">
+        <div className="rounded-lg overflow-hidden absolute top-full right-0 z-30 mt-1 w-[300px] border border-rule bg-panel shadow-lg">
           {error && (
-            <p className="border-b border-bad/35 bg-bad-wash px-2.5 py-2 text-[11px] text-bad">
+            <p className="border-b border-bad/35 bg-bad-wash px-2.5 py-2 text-[12px] text-bad">
               {error}
             </p>
           )}
 
           {menu === 'export' ? (
             <>
-              <p className="border-b border-rule px-2.5 py-1.5 text-[10.5px] text-ink-dim">
+              <p className="border-b border-rule px-2.5 py-1.5 text-[11.5px] text-ink-dim">
                 {version ? `Exporting version ${version}.` : 'Exporting the live site.'}
               </p>
               {FORMATS.map(f => (
@@ -192,14 +192,14 @@ export default function SiteToolbar({
                   disabled={busy}
                   className="block w-full border-b border-rule px-2.5 py-2 text-left transition-colors last:border-b-0 hover:bg-sunk disabled:opacity-60"
                 >
-                  <span className="block text-[11.5px] font-semibold text-ink">{f.label}</span>
-                  <span className="block text-[10.5px] leading-snug text-ink-dim">{f.note}</span>
+                  <span className="block text-[12.5px] font-semibold text-ink">{f.label}</span>
+                  <span className="block text-[11.5px] leading-snug text-ink-dim">{f.note}</span>
                 </button>
               ))}
             </>
           ) : (
             <div className="p-2.5">
-              <p className="mb-2 text-[10.5px] leading-snug text-ink-dim">
+              <p className="mb-2 text-[11.5px] leading-snug text-ink-dim">
                 Freezes every written page under a label. The live site keeps changing;
                 a snapshot does not.
               </p>
@@ -220,8 +220,8 @@ export default function SiteToolbar({
                 <ul className="mt-3 border-t border-rule pt-2">
                   {versions.slice(0, 4).map(v => (
                     <li key={v.id} className="flex items-baseline gap-2 py-[2px]">
-                      <span className="text-[11px] text-ink">{v.label}</span>
-                      <span className="tag ml-auto text-ink-dim">
+                      <span className="text-[12px] text-ink">{v.label}</span>
+                      <span className="text-[12px] font-medium ml-auto text-ink-dim">
                         {relativeTime(v.snapshot_at ?? v.created_at)}
                       </span>
                     </li>

@@ -190,7 +190,7 @@ export default function NewProjectDialog({
           {probing ? (
             <>
               <span className="anim-spin block size-[9px] rounded-full border border-hot border-t-transparent" />
-              checking the repository…
+              Checking the repository…
             </>
           ) : (
             '↻ Check the repository'
@@ -199,20 +199,20 @@ export default function NewProjectDialog({
 
         {/* probe report */}
         {probe && !probe.ok && (
-          <div className="border border-bad/35 bg-bad-wash px-3 py-2.5">
+          <div className="rounded-lg border border-bad/35 bg-bad-wash px-3 py-2.5">
             <span className="tag flex items-center gap-1.5 text-bad">
-              <span className="block size-[6px] rotate-45 bg-bad" /> Cannot use this source
+              <span className="block size-[6px] rounded-full bg-bad" /> Cannot use this source
             </span>
-            <p className="mt-1.5 font-sans text-[12.5px] leading-relaxed text-ink">
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink">
               {probe.error ?? 'The repository could not be read.'}
             </p>
           </div>
         )}
 
         {probe?.ok && (
-          <div className="anim-rise border border-ok/35 bg-ok-wash">
+          <div className="rounded-xl anim-rise border border-ok/35 bg-ok-wash">
             <div className="tag flex items-center gap-2 border-b border-ok/25 px-3 py-2 text-ok">
-              <span className="block size-[6px] rotate-45 bg-ok" />
+              <span className="block size-[6px] rounded-full bg-ok" />
               Repository looks good
               <span className="ml-auto normal-case text-ink-dim">
                 {probe.branch ?? 'default'} · {shortSha(probe.commit_sha)}
@@ -232,7 +232,7 @@ export default function NewProjectDialog({
             </div>
             {shares.length > 0 && (
               <div className="border-t border-ok/25 px-3 py-2.5">
-                <div className="flex h-[7px] w-full overflow-hidden border border-ink/10">
+                <div className="rounded-full flex h-[7px] w-full overflow-hidden border border-ink/10">
                   {shares.slice(0, 6).map((l, i) => (
                     <span
                       key={l.name}
@@ -267,7 +267,7 @@ export default function NewProjectDialog({
             {creating ? (
               <>
                 <span className="anim-spin block size-[9px] rounded-full border border-current border-t-transparent" />
-                creating…
+                Creating…
               </>
             ) : (
               'Create project →'

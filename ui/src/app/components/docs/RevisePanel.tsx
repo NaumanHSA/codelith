@@ -1,3 +1,4 @@
+import { Icon } from '../../lib/icons'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
@@ -134,8 +135,8 @@ export default function RevisePanel({
     <aside className="flex h-full w-full flex-col border-l border-rule bg-panel">
       <header className="flex items-start gap-2 border-b border-rule px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <span className="tag block text-ink-dim">
-            {target.anchor ? 'revising this section' : 'revising the whole page'}
+          <span className="text-[12px] font-medium block text-ink-dim">
+            {target.anchor ? 'Revising this section' : 'Revising the whole page'}
           </span>
           <span className="mt-0.5 block truncate text-[12.5px] font-semibold text-ink">
             {target.title}
@@ -144,15 +145,15 @@ export default function RevisePanel({
         <button
           onClick={onClose}
           aria-label="Close"
-          className="tag shrink-0 px-1 text-ink-dim transition-colors hover:text-ink"
+          className="grid size-7 shrink-0 place-items-center rounded-md text-ink-dim transition-colors hover:bg-hover hover:text-ink"
         >
-          ✕
+          <Icon name="x" size={15} />
         </button>
       </header>
 
       <div ref={box} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {turns.length === 0 && !live && (
-          <p className="text-[11.5px] leading-relaxed text-ink-dim">
+          <p className="text-[12.5px] leading-relaxed text-ink-dim">
             Say what should change. The section is rewritten in place against the same
             evidence it was written from. Everything else on the page is left alone.
           </p>
@@ -162,9 +163,9 @@ export default function RevisePanel({
           {turns.map(t => (
             <li key={t.id} className="space-y-1.5">
               {/* what was asked */}
-              <div className="border border-rule bg-sunk/60 px-2.5 py-1.5">
-                <span className="tag block text-ink-dim">you asked</span>
-                <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink">
+              <div className="rounded-lg border border-rule bg-sunk/60 px-2.5 py-1.5">
+                <span className="text-[12px] font-medium block text-ink-dim">You asked</span>
+                <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink">
                   {String((t.config_json ?? {}).instructions ?? '')}
                 </p>
               </div>
@@ -174,24 +175,24 @@ export default function RevisePanel({
                 <div className="flex items-center gap-2 pl-2">
                   {t.status === 'completed' ? (
                     <>
-                      <span className="block size-[5px] shrink-0 rotate-45 bg-ok" />
-                      <span className="text-[11px] text-ink-mid">
+                      <span className="block size-[5px] shrink-0 rounded-full bg-ok" />
+                      <span className="text-[12px] text-ink-mid">
                         Rewritten and applied to the page.
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="block size-[5px] shrink-0 rotate-45 bg-bad" />
-                      <span className="min-w-0 text-[11px] text-bad">
+                      <span className="block size-[5px] shrink-0 rounded-full bg-bad" />
+                      <span className="min-w-0 text-[12px] text-bad">
                         {t.error_message || `The run ${t.status}. The page is unchanged.`}
                       </span>
                     </>
                   )}
                   <Link
                     to={`/app/projects/${projectId}/jobs/${t.id}`}
-                    className="tag ml-auto shrink-0 text-hot-ink hover:underline"
+                    className="text-[12px] font-medium ml-auto shrink-0 text-hot-ink hover:underline"
                   >
-                    run #{t.id} →
+                    Run #{t.id} →
                   </Link>
                 </div>
               )}
@@ -200,11 +201,11 @@ export default function RevisePanel({
         </ul>
 
         {live && (
-          <div className="mt-2.5 border border-hot/40 bg-hot-wash/50 px-2.5 py-2">
+          <div className="rounded-lg mt-2.5 border border-hot/40 bg-hot-wash/50 px-2.5 py-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="tag flex items-center gap-1.5 text-hot-ink">
+              <span className="text-[12px] font-medium flex items-center gap-1.5 text-hot-ink">
                 <span className="anim-blink block size-[6px] rounded-full bg-hot" />
-                rewriting
+                Rewriting
               </span>
               <Meter pct={denominator ? Math.round((done / denominator) * 100) : 0} segments={10} />
               {/* There is a moment between the API accepting the run and the first
@@ -212,19 +213,19 @@ export default function RevisePanel({
               {job && (
                 <Link
                   to={`/app/projects/${projectId}/jobs/${job.id}`}
-                  className="tag ml-auto text-hot-ink hover:underline"
+                  className="text-[12px] font-medium ml-auto text-hot-ink hover:underline"
                 >
-                  run #{job.id} →
+                  Run #{job.id} →
                 </Link>
               )}
             </div>
-            <p className="mt-1 text-[11px] text-ink-mid">
+            <p className="mt-1 text-[12px] text-ink-mid">
               {active ? `${agentLabel(active.name)} · ${describeStep(active) ?? 'working'}` : 'Starting…'}
             </p>
           </div>
         )}
 
-        {error && <p className="mt-2.5 text-[11.5px] text-bad">{error}</p>}
+        {error && <p className="mt-2.5 text-[12.5px] text-bad">{error}</p>}
       </div>
 
       <div className="border-t border-rule p-2.5">
@@ -247,17 +248,17 @@ export default function RevisePanel({
               ? 'Anything else? e.g. “now make the second paragraph shorter”'
               : 'e.g. “lead with a numbered list of the steps, and keep the file references”'
           }
-          className="w-full resize-none border border-rule bg-sunk/60 px-2.5 py-2 font-sans text-[11.5px] leading-relaxed text-ink transition-colors placeholder:text-ink-dim focus:border-hot focus:bg-panel focus:outline-none disabled:opacity-60"
+          className="rounded-lg w-full resize-none border border-rule bg-sunk/60 px-2.5 py-2 text-[12.5px] leading-relaxed text-ink transition-colors placeholder:text-ink-dim focus:border-hot focus:bg-panel focus:outline-none disabled:opacity-60"
         />
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="tag text-ink-dim">enter to send</span>
+          <span className="text-[12px] font-medium text-ink-dim">Enter to send</span>
           <Button
             variant="hot"
             className="ml-auto"
             onClick={() => void send()}
             disabled={!draft.trim() || Boolean(live)}
           >
-            {live ? 'rewriting…' : 'Rewrite'}
+            {live ? 'Rewriting…' : 'Rewrite'}
           </Button>
         </div>
       </div>

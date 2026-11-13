@@ -29,12 +29,18 @@ from pathlib import PurePosixPath
 from codelith.knowledge.constants import EntityKind
 from codelith.languages.base import (
     CallRef,
+    Declared,
     DetectedEntity,
+    FlowFacts,
     ImportRef,
+    Issue,
     LanguageProvider,
     ModuleRef,
+    RunInfo,
     Symbol,
 )
+from codelith.languages.providers import _ecosystem_deps as ecosystem_deps
+from codelith.languages.providers import _pattern_qa as pattern_qa
 from codelith.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 # ── Declarations ──────────────────────────────────────────────────────────────
@@ -186,6 +192,7 @@ class TypeScriptProvider(LanguageProvider):
     display_name = "TypeScript"
     extensions = (".ts", ".tsx", ".mts", ".cts")
     manifest_files = ("package.json",)
+    lock_files = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "npm-shrinkwrap.json")
 
     # ── Symbols ───────────────────────────────────────────────────────────────
 
@@ -527,6 +534,81 @@ class TypeScriptProvider(LanguageProvider):
                 data={"source": "package.json"},
             ))
         return out
+
+    has_rules = True
+    qa_rules = pattern_qa.labels(pattern_qa.TYPESCRIPT)
+
+    def flow_facts(self, relative_path: str, source: str) -> FlowFacts | None:
+        return pattern_qa.flow_facts(source, "typescript")
+
+    ecosystem = "npm"
+
+    def declared(self, relative_path: str, source: str) -> list[Declared]:
+        return ecosystem_deps.node_declared(relative_path, source)
+
+    def locked(self, relative_path: str, source: str) -> dict[str, str]:
+        return ecosystem_deps.node_locked(relative_path, source)
+
+    def imported_packages(self, relative_path: str, source: str) -> list[tuple[str, int]]:
+        seen: dict[str, int] = {}
+        for ref in self.extract_imports(source, relative_path):
+            root = ecosystem_deps.node_root(ref.target)
+            if root:
+                seen.setdefault(root, ref.line)
+        # Loaded lazily (`await import("mermaid")`) or the CommonJS way: still a use.
+        for m in ecosystem_deps.DYNAMIC_IMPORT.finditer(source):
+            root = ecosystem_deps.node_root(m.group(1))
+            if root:
+                seen.setdefault(root, source.count("\n", 0, m.start()) + 1)
+        return sorted(seen.items(), key=lambda kv: kv[1])
+
+    def never_imported(self, package: str) -> bool:
+        return bool(ecosystem_deps.NODE_NOT_IMPORTED.match(package))
+
+    def inspect(self, relative_path: str, source: str) -> list[Issue]:
+        return pattern_qa.scan(source, pattern_qa.TYPESCRIPT, self.is_test_file(relative_path))
+
+    def run_info(self, relative_path: str, source: str, siblings: frozenset[str]) -> RunInfo | None:
+        if PurePosixPath(relative_path).name != "package.json":
+            return None
+        import json
+
+        try:
+            data = json.loads(source)
+        except ValueError:
+            return None
+        if not isinstance(data, dict):
+            return None
+        declared = str(data.get("packageManager") or "").split("@", 1)[0]
+        if declared in ("pnpm", "yarn", "bun", "npm"):
+            pm = declared
+        elif "pnpm-lock.yaml" in siblings:
+            pm = "pnpm"
+        elif "yarn.lock" in siblings:
+            pm = "yarn"
+        elif "bun.lockb" in siblings or "bun.lock" in siblings:
+            pm = "bun"
+        else:
+            pm = "npm"
+        engines = data.get("engines") if isinstance(data.get("engines"), dict) else {}
+        info = RunInfo(runtime="Node.js", version=engines.get("node"))
+        info.install.append("npm ci" if pm == "npm" and "package-lock.json" in siblings else f"{pm} install")
+
+        scripts = data.get("scripts") if isinstance(data.get("scripts"), dict) else {}
+        first = ("dev", "start", "serve", "build", "preview")
+        lifecycle = {"install", "prepare", "prepublishOnly", "postinstall", "preinstall"}
+        ordered = sorted(scripts, key=lambda n: (first.index(n) if n in first else len(first), n))
+        for name in ordered:
+            if name == "test" or name in lifecycle or (name[:3] in ("pre", "pos") and name.lstrip("pre").lstrip("post") in scripts):
+                continue
+            command = f"npm run {name}" if pm == "npm" and name != "start" else f"{pm} {name}"
+            info.run.append((command, str(scripts[name])[:90]))
+            if len(info.run) == 8:
+                break
+        test = str(scripts.get("test") or "")
+        if test and "no test specified" not in test:
+            info.test.append(f"{pm} test")
+        return info
 
 
 class JavaScriptProvider(TypeScriptProvider):

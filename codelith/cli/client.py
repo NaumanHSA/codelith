@@ -103,6 +103,7 @@ class ApiClient:
         json_body: Any | None = None,
         params: dict | None = None,
         timeout: float | None = None,
+        raw: bool = False,
     ) -> Any:
         url = f"{self.creds.api_url}/api/v1{path}"
         try:
@@ -127,6 +128,8 @@ class ApiClient:
             raise CliError("Not signed in, or the token has expired. Run `codelith login`.")
         if r.status_code >= 400:
             raise CliError(f"{method} {path} failed ({r.status_code}): {_detail(r)}")
+        if raw:
+            return r.text
         if not r.content:
             return None
         return r.json()
@@ -189,8 +192,40 @@ class ApiClient:
             timeout=180.0,
         )
 
-    def analyse(self, project_id: int) -> dict:
-        return self.request("POST", f"/projects/{project_id}/analyze", json_body={})
+    def analyse(self, project_id: int, force: bool = False) -> dict:
+        """Start a reading. Without `force` it keeps what did not change since the last
+        one, and does nothing at all if the code has not moved."""
+        return self.request("POST", f"/projects/{project_id}/analyze", json_body={"force": force})
+
+    def review(self, project_id: int, change: dict) -> dict:
+        """Send a change collected here to be reviewed against the codebase's knowledge."""
+        return self.request(
+            "POST",
+            f"/projects/{project_id}/reviews",
+            json_body={"change": change, "source": "cli"},
+            # Every changed file gets a pre-flight; a large change is not instant.
+            timeout=300.0,
+        )
+
+    def qa_catalog(self, project_id: int) -> dict:
+        return self.request("GET", f"/projects/{project_id}/qa/catalog")
+
+    def qa_start(self, project_id: int, body: dict) -> dict:
+        return self.request("POST", f"/projects/{project_id}/qa/runs", json_body=body, timeout=120.0)
+
+    def qa_run(self, project_id: int, run_id: int) -> dict:
+        return self.request("GET", f"/projects/{project_id}/qa/runs/{run_id}")
+
+    def qa_cancel(self, project_id: int, run_id: int) -> dict:
+        return self.request("POST", f"/projects/{project_id}/qa/runs/{run_id}/cancel")
+
+    def qa_report(self, project_id: int, run_id: int, fmt: str) -> str:
+        return self.request(
+            "GET", f"/projects/{project_id}/qa/runs/{run_id}/report", params={"format": fmt}, raw=True, timeout=120.0
+        )
+
+    def agent_guide(self, project_id: int, fmt: str = "agents") -> dict:
+        return self.request("GET", f"/projects/{project_id}/agent-guide", params={"format": fmt}, timeout=120.0)
 
     def job(self, job_id: int) -> dict:
         return self.request("GET", f"/jobs/{job_id}")

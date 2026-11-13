@@ -5,14 +5,24 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Inter for reading, Geist for headings, JetBrains Mono for code, paths, data and
+   the micro labels. The body used to be monospace throughout, which is most of what
+   made the studio read as a terminal rather than a product. */
 body {
   margin: 0;
   background-color: var(--paper);
   color: var(--ink);
-  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-family: var(--font-sans);
   font-feature-settings: 'tnum' 1, 'zero' 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-head);
+  letter-spacing: -0.02em;
 }
 
 ::selection {
@@ -39,41 +49,27 @@ summary {
 }
 
 /* --- blueprint ground ------------------------------------------------- */
-.bp-grid {
-  background-image:
-    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-.bp-hatch {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--hatch-line) 0 1px,
-    transparent 1px 7px
-  );
-}
-
-/* --- brutalist plate: hard offset shadow on hover --------------------- */
+/* --- plate: a panel you can press ------------------------------------- *
+ * It used to lift with a hard 4px offset shadow in the ink colour, a light-theme
+ * brutalist gesture that on dark became a white block behind the panel. Now a
+ * rounded panel that rises a pixel and catches a soft shadow. */
 .plate {
   border: 1px solid var(--rule);
+  border-radius: 10px;
   background: var(--panel);
   transition:
-    transform 0.14s cubic-bezier(0.2, 0, 0, 1),
-    box-shadow 0.14s cubic-bezier(0.2, 0, 0, 1),
-    border-color 0.14s;
+    transform 0.16s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.16s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.16s;
 }
 .plate-lift:hover {
-  border-color: var(--ink);
-  transform: translate(-2px, -2px);
-  box-shadow: 4px 4px 0 0 var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 22%, var(--rule));
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px -20px var(--shadow);
 }
 .plate-lift:hover .plate-arrow {
   transform: translateX(3px);
   color: var(--hot-ink);
-}
-.plate-hot:hover {
-  border-color: var(--hot);
-  box-shadow: 4px 4px 0 0 var(--hot);
 }
 
 .plate-arrow {
@@ -97,6 +93,13 @@ summary {
 }
 .doc > *:first-child {
   margin-top: 0;
+}
+/* Prose keeps a reading measure; code, tables and diagrams do not. Pages now use
+   the full width of the window, which on a 3440px screen would otherwise run a
+   paragraph across 2,800px. Capping the text rather than the page is what lets
+   both be true. */
+.doc :is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+  max-width: 82ch;
 }
 .doc p {
   margin: 0 0 0.95rem;
@@ -259,12 +262,156 @@ summary {
 }
 
 /* --- micro label ------------------------------------------------------ */
-.tag {
-  font-size: 9.5px;
-  line-height: 1;
-  letter-spacing: 0.12em;
+/* --- the page frame ---------------------------------------------------- *
+ * Every page sits in this: centred, at a normal website's width. The studio
+ * once stretched pages across the whole window, which on a 3440px monitor
+ * put a line of text two metres long; what the user had asked for was the
+ * full *height*, which the frame keeps (the shell gives it the window's). */
+.page-frame {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+/* The tab strip scrolls sideways when tabs outnumber the width; no bar for it. */
+.tab-strip {
+  scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- atlas ------------------------------------------------------------- */
+.atlas-grid {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+.atlas-grid.atlas-grid-wide {
+  grid-template-columns: minmax(0, 1fr) min(760px, 48%);
+}
+@media (max-width: 1100px) {
+  .atlas-grid,
+  .atlas-grid.atlas-grid-wide {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(60vh, 1fr) auto;
+  }
+
+}
+.atlas-stage {
+  background: radial-gradient(70% 60% at 50% 45%, var(--sunk), var(--panel));
+}
+.atlas-canvas {
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+.atlas-canvas:active {
+  cursor: grabbing;
+}
+.atlas-canvas.looking {
+  cursor: none;
+}
+.atlas-float {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  backdrop-filter: blur(6px);
+}
+.atlas-keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font: 600 11px var(--font-mono);
+  color: var(--ink);
+  background: var(--sunk);
+  box-shadow:
+    inset 0 -1px 0 var(--line-2),
+    inset 0 0 0 1px var(--line-2);
+  transition:
+    background-color 0.1s,
+    color 0.1s;
+}
+.atlas-keys kbd.on {
+  color: var(--on-hot);
+  background: var(--hot);
+}
+/* A component's name over its dashed boundary, with its open/close button. The scene
+   moves it every frame (transform, opacity) and marks the one being looked at. */
+.atlas-tag {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sunk) 90%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line-2), 0 4px 14px -6px var(--shadow);
+  white-space: nowrap;
+  will-change: transform, opacity;
+  transition: box-shadow 0.15s;
+}
+.atlas-tag[data-focus='true'] {
+  box-shadow: inset 0 0 0 1px var(--hot), 0 4px 14px -6px var(--shadow);
+}
+.atlas-tag[data-focus='true'] .atlas-tag-name {
+  color: var(--ink);
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .atlas-keys {
+    display: none;
+  }
+
+}
+/* Full screen: the Fullscreen API when the browser grants it, and this fixed layer
+   either way, so the map fills the window even where the API is refused. */
+.atlas-wrap.immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--paper);
+  padding: 12px;
+}
+
+/* --- table: v3's list of things, the alternative to a grid of cards ---- */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tbl th {
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-weight: 600;
+  color: var(--ink-dim);
+  text-align: left;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.tbl td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+.tbl .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tbl tr[data-link] {
+  cursor: pointer;
+}
+.tbl tr[data-link] td {
+  transition: background-color 0.15s;
+}
+.tbl tr[data-link]:hover td {
+  background: var(--panel);
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 
 /* --- focus ------------------------------------------------------------ */
@@ -291,6 +438,14 @@ summary {
  * keyboard users.
  */
 .focus-ring-inherit:focus-visible {
+  outline: none;
+}
+/* The same, for a search field drawn as a box round an icon and an input: the box
+   turns orange on focus, so the input's own ring would be a second one inside it.
+   Tailwind's `focus:outline-none` cannot do this, because utilities sit in a cascade
+   layer and the unlayered rule above wins over them. */
+[class*='focus-within:border-hot'] > input:focus-visible,
+[class*='focus-within:border-hot'] > textarea:focus-visible {
   outline: none;
 }
 
@@ -369,123 +524,7 @@ summary {
   .live-dot::after {
     animation: none;
   }
-}
 
-/* ── Home's "how it works" schematic ──────────────────────────────────────────
-   The connectors are HTML rules painted with a repeating gradient rather than SVG
-   strokes, so the dash marches by moving the gradient's background-position. One
-   cycle is the 9px pattern, which is why both keyframes end there — anything else
-   makes the dashes jump on repeat. */
-@keyframes pipe-dash-x {
-  from {
-    background-position-x: 0;
-  }
-  to {
-    background-position-x: 9px;
-  }
-}
-@keyframes pipe-dash-y {
-  from {
-    background-position-y: 0;
-  }
-  to {
-    background-position-y: 9px;
-  }
-}
-
-/* The knowledge base breathing while it waits its turn. It is the one card the
-   others exist to feed, and this is what says so when the pulse is elsewhere. */
-@keyframes pipe-hub-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-  50% {
-    box-shadow: 0 0 16px 2px color-mix(in srgb, var(--hot) 10%, transparent);
-  }
-}
-
-/* The badge on the card the pulse is standing on. */
-@keyframes pipe-badge-bounce {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  50% {
-    transform: translateY(-5px) rotate(-4deg);
-  }
-}
-
-.pipe-card {
-  transition:
-    opacity 0.5s ease,
-    transform 0.5s cubic-bezier(0.2, 0.7, 0.3, 1),
-    box-shadow 0.32s ease,
-    background-color 0.32s ease,
-    border-color 0.32s ease;
-  will-change: transform;
-}
-.pipe-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 14px 30px -16px color-mix(in srgb, var(--hot) 45%, transparent);
-  border-color: var(--hot);
-}
-
-/* The badge sits over the card's top-right corner, solid, glyph always cream. */
-.pipe-badge {
-  box-shadow: 0 5px 14px -5px color-mix(in srgb, var(--ink) 40%, transparent);
-  transition:
-    box-shadow 0.32s ease,
-    transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.pipe-badge svg {
-  stroke: var(--hot-wash);
-}
-.pipe-card:hover .pipe-badge {
-  box-shadow: 0 14px 26px -8px color-mix(in srgb, var(--hot) 55%, transparent);
-  transform: translateY(-4px) rotate(-6deg) scale(1.1);
-}
-.pipe-badge.is-active {
-  animation: pipe-badge-bounce 0.8s ease-in-out infinite;
-  box-shadow: 0 10px 22px -6px color-mix(in srgb, var(--hot) 60%, transparent);
-}
-
-/* The rule at the card's foot stretches when you point at it. */
-.pipe-rule {
-  transition: width 0.32s cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.pipe-card:hover .pipe-rule {
-  width: 56px !important;
-}
-
-/* A warm wash sweeping in from the corner the badge sits on. */
-.pipe-wash {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  background: radial-gradient(
-    120% 120% at 100% 0%,
-    color-mix(in srgb, var(--hot) 9%, transparent),
-    transparent 55%
-  );
-  transition: opacity 0.32s ease;
-}
-.pipe-card:hover .pipe-wash {
-  opacity: 1;
-}
-
-/* Four things loop here for as long as the page is open. For anybody who has asked
-   for less motion that is exactly the kind of page the setting exists for, so the
-   loops stop and the schematic stays legible and still. */
-@media (prefers-reduced-motion: reduce) {
-  .pipe-dash,
-  .pipe-badge.is-active {
-    animation: none !important;
-  }
-  .pipe-card {
-    animation: none !important;
-  }
 }
 
 @keyframes chat-bounce {
@@ -527,14 +566,6 @@ summary {
     width: 100%;
   }
 }
-@keyframes ticker {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
 @keyframes shimmer {
   from {
     background-position: -320px 0;
@@ -544,12 +575,34 @@ summary {
   }
 }
 
-.anim-rise {
-  animation: rise 0.22s cubic-bezier(0.2, 0, 0, 1) both;
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.anim-flow {
-  stroke-dasharray: 5 7;
-  animation: flow 14s linear infinite;
+/* Five components asked for this class before it existed, so the marks for
+   "running" and "writing" sat still. Durations and easings match lib/motion.ts. */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.anim-rise {
+  animation: rise 0.24s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.anim-fade {
+  animation: fade 0.24s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.anim-pulse {
+  animation: pulse-soft 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 .anim-spin {
   animation: spin 0.7s linear infinite;
@@ -580,6 +633,7 @@ summary {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
 }
 
 /* ---------------------------------------------------------------------
@@ -622,173 +676,196 @@ summary {
 .chat-answer pre {
   margin: 0.5rem 0 0.75rem;
 }
+/* A tour stop sits in the graph's side pane: paths in its text wrap rather than run
+   out of a column that narrow. */
+.tour-body :not(pre) > code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+ * A file compared between two readings (`components/changes/DiffView`).
+ * Additions and removals are washes of the status colours, so the code's
+ * own highlighting still reads on top of them; the words that changed
+ * within a line are the stronger wash.
+ * --------------------------------------------------------------------- */
+.diff {
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.diff-split {
+  table-layout: fixed;
+}
+col.diff-col-num {
+  width: 52px;
+}
+.diff-num {
+  width: 1%;
+  min-width: 46px;
+  padding: 0 10px;
+  text-align: right;
+  vertical-align: top;
+  white-space: nowrap;
+  color: var(--code-gutter);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.diff-split .diff-num {
+  width: 52px;
+}
+.diff-code {
+  padding: 0 14px 0 4px;
+  white-space: pre;
+  color: var(--ink);
+  vertical-align: top;
+}
+.diff-split .diff-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-split td:nth-child(2) {
+  border-right: 1px solid var(--code-rule);
+}
+.diff-sign {
+  display: inline-block;
+  width: 1.4ch;
+  color: var(--code-gutter);
+  user-select: none;
+}
+.diff-add {
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.diff-del {
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+.diff-num.diff-add {
+  background: color-mix(in srgb, var(--ok) 17%, transparent);
+  color: var(--ok);
+}
+.diff-num.diff-del {
+  background: color-mix(in srgb, var(--bad) 17%, transparent);
+  color: var(--bad);
+}
+.diff-add .diff-sign {
+  color: var(--ok);
+}
+.diff-del .diff-sign {
+  color: var(--bad);
+}
+.diff-mark {
+  color: inherit;
+  border-radius: 2px;
+}
+.diff-mark-add {
+  background: color-mix(in srgb, var(--ok) 34%, transparent);
+}
+.diff-mark-del {
+  background: color-mix(in srgb, var(--bad) 34%, transparent);
+}
+.diff-empty {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--code-rule) 60%, transparent) 6px 7px
+  );
+}
+.diff-fold td {
+  background: var(--sunk);
+  border-block: 1px solid var(--code-rule);
+  padding: 0;
+}
+.diff-fold button {
+  display: block;
+  width: 100%;
+  padding: 3px 14px;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-mid);
+  transition: color 120ms, background 120ms;
+}
+.diff-fold button:hover {
+  color: var(--hot-ink);
+  background: var(--hover);
+}
 /* The question is the reader's own words; it should not shout. */
 .chat-bubble {
   color: var(--ink);
 }
 
-/* ── The architecture map ─────────────────────────────────────────────────────
-   Drawn from `architecture_json`, so the number of nodes and their arrangement
-   are not known until render. Everything here is therefore expressed against the
-   element rather than against a position: a node rises in place, an edge draws
-   along its own length.
-
-   Edges use `pathLength="1"` on the path, which renormalises the geometry so a
-   dash of `1` is the whole line whatever its actual length. Without it every edge
-   would need its length measured in JS after layout, and short edges would finish
-   drawing while long ones were still a third done. */
-@keyframes arch-node-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+/* Home's flow: the link between two steps, a dashed line that runs toward the
+   next one. Still under reduced motion (the block above stops every animation). */
+.flow-link {
+  background-image: linear-gradient(90deg, var(--hot) 50%, transparent 50%);
+  background-size: 8px 1px;
+  opacity: 0.7;
+  animation: flow-run 1.2s linear infinite;
 }
-@keyframes arch-edge-in {
+/* Home's pipeline: a dot running along a link, the repository's hosts taking turns,
+   the knowledge base glowing as it fills. Stopped under reduced motion with the rest. */
+@keyframes pipe-travel-x {
   from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@keyframes arch-label-in {
-  from {
+    left: 0;
     opacity: 0;
   }
-  to {
+  15% {
     opacity: 1;
   }
-}
-/* Direction, shown rather than inferred from an arrowhead five pixels wide. */
-@keyframes arch-flow {
-  from {
-    stroke-dashoffset: 24;
+  85% {
+    opacity: 1;
   }
   to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.arch-node {
-  /* Without fill-box the origin is the whole SVG, and a hovered node in the
-     bottom row flies across the diagram instead of growing where it stands. */
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: arch-node-in 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
-}
-.arch-node:hover {
-  transform: scale(1.035);
-}
-.arch-edge {
-  stroke-dasharray: 1;
-  animation: arch-edge-in 0.5s ease-out backwards;
-}
-.arch-flow {
-  stroke-dasharray: 5 7;
-  animation: arch-flow 0.9s linear infinite;
-}
-.arch-label {
-  animation: arch-label-in 0.3s ease-out backwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .arch-node,
-  .arch-edge,
-  .arch-label,
-  .arch-flow {
-    animation: none;
-  }
-  .arch-edge {
-    stroke-dasharray: none;
-  }
-  .arch-node:hover {
-    transform: none;
-  }
-}
-
-/* ── The knowledge graph ──────────────────────────────────────────────────────
-   A radial drill-down: the project at the centre, roles on the first ring,
-   then modules, then files, then the symbols in a file.
-
-   Positions are tweened in JavaScript rather than by CSS, because the whole
-   wheel re-apportions itself on every expansion: a node's angle depends on how
-   many leaves its siblings currently have. Transitioning `transform` per node
-   would move the nodes and leave the edges snapping between frames, and an edge
-   that arrives before the node it points at reads as a glitch. So the layout is
-   interpolated and everything is drawn from the same interpolated positions. */
-@keyframes kb-fade-in {
-  from {
+    left: calc(100% - 20px);
     opacity: 0;
   }
-  to {
+}
+@keyframes pipe-travel-y {
+  from {
+    top: 0;
+    opacity: 0;
+  }
+  20% {
     opacity: 1;
   }
+  to {
+    top: calc(100% - 5px);
+    opacity: 0;
+  }
 }
-@keyframes kb-pulse {
+@keyframes pipe-cycle {
+  0%,
+  40%,
+  100% {
+    opacity: 0.38;
+    transform: scale(1);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+}
+@keyframes pipe-glow {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.1;
+    transform: scale(0.85);
   }
   50% {
-    opacity: 1;
+    opacity: 0.32;
+    transform: scale(1.1);
   }
 }
-
-.kb-canvas {
-  touch-action: none;
-  cursor: grab;
-  /* Every label in here is inside a thing you drag. Without this, moving a card
-     paints a selection through whatever text the cursor crossed on the way. */
-  user-select: none;
-  -webkit-user-select: none;
-  background-color: var(--panel);
-  /* The blueprint field, so the graph reads as something drawn on a surface
-     rather than floating on nothing. */
-  background-image: radial-gradient(var(--rule) 0.9px, transparent 0.9px);
-  background-size: 18px 18px;
-}
-.kb-canvas.dragging {
-  cursor: grabbing;
-}
-.kb-node {
-  cursor: pointer;
-}
-/* Selectable text inside a draggable canvas turns every pan into a highlight,
-   so selection is off - but the label stays clickable, because clicking the
-   word SERVICE is the obvious gesture and it was inert while this said
-   `pointer-events: none`. */
-.kb-label {
-  user-select: none;
-}
-.kb-enter {
-  animation: kb-fade-in 0.35s ease-out backwards;
-}
-.kb-loading {
-  animation: kb-pulse 1.1s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .kb-enter,
-  .kb-loading {
-    animation: none;
+@keyframes flow-run {
+  from {
+    background-position: 0 0;
   }
-}
-
-/* A symbol row in the graph's table node. Its own rule because the row is a
-   destination - it goes to a line of source - and nothing about a `<g>` says so. */
-.kb-row {
-  cursor: pointer;
-}
-.kb-row:hover rect {
-  fill: var(--hot-wash);
-}
-.kb-row:hover text {
-  fill: var(--hot-ink);
+  to {
+    background-position: 16px 0;
+  }
 }

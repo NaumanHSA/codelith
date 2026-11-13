@@ -36,12 +36,13 @@ logger = structlog.get_logger(__name__)
 
 
 class AnalysisWorkflow:
-    def __init__(self, project, job, db: AsyncSession, sandbox=None) -> None:
+    def __init__(self, project, job, db: AsyncSession, sandbox=None, force: bool = False) -> None:
         self.project = project
         self.job = job
         self.db = db
         self.job_id = job.id
         self.sandbox = sandbox
+        self.force = force
 
     async def run(self) -> dict[str, Any]:
         graph = self._build_graph()
@@ -49,6 +50,7 @@ class AnalysisWorkflow:
             "project": self.project,
             "job": self.job,
             "sandbox": self.sandbox,
+            "force": self.force,
         }
         final = await graph.ainvoke(initial)
         return {

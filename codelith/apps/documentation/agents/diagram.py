@@ -443,7 +443,8 @@ class DiagramAgent(BaseAgent):
         Attached to the first document of the run rather than to each: they describe
         the system, not a page, and repeating them under every heading is noise.
         """
-        from codelith.knowledge.diagrams import module_map, system_context
+        from codelith.knowledge.diagrams import module_map, request_flow, system_context
+        from codelith.knowledge.flows import FlowService
         from codelith.tools.d2_render import render_svg
 
         kb_id = state.get("kb_id")
@@ -472,6 +473,19 @@ class DiagramAgent(BaseAgent):
         if files:
             roles = {m.path: m.role for m in modules}
             sources.append(("module_map", "Module Dependencies", module_map(files, imports, roles)))
+
+        # One real request, entry to data, from the call graph: the request that goes
+        # deepest before it reaches data is the one that says most about the system.
+        kb = await repos.bases.get_by_id(kb_id)
+        if kb is not None:
+            flows = [f for f in await FlowService(self.db, kb).flows() if f.ends and len(f.chain) >= 3]
+            if flows:
+                top = max(flows, key=lambda f: len(f.chain))
+                chain = [
+                    {"qname": top.steps[i].qname, "path": top.steps[i].path, "part": top.steps[i].part}
+                    for i in top.chain
+                ]
+                sources.append(("request_flow", f"How {top.name} flows", request_flow(top.name, chain, top.ends)))
 
         target = doc_key(docs[0]) or ""
         drawn: list[dict] = []

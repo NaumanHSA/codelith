@@ -5,6 +5,7 @@ import { api } from '../../lib/api'
 import { useChatThreads } from '../../chat-threads'
 import type { ChatThreadSummary } from '../../lib/types'
 import ConfirmDelete from '../ConfirmDelete'
+import { Icon } from '../../lib/icons'
 
 /* ------------------------------------------------------------------ *
  * Conversations in the rail.
@@ -107,7 +108,7 @@ function RowMenu({
           open ? 'text-hot-ink' : 'text-ink-dim hover:text-ink'
         } ${busy ? 'anim-pulse' : ''}`}
       >
-        ⋯
+        <Icon name="ellipsis" size={15} />
       </button>
 
       {at &&
@@ -118,12 +119,12 @@ function RowMenu({
             // The dismiss listener is on mousedown, so the menu must stop its own
             // or every click closes it before the button below can fire.
             onMouseDown={e => e.stopPropagation()}
-            className="z-50 border border-rule bg-panel shadow-md"
+            className="z-50 overflow-hidden rounded-lg border border-line-2 bg-panel p-1 shadow-[0_16px_40px_-12px_var(--shadow)]"
           >
             <button
               type="button"
               onClick={() => void exportMd()}
-              className="block w-full px-2.5 py-1.5 text-left text-[11px] text-ink-mid transition-colors hover:bg-sunk hover:text-ink"
+              className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-mid transition-colors hover:bg-hover hover:text-ink"
             >
               Export as Markdown
             </button>
@@ -133,7 +134,7 @@ function RowMenu({
                 setAt(null)
                 setConfirming(true)
               }}
-              className="block w-full border-t border-rule px-2.5 py-1.5 text-left text-[11px] text-ink-mid transition-colors hover:bg-bad-wash hover:text-bad"
+              className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-mid transition-colors hover:bg-bad-wash hover:text-bad"
             >
               Delete
             </button>
@@ -168,17 +169,17 @@ export default function ThreadRail() {
     <>
       <button
         onClick={() => navigate(NEW_CHAT(activeProject))}
-        className="flex w-full items-center gap-2 py-[6px] pr-2 pl-4 text-left text-[12px] text-ink-mid transition-colors hover:bg-sunk hover:text-ink"
+        className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-[6px] text-left text-[13px] text-ink-mid transition-colors hover:bg-hover hover:text-ink"
       >
-        <span className="text-[14px] leading-none text-hot">+</span>
+        <Icon name="plus" size={15} className="text-hot" />
         New chat
       </button>
 
       <div className="max-h-[30vh] overflow-y-auto">
-        {loading && <p className="px-4 py-1 text-[10.5px] text-ink-dim">Loading…</p>}
+        {loading && <p className="px-2.5 py-1 text-[12px] text-ink-dim">Loading…</p>}
 
         {!loading && threads.length === 0 && (
-          <p className="px-4 py-1 text-[10.5px] leading-snug text-ink-dim">
+          <p className="px-2.5 py-1 text-[12px] leading-snug text-ink-dim">
             No conversations yet.
           </p>
         )}
@@ -188,26 +189,26 @@ export default function ThreadRail() {
           return (
             <div
               key={t.id}
-              className={`group relative flex items-center gap-1.5 pr-1.5 pl-4 transition-colors ${
-                active ? 'bg-hot-wash' : 'hover:bg-sunk'
+              className={`group flex items-center gap-1.5 rounded-[7px] pr-1.5 pl-2.5 transition-colors ${
+                active
+                  ? 'bg-sunk text-ink shadow-[inset_0_0_0_1px_var(--rule)]'
+                  : 'text-ink-mid hover:bg-hover hover:text-ink'
               }`}
             >
-              {active && <span className="absolute top-0 left-0 h-full w-[3px] bg-hot" />}
+              <Icon
+                name="message-square"
+                size={15}
+                className={active ? 'text-hot' : 'text-ink-dim group-hover:text-ink'}
+              />
               <button
                 onClick={() => navigate(`/app/chat?project=${t.project_id}&thread=${t.id}`)}
                 title={`${t.title} · ${t.project_name}`}
-                className="min-w-0 flex-1 py-[5px] text-left"
+                className="min-w-0 flex-1 py-[5px] pl-1 text-left"
               >
-                <span
-                  className={`block truncate text-[12px] ${
-                    active ? 'font-semibold text-hot-ink' : 'text-ink-mid'
-                  }`}
-                >
+                <span className={`block truncate text-[13px] ${active ? 'font-medium' : ''}`}>
                   {t.title}
                 </span>
-                <span className="block truncate text-[10px] text-ink-dim">
-                  {t.project_name}
-                </span>
+                <span className="block truncate text-[11px] text-ink-dim">{t.project_name}</span>
               </button>
               <RowMenu
                 thread={t}

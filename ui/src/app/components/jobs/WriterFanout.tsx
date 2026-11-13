@@ -90,11 +90,11 @@ export default function WriterFanout({
   return (
     <div className="border-t border-rule bg-sunk/30 px-3 py-2.5">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="tag text-ink-dim">
+        <span className="text-[12px] font-medium text-ink-dim">
           {done}/{sections.length} sections written
         </span>
         {writing.length > 1 && (
-          <span className="tag text-hot-ink">{writing.length} in parallel</span>
+          <span className="text-[12px] font-medium text-hot-ink">{writing.length} in parallel</span>
         )}
       </div>
 
@@ -116,9 +116,9 @@ export default function WriterFanout({
                   strokeDasharray={s.state === 'pending' ? '2 2' : undefined}
                 />
               </svg>
-              <span className={`block size-[6px] shrink-0 rotate-45 ${DOT[s.state]}`} />
+              <span className={`block size-[6px] shrink-0 rounded-full ${DOT[s.state]}`} />
               <span
-                className={`min-w-0 flex-1 truncate text-[11.5px] ${
+                className={`min-w-0 flex-1 truncate text-[12.5px] ${
                   s.state === 'pending'
                     ? 'text-ink-dim'
                     : s.state === 'writing'
@@ -130,13 +130,13 @@ export default function WriterFanout({
                 {s.name}
               </span>
               {multiPage && (
-                <span className="tag hidden shrink-0 text-ink-dim md:block">
+                <span className="text-[12px] font-medium hidden shrink-0 text-ink-dim md:block">
                   {s.page.split('/').pop()}
                 </span>
               )}
-              {s.state === 'writing' && <span className="tag shrink-0 text-hot-ink">writing…</span>}
+              {s.state === 'writing' && <span className="text-[12px] font-medium shrink-0 text-hot-ink">Writing…</span>}
               {s.state === 'done' && s.words != null && (
-                <span className="tag shrink-0 text-ink-dim">{s.words}w</span>
+                <span className="text-[12px] font-medium shrink-0 text-ink-dim">{s.words}w</span>
               )}
             </li>
           ))}

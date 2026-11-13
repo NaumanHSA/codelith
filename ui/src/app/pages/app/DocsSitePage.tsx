@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
+import { Icon } from '../../lib/icons'
+import { IconTile, Pill } from '../../components/primitives'
+import { APP_LOOKS } from '../../lib/kinds'
 import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
 import { useRunningJobs } from '../../running-jobs'
@@ -284,7 +287,7 @@ ${body}
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1100px] p-5">
+      <div className="w-full px-6 py-5">
         <SkeletonPanel rows={8} />
       </div>
     )
@@ -292,7 +295,7 @@ ${body}
 
   if (error) {
     return (
-      <div className="mx-auto max-w-[1100px] p-5">
+      <div className="w-full px-6 py-5">
         <ErrorState message={error} onRetry={reload} />
       </div>
     )
@@ -300,7 +303,7 @@ ${body}
 
   if (!site || !site.sections.length) {
     return (
-      <div className="mx-auto max-w-[1100px] p-5">
+      <div className="w-full px-6 py-5">
         <EmptyState
           title="No documentation site yet"
           body="Analysis proposes the sections and pages this project warrants. Run it, and the site appears as a map you can fill in a section at a time."
@@ -318,25 +321,31 @@ ${body}
     <div className="flex min-h-full flex-col">
       {/* ── top: project, sections, search, coverage ─────────────────── */}
       <header className="sticky top-0 z-20 border-b border-rule bg-paper">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-3 pb-2">
-          <button
-            onClick={() => navigate(`/app/projects/${id}`)}
-            className="tag text-ink-dim transition-colors hover:text-hot-ink"
-          >
-            ← {project?.name ?? 'project'}
-          </button>
-          <h1 className="truncate text-[14px] font-bold tracking-tight text-ink">{site.title}</h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pt-4 pb-3">
+          <IconTile icon={APP_LOOKS.documentation.icon} color={APP_LOOKS.documentation.color} tint size={36} />
+          <div className="min-w-0">
+            <h1 className="truncate text-[18px] leading-tight font-semibold text-ink">{site.title}</h1>
+            <button
+              onClick={() => navigate(`/app/projects/${id}`)}
+              className="text-[12px] text-ink-dim transition-colors hover:text-ink"
+            >
+              Documentation of {project?.name ?? 'this codebase'}
+            </button>
+          </div>
 
           <div className="relative ml-auto">
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="search pages…"
-              aria-label="Search pages"
-              className="w-[190px] border border-rule bg-sunk/60 px-2.5 py-[5px] font-mono text-[11px] text-ink transition-colors placeholder:text-ink-dim focus:border-hot focus:bg-panel focus:outline-none"
-            />
+            <label className="flex h-[34px] w-[230px] items-center gap-2 rounded-lg border border-line-2 bg-sunk px-2.5 focus-within:border-hot">
+              <Icon name="search" size={14} className="text-ink-dim" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search pages"
+                aria-label="Search pages"
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-ink-dim focus:outline-none"
+              />
+            </label>
             {results.length > 0 && (
-              <ul className="absolute top-full right-0 z-30 mt-1 w-[320px] border border-rule bg-panel shadow-lg">
+              <ul className="absolute top-full right-0 z-30 mt-1 w-[340px] overflow-hidden rounded-lg border border-line-2 bg-panel p-1 shadow-[0_16px_40px_-12px_var(--shadow)]">
                 {results.map(r => (
                   <li key={r.address}>
                     <button
@@ -344,10 +353,11 @@ ${body}
                         setQuery('')
                         open(r.section.slug, r.page)
                       }}
-                      className="flex w-full items-baseline gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-sunk"
+                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-hover"
                     >
-                      <span className="truncate text-[11.5px] text-ink">{r.page.title}</span>
-                      <span className="tag ml-auto shrink-0 text-ink-dim">{r.address}</span>
+                      <Icon name="file-text" size={14} className="shrink-0 text-ink-dim" />
+                      <span className="truncate text-[13px] text-ink">{r.page.title}</span>
+                      <span className="ml-auto shrink-0 text-[12px] text-ink-dim">{r.section.title}</span>
                     </button>
                   </li>
                 ))}
@@ -358,10 +368,10 @@ ${body}
           <button
             onClick={() => navigate(`/app/projects/${id}/docs${suffix}`)}
             title="The whole map: what is built, planned and stale"
-            className="flex items-center gap-2 border border-rule bg-panel px-2 py-[4px] transition-colors hover:border-ink"
+            className="flex h-[34px] items-center gap-2 rounded-lg border border-line-2 bg-sunk px-3 transition-colors hover:bg-hover"
           >
             <Meter pct={cov.pct} segments={12} />
-            <span className="tag text-ink-dim">{cov.pct}%</span>
+            <span className="text-[12.5px] text-ink-mid">{cov.pct}% written</span>
           </button>
 
           <SiteToolbar
@@ -415,9 +425,9 @@ ${body}
 
       {version && (
         <div className="flex flex-wrap items-center gap-2 border-b border-rule bg-sunk px-4 py-1.5">
-          <span className="tag text-ink-dim">reading version</span>
-          <span className="text-[11.5px] font-semibold text-ink">{version}</span>
-          <span className="text-[11px] text-ink-dim">
+          <span className="text-[12px] font-medium text-ink-dim">Reading version</span>
+          <span className="text-[12.5px] font-semibold text-ink">{version}</span>
+          <span className="text-[12px] text-ink-dim">
             frozen: nothing here can be rewritten
           </span>
           <button
@@ -426,9 +436,9 @@ ${body}
               next.delete('v')
               setParams(next, { replace: true })
             }}
-            className="tag ml-auto text-hot-ink hover:underline"
+            className="text-[12px] font-medium ml-auto text-hot-ink hover:underline"
           >
-            back to the live site →
+            Back to the live site
           </button>
         </div>
       )}
@@ -463,7 +473,7 @@ ${body}
       />
 
       {showCoverage ? (
-        <div className="mx-auto w-full max-w-[1100px] p-5">
+        <div className="w-full px-6 py-5">
           {/* Above the coverage list, because publishing is what a finished site is
               for, and the list below is about finishing it. Manager-gated the same
               way writing is: publishing puts pages where other people can read them. */}
@@ -488,7 +498,7 @@ ${body}
               site.home_markdown ? (
                 // Home is derived from the map on every read, so it can never
                 // fall behind the nav — it has no stored copy to go stale.
-                <article className="doc min-w-0 border border-rule bg-panel px-5 py-4 md:px-8 md:py-6">
+                <article className="doc min-w-0 rounded-xl border border-rule bg-panel px-5 py-5 md:px-9 md:py-7">
                   <Suspense fallback={<SkeletonPanel rows={4} />}>
                     <DocMarkdown>{site.home_markdown}</DocMarkdown>
                   </Suspense>
@@ -526,9 +536,9 @@ ${body}
           the reading measure matters more.
         */
         <div ref={scroller} className="min-w-0 flex-1 p-5">
-          <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 lg:grid-cols-[288px_minmax(0,1fr)] xl:grid-cols-[288px_minmax(0,1fr)_200px]">
+          <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[288px_minmax(0,1fr)] xl:grid-cols-[288px_minmax(0,1fr)_200px]">
             <aside className="lg:sticky lg:top-[86px] lg:h-fit lg:self-start">
-              <div className="border border-rule bg-panel">
+              <div className="overflow-hidden rounded-xl border border-rule bg-panel">
                 <SiteNav
                   section={activeSection}
                   activeSlug={pageSlug}
@@ -614,32 +624,34 @@ ${body}
 
               {/* ── prev / next ────────────────────────────────── */}
               {(prev || next) && (
-                <div className="mt-6 grid grid-cols-2 gap-px border border-rule bg-rule">
+                <div className="mt-6 grid grid-cols-2 gap-3">
                   {prev ? (
                     <button
                       onClick={() => open(prev.section.slug, prev.page)}
-                      className="bg-panel px-3 py-2.5 text-left transition-colors hover:bg-sunk"
+                      className="group flex items-center gap-3 rounded-xl border border-rule bg-panel px-4 py-3 text-left transition-colors hover:border-line-2 hover:bg-hover"
                     >
-                      <span className="tag block text-ink-dim">← {prev.section.title}</span>
-                      <span className="mt-0.5 block truncate text-[12px] text-ink">
-                        {prev.page.title}
+                      <Icon name="arrow-left" size={16} className="text-ink-dim group-hover:text-ink" />
+                      <span className="min-w-0">
+                        <span className="block text-[12px] text-ink-dim">Previous · {prev.section.title}</span>
+                        <span className="mt-0.5 block truncate text-[14px] font-medium text-ink">{prev.page.title}</span>
                       </span>
                     </button>
                   ) : (
-                    <span className="bg-panel" />
+                    <span />
                   )}
                   {next ? (
                     <button
                       onClick={() => open(next.section.slug, next.page)}
-                      className="bg-panel px-3 py-2.5 text-right transition-colors hover:bg-sunk"
+                      className="group flex items-center justify-end gap-3 rounded-xl border border-rule bg-panel px-4 py-3 text-right transition-colors hover:border-line-2 hover:bg-hover"
                     >
-                      <span className="tag block text-ink-dim">{next.section.title} →</span>
-                      <span className="mt-0.5 block truncate text-[12px] text-ink">
-                        {next.page.title}
+                      <span className="min-w-0">
+                        <span className="block text-[12px] text-ink-dim">Next · {next.section.title}</span>
+                        <span className="mt-0.5 block truncate text-[14px] font-medium text-ink">{next.page.title}</span>
                       </span>
+                      <Icon name="arrow-right" size={16} className="text-ink-dim group-hover:text-ink" />
                     </button>
                   ) : (
-                    <span className="bg-panel" />
+                    <span />
                   )}
                 </div>
               )}
@@ -746,27 +758,30 @@ function PageBody({
 
   return (
     <>
-      <div className="mb-4 border-b border-rule pb-3">
+      <div className="mb-5 border-b border-rule pb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="tag text-ink-dim">
-            {section.title} / {page.slug}
-          </span>
-          {page.status !== 'ready' && page.status !== 'stale' && (
-            <Chip tone={page.status === 'failed' ? 'bad' : 'plain'}>{page.status}</Chip>
-          )}
+          <span className="text-[12.5px] text-ink-dim">{section.title}</span>
+          {page.status === 'failed' ? (
+            <Pill tone="bad" icon="circle-x">Failed</Pill>
+          ) : page.status === 'planned' ? (
+            <Pill icon="circle-dashed">Planned</Pill>
+          ) : page.status === 'generating' ? (
+            <Pill tone="hot" icon="loader">Writing</Pill>
+          ) : page.status === 'orphaned' ? (
+            <Pill icon="circle-dashed">No longer proposed</Pill>
+          ) : null}
           {previous && (
             <button
               onClick={() => setShowDiff(d => !d)}
-              className="tag border border-rule bg-sunk px-1.5 py-[3px] text-ink-mid transition-colors hover:border-ink hover:text-ink"
+              className="inline-flex h-6 items-center gap-1.5 rounded-full border border-line-2 px-2.5 text-[12px] font-medium text-ink-mid transition-colors hover:text-ink"
             >
-              {showDiff ? 'hide changes' : 'what changed?'}
+              <Icon name="git-compare-arrows" size={13} />
+              {showDiff ? 'Hide changes' : 'What changed?'}
             </button>
           )}
         </div>
-        <h1 className="mt-1.5 text-[21px] leading-tight font-bold tracking-tight text-ink">
-          {page.title}
-        </h1>
-        {page.intent && <p className="mt-1.5 text-[12px] text-ink-mid">{page.intent}</p>}
+        <h1 className="mt-2 text-[26px] leading-tight font-semibold text-ink">{page.title}</h1>
+        {page.intent && <p className="mt-2 max-w-[75ch] text-[14px] leading-relaxed text-ink-mid">{page.intent}</p>}
       </div>
 
       {inFlight && (
@@ -782,14 +797,15 @@ function PageBody({
 
       {/* Staleness is per page, so the offer is precise: refresh *this* one. */}
       {page.status === 'stale' && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 border border-warn/40 bg-warn-wash px-3 py-2">
-          <span className="tag text-warn">out of date</span>
-          <span className="font-sans text-[11.5px] text-ink-mid">
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-warn/40 bg-warn-wash px-3 py-2">
+          <Icon name="triangle-alert" size={15} className="text-warn" />
+          <span className="text-[13px] font-medium text-warn">Out of date</span>
+          <span className="text-[12.5px] text-ink-mid">
             The code this page was written from has changed since {shortSha(page.commit_sha)}.
           </span>
           {canGenerate && (
             <Button variant="ghost" className="ml-auto" onClick={onGenerate} disabled={generating}>
-              {generating ? 'rewriting…' : '↻ Rewrite'}
+              {generating ? 'Rewriting…' : 'Rewrite'}
             </Button>
           )}
         </div>
@@ -801,12 +817,12 @@ function PageBody({
           every other affordance is about pages that do not exist yet. That is the
           confusion, and this is the half of the fix that keeps the capability. */}
       {canGenerate && page.status === 'ready' && markdown && (
-        <details className="mb-4 border border-rule bg-sunk/40">
-          <summary className="cursor-pointer px-3 py-2 text-[12px] text-ink-mid transition-colors select-none hover:text-hot-ink">
-            ↻ Write this page again
+        <details className="mb-4 overflow-hidden rounded-lg border border-rule bg-panel">
+          <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-[13px] text-ink-mid transition-colors select-none hover:text-ink">
+            <Icon name="refresh-cw" size={14} /> Write this page again
           </summary>
           <div className="flex flex-col gap-3 border-t border-rule px-3 py-2.5">
-            <p className="font-sans text-[11.5px] leading-relaxed text-warn">
+            <p className="text-[12.5px] leading-relaxed text-warn">
               This replaces the {page.word_count} words currently on the page. To change
               part of it instead, use the rewrite button beside a heading.
             </p>
@@ -823,7 +839,7 @@ function PageBody({
               onClick={onGenerate}
               disabled={generating}
             >
-              {generating ? 'rewriting…' : '↻ Replace this page'}
+              {generating ? 'Rewriting…' : 'Replace this page'}
             </Button>
           </div>
         </details>
@@ -832,7 +848,7 @@ function PageBody({
       {showDiff && previous && markdown ? (
         <PageDiff before={previous} after={markdown} onClose={() => setShowDiff(false)} />
       ) : markdown ? (
-        <article className="doc min-w-0 border border-rule bg-panel px-5 py-4 md:px-8 md:py-6">
+        <article className="doc min-w-0 rounded-xl border border-rule bg-panel px-5 py-5 md:px-9 md:py-7">
           <Suspense fallback={<SkeletonPanel rows={8} />}>
             <DocMarkdown
               onRevise={onRevise}
@@ -845,17 +861,22 @@ function PageBody({
           {detail && <Grounding page={detail} />}
         </article>
       ) : (
-        <section className="plate p-5">
+        <section className="plate p-6">
           {/* `generating` is not listed: PageProgress above already says so, in
               far more detail than a three-word tag could. */}
-          <span className="tag text-ink-dim">
+          <span className="flex items-center gap-2 text-[14px] font-medium text-ink">
+            <Icon
+              name={page.status === 'failed' ? 'circle-x' : inFlight ? 'pencil' : 'circle-dashed'}
+              size={16}
+              className={page.status === 'failed' ? 'text-bad' : 'text-ink-dim'}
+            />
             {page.status === 'failed'
-              ? 'this page could not be written'
+              ? 'This page could not be written'
               : inFlight
-                ? 'what it will say'
-                : 'not written yet'}
+                ? 'What it will say'
+                : 'Not written yet'}
           </span>
-          <p className="mt-2 max-w-[60ch] text-[12px] leading-relaxed text-ink-mid">
+          <p className="mt-2 max-w-[70ch] text-[13.5px] leading-relaxed text-ink-mid">
             {page.reason
               ? `Analysis proposed this page because ${page.reason.charAt(0).toLowerCase()}${page.reason.slice(1)}`
               : 'Analysis proposed this page from the knowledge base.'}
@@ -863,10 +884,11 @@ function PageBody({
 
           {!!page.key_files?.length && (
             <div className="mt-4">
-              <span className="tag block text-ink-dim">It will be written from</span>
-              <ul className="mt-1.5 space-y-0.5">
+              <span className="block text-[12.5px] font-medium text-ink-mid">It will be written from</span>
+              <ul className="mt-2 flex flex-col gap-1">
                 {page.key_files.map(f => (
-                  <li key={f} className="font-mono text-[11px] text-ink-mid">
+                  <li key={f} className="flex items-center gap-2 font-mono text-[12.5px] text-ink-mid">
+                    <Icon name="file-code" size={14} className="text-ink-dim" />
                     {f}
                   </li>
                 ))}
@@ -885,7 +907,7 @@ function PageBody({
                   writing one page silently inherited whatever the bar had been left
                   on — and the bar is not on screen, so there was nothing to inherit
                   it from as far as the reader could tell. */}
-              <div className="border border-rule bg-sunk/40 px-3 py-2.5">
+              <div className="rounded-lg border border-rule bg-sunk px-3.5 py-3">
                 <WriteOptions
                   depth={depth}
                   onDepth={onDepth}
@@ -903,20 +925,20 @@ function PageBody({
                     disabled={generatingSection || generating}
                   >
                     {generatingSection
-                      ? 'writing the section…'
+                      ? 'Writing the section…'
                       : `Write all ${sectionRemaining} unwritten pages in ${section.title}`}
                   </Button>
                   <Button variant="ghost" onClick={onGenerate} disabled={generating || generatingSection}>
-                    {generating ? 'writing…' : 'Just this page'}
+                    {generating ? 'Writing…' : 'Just this page'}
                   </Button>
-                  <span className="tag w-full text-ink-dim">
+                  <span className="w-full text-[12.5px] text-ink-dim">
                     One run plans the whole section together, so the pages divide the
                     material between them instead of each deciding alone.
                   </span>
                 </>
               ) : (
                 <Button variant="hot" onClick={onGenerate} disabled={generating}>
-                  {generating ? 'writing…' : 'Write this page'}
+                  {generating ? 'Writing…' : 'Write this page'}
                 </Button>
               )}
               </div>

@@ -91,6 +91,9 @@ class KnowledgeBase(Base, TimestampMixin):
     #: digest here. Deliberately not a git diff — uploads and local directories have
     #: no commits, and this works for all of them.
     file_hashes_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
+    #: How often each file changed, read from git while the checkout existed:
+    #: `knowledge/churn.py`. Empty for a source with no history (an upload).
+    churn_json: Mapped[dict] = mapped_column(json_column(), default=dict, nullable=False)
     #: doc-type key → the composition strategy chosen for it: audience, tone, whether
     #: diagrams are worth drawing.
     #:

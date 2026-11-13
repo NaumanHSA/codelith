@@ -59,7 +59,7 @@ export function ContextWheel({
           className="stroke-current transition-[stroke-dashoffset] duration-300"
         />
       </svg>
-      <span className="text-[10px] tabular-nums">{pct}%</span>
+      <span className="text-[11.5px] tabular-nums">{pct}%</span>
     </span>
   )
 }

@@ -21,12 +21,18 @@ from pathlib import PurePosixPath
 from codelith.knowledge.constants import EntityKind
 from codelith.languages.base import (
     CallRef,
+    Declared,
     DetectedEntity,
+    FlowFacts,
     ImportRef,
+    Issue,
     LanguageProvider,
     ModuleRef,
+    RunInfo,
     Symbol,
 )
+from codelith.languages.providers import _ecosystem_deps as ecosystem_deps
+from codelith.languages.providers import _pattern_qa as pattern_qa
 from codelith.languages.taxonomy import ModuleKind, SymbolKind, Visibility
 
 _FUNC = re.compile(r"^func\s+(\w+)\s*(?:\[[^\]]*\])?\s*\(")
@@ -135,6 +141,7 @@ class GoProvider(LanguageProvider):
     display_name = "Go"
     extensions = (".go",)
     manifest_files = ("go.mod",)
+    lock_files = ("go.sum", "go.work.sum")
 
     # ── Symbols ───────────────────────────────────────────────────────────────
 
@@ -409,6 +416,42 @@ class GoProvider(LanguageProvider):
                     ))
         return out
 
+    has_rules = True
+    qa_rules = pattern_qa.labels(pattern_qa.GO)
+
+    def flow_facts(self, relative_path: str, source: str) -> FlowFacts | None:
+        return pattern_qa.flow_facts(source, "go")
+
+    ecosystem = "Go"
+
+    def declared(self, relative_path: str, source: str) -> list[Declared]:
+        return ecosystem_deps.go_declared(relative_path, source)
+
+    def imported_packages(self, relative_path: str, source: str) -> list[tuple[str, int]]:
+        seen: dict[str, int] = {}
+        for ref in self.extract_imports(source, relative_path):
+            root = ecosystem_deps.go_root(ref.target)
+            if root:
+                seen.setdefault(root, ref.line)
+        return sorted(seen.items(), key=lambda kv: kv[1])
+
+    def provides(self, package: str, imported: str) -> bool:
+        return imported == package or imported.startswith(package + "/")
+
+    def inspect(self, relative_path: str, source: str) -> list[Issue]:
+        return pattern_qa.scan(source, pattern_qa.GO, self.is_test_file(relative_path))
+
+    def run_info(self, relative_path: str, source: str, siblings: frozenset[str]) -> RunInfo | None:
+        if PurePosixPath(relative_path).name != "go.mod":
+            return None
+        version = re.search(r"^go\s+(\S+)", source, re.MULTILINE)
+        return RunInfo(
+            runtime="Go",
+            version=version.group(1) if version else None,
+            install=["go mod download"],
+            run=[("go build ./...", "builds every package")],
+            test=["go test ./..."],
+        )
 
 #: `const`/`var` keyword to the kind it declares.
 _KIND = {"const": SymbolKind.CONSTANT, "var": SymbolKind.VARIABLE}
@@ -416,6 +459,7 @@ _KIND = {"const": SymbolKind.CONSTANT, "var": SymbolKind.VARIABLE}
 
 def _line_of(source: str, offset: int) -> int:
     return source.count("\n", 0, offset) + 1
+
 
 
 __all__ = ["GoProvider"]

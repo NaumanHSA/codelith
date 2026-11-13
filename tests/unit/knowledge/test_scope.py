@@ -274,6 +274,24 @@ class TestVerdicts:
         assert QUESTIONS[0] in verdict.reply
 
 
+class TestTheCallItMakes:
+    async def test_a_reasoning_model_is_left_room_to_answer(self, monkeypatch) -> None:
+        """A reasoning model thinks before it writes. Measured with qwen3.5-9b, a
+        300-token cap was spent entirely on reasoning and returned no content, so
+        the gate failed open on every question. It must not cap its own output."""
+        seen: dict = {}
+
+        async def fake_chat_completion(messages, **kwargs):
+            seen.update(kwargs)
+            return '{"verdict": "code", "reason": "x", "reply": ""}'
+
+        monkeypatch.setattr("codelith.llm.client.chat_completion", fake_chat_completion)
+
+        await ScopeGate(_profile()).judge("what is the capital of France")
+
+        assert seen.get("max_tokens") is None
+
+
 class TestItFailsOpen:
     """Every uncertain path answers `code`. Refusing a real question about somebody's
     own code is indistinguishable, to them, from the product being broken."""

@@ -41,6 +41,18 @@ class CitedByOut(BaseModel):
     title: str
 
 
+class FindingBriefOut(BaseModel):
+    id: int
+    rule: str
+    area: str
+    severity: str
+    confidence: str
+    title: str
+    path: str | None
+    line: int | None
+    run_id: int
+
+
 class PreflightOut(BaseModel):
     target: str
     found: bool
@@ -62,6 +74,8 @@ class PreflightOut(BaseModel):
     tests: list[str] = Field(default_factory=list)
     documented_in: list[CitedByOut] = Field(default_factory=list)
     facts: list[str] = Field(default_factory=list)
+    #: Open QA findings in these files.
+    findings: list[FindingBriefOut] = Field(default_factory=list)
 
 
 @router.get("/{project_id}/preflight", response_model=PreflightOut)
@@ -115,4 +129,9 @@ async def preflight(
         tests=report.tests,
         documented_in=[CitedByOut(address=p.address, title=p.title) for p in report.documented_in],
         facts=report.facts,
+        findings=[
+            FindingBriefOut(id=k.id, rule=k.rule, area=k.area, severity=k.severity, confidence=k.confidence,
+                            title=k.title, path=k.path, line=k.line, run_id=k.run_id)
+            for k in report.findings
+        ],
     )

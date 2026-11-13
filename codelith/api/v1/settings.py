@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from codelith.config import get_settings
 from codelith.dependencies import AdminUser, CurrentUser, DbSession
 from codelith.models.setting import SystemSetting
 
@@ -98,6 +99,55 @@ async def _set(db, key: str, value: dict, user_id: int) -> None:
 
 
 # ── Features ──────────────────────────────────────────────────────────────────
+
+class CodebaseStorage(BaseModel):
+    id: int
+    name: str
+    readings_with_files: int
+    blobs: int
+    bytes: int
+    stored_bytes: int
+
+
+class Storage(BaseModel):
+    #: Every reading's files on this machine: distinct contents, their size, and what
+    #: they take compressed.
+    blobs: int
+    bytes: int
+    stored_bytes: int
+    #: 0 keeps every reading's files.
+    keep_readings: int
+    codebases: list[CodebaseStorage]
+
+
+@router.get("/storage", response_model=Storage)
+async def storage(db: DbSession, user: CurrentUser) -> Storage:
+    """How much the kept source takes, overall and per codebase. Shared content counts in each codebase that uses it."""
+    from sqlalchemy import func, select
+
+    from codelith.db.repositories.knowledge.source_repo import SourceRepository
+    from codelith.models.knowledge import KnowledgeBase
+    from codelith.models.project import Project
+    from codelith.models.source import ReadingFile
+
+    repo = SourceRepository(db)
+    total = await repo.usage()
+    projects = (await db.execute(select(Project).where(Project.org_id == user.org_id))).scalars().all()
+    readings = dict(
+        (
+            await db.execute(
+                select(KnowledgeBase.project_id, func.count(func.distinct(ReadingFile.kb_id)))
+                .join(ReadingFile, ReadingFile.kb_id == KnowledgeBase.id)
+                .group_by(KnowledgeBase.project_id)
+            )
+        ).all()
+    )
+    out = []
+    for p in projects:
+        used = await repo.usage(p.id)
+        out.append(CodebaseStorage(id=p.id, name=p.name, readings_with_files=int(readings.get(p.id, 0)), **used))
+    return Storage(**total, keep_readings=get_settings().KEEP_SOURCE_READINGS, codebases=sorted(out, key=lambda c: -c.stored_bytes))
+
 
 @router.get("/features", response_model=Features)
 async def get_features(_: CurrentUser) -> Features:

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Heading } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
@@ -18,6 +18,11 @@ export default function Toc({
   top?: string
 }) {
   const [active, setActive] = useState<string | null>(null)
+  const nav = useRef<HTMLElement>(null)
+  // Looked up within this tab: another tab's page, hidden but still in the document,
+  // may hold a heading with the same id.
+  const find = (id: string) =>
+    (nav.current?.closest('[data-tab-pane]') ?? document).querySelector<HTMLElement>(`#${CSS.escape(id)}`)
 
   useEffect(() => {
     if (!headings.length) return
@@ -31,18 +36,20 @@ export default function Toc({
       { rootMargin: '-64px 0px -70% 0px' },
     )
     for (const h of headings) {
-      const el = document.getElementById(h.id)
+      const el = find(h.id)
       if (el) obs.observe(el)
     }
     return () => obs.disconnect()
+    // `find` reads a ref; the headings are what change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headings])
 
   if (headings.length < 2) return null
 
   return (
-    <nav className={className}>
+    <nav ref={nav} className={className}>
       <div className={`sticky ${top}`}>
-        <span className="tag mb-2 block text-ink-dim">On this page</span>
+        <span className="text-[12px] font-medium mb-2 block text-ink-dim">On this page</span>
         <ul className="border-l border-rule">
           {/* Keyed by position, not by id. Two headings with the same text produce the
               same anchor id — `## Entry Points` twice in one page is ordinary prose,
@@ -58,10 +65,10 @@ export default function Toc({
                 href={`#${h.id}`}
                 onClick={e => {
                   e.preventDefault()
-                  document.getElementById(h.id)?.scrollIntoView({ behavior: 'smooth' })
+                  find(h.id)?.scrollIntoView({ behavior: 'smooth' })
                 }}
                 style={{ paddingLeft: `${(h.depth - 1) * 9 + 9}px` }}
-                className={`block border-l-2 py-[3px] pr-1 text-[11px] leading-snug transition-colors ${
+                className={`block border-l-2 py-[3px] pr-1 text-[12px] leading-snug transition-colors ${
                   active === h.id
                     ? 'border-hot text-hot-ink'
                     : 'border-transparent text-ink-dim hover:text-ink'

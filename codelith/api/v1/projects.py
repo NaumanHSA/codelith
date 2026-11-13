@@ -181,6 +181,8 @@ class AnalysisPreviewOut(BaseModel):
     changed: bool
     analysed_commit: str | None = None
     current_commit: str | None = None
+    #: Commits since the last reading, for a local repository. None when unknown.
+    behind: int | None = None
     branch: str | None = None
     reason: str | None = None
     #: The sentence the dialog leads with.
@@ -236,6 +238,7 @@ async def preview_analysis(project_id: int, db: DbSession, user: ManagerUser):
         changed=check.changed,
         analysed_commit=check.analysed_commit,
         current_commit=check.current_commit,
+        behind=check.behind,
         branch=check.branch,
         reason=check.reason,
         summary=check.summary(),
@@ -262,6 +265,33 @@ async def analyze_project(
         ip_address=request.client.host if request.client else None,
     )
     return job
+
+
+class AutoReadIn(BaseModel):
+    on: bool
+
+
+class AutoReadOut(BaseModel):
+    """Whether this codebase is read again after every commit. See `services/auto_read.py`."""
+
+    available: bool
+    on: bool
+    since: str | None = None
+
+
+@router.put("/{project_id}/auto-read", response_model=AutoReadOut)
+async def set_auto_read(project_id: int, req: AutoReadIn, db: DbSession, user: ManagerUser, request: Request):
+    """Switch "read every commit" on or off for a local codebase."""
+    from codelith.services import auto_read
+
+    state = await auto_read.set_auto_read(db, project_id, user, req.on)
+    await AuditService(db).log(
+        "project.auto_read", "project",
+        user_id=user.id, resource_id=project_id,
+        details={"on": req.on},
+        ip_address=request.client.host if request.client else None,
+    )
+    return state
 
 
 @router.get("/{project_id}/knowledge-base", response_model=KnowledgeBaseSummary | None)
@@ -326,7 +356,7 @@ async def get_modules(project_id: int, db: DbSession, user: CurrentUser):
 
 
 @router.get("/{project_id}/files", response_model=FileTreeOut)
-async def get_files(project_id: int, db: DbSession, user: CurrentUser):
+async def get_files(project_id: int, db: DbSession, user: CurrentUser, reading: int | None = None):
     """
     Every file the reading covered.
 
@@ -339,11 +369,11 @@ async def get_files(project_id: int, db: DbSession, user: CurrentUser):
     `has_source: false`. A file that silently vanishes from the tree looks like a
     file that was never there, which is a different and worse claim.
     """
-    return await CodeService(db).tree(project_id, user)
+    return await CodeService(db).tree(project_id, user, reading)
 
 
 @router.get("/{project_id}/files/{path:path}", response_model=FileOut)
-async def get_file(project_id: int, path: str, db: DbSession, user: CurrentUser):
+async def get_file(project_id: int, path: str, db: DbSession, user: CurrentUser, reading: int | None = None):
     """
     One file, rebuilt from the chunks that outlived the clone.
 
@@ -357,7 +387,7 @@ async def get_file(project_id: int, path: str, db: DbSession, user: CurrentUser)
     nothing comes back with `indexed: false`, since "we read this and have nothing
     to show" and "no such file" are different answers.
     """
-    result = await CodeService(db).file(project_id, path, user)
+    result = await CodeService(db).file(project_id, path, user, reading)
     if result is None:
         raise HTTPException(status_code=404, detail="No analysed reading for this project")
     return result

@@ -6,6 +6,8 @@ import { Button } from '../ui'
 import ConfirmDelete from '../ConfirmDelete'
 import type { Publication } from '../../lib/types'
 
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
 /* ------------------------------------------------------------------ *
  * Published sites.
  *
@@ -80,11 +82,11 @@ function Row({
   return (
     <div className="border-b border-rule px-3 py-3 last:border-b-0">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="tag text-ink-dim">
-          {publication.target === 'live' ? 'live site' : publication.target}
+        <span className="text-[12px] font-medium text-ink-dim">
+          {publication.target === 'live' ? 'Live site' : cap(publication.target)}
         </span>
         <span
-          className={`tag ${
+          className={`text-[12px] font-medium ${
             live
               ? 'text-ok'
               : publication.status === 'failed'
@@ -92,18 +94,18 @@ function Row({
                 : 'text-ink-dim'
           }`}
         >
-          {publication.status === 'unpublished' ? 'taken down' : publication.status}
+          {publication.status === 'unpublished' ? 'Taken down' : cap(publication.status)}
         </span>
         {build?.commit_sha && (
-          <span className="tag text-ink-dim">built from {shortSha(build.commit_sha)}</span>
+          <span className="text-[12px] font-medium text-ink-dim">Built from {shortSha(build.commit_sha)}</span>
         )}
         {/* The question worth answering, and only when it can be. */}
         {publication.is_current === false && (
-          <span className="tag text-warn">
-            code has moved on{publication.latest_commit ? ` (${shortSha(publication.latest_commit)})` : ''}
+          <span className="text-[12px] font-medium text-warn">
+            Code has moved on{publication.latest_commit ? ` (${shortSha(publication.latest_commit)})` : ''}
           </span>
         )}
-        {publication.is_current === true && <span className="tag text-ok">current</span>}
+        {publication.is_current === true && <span className="text-[12px] font-medium text-ok">Current</span>}
       </div>
 
       {live ? (
@@ -112,16 +114,16 @@ function Row({
             href={url}
             target="_blank"
             rel="noreferrer"
-            className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-hot-ink hover:underline"
+            className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-hot-ink hover:underline"
           >
             {url}
           </a>
-          <button type="button" onClick={copy} className="tag text-ink-dim hover:text-ink">
-            {copied ? 'copied' : 'copy link'}
+          <button type="button" onClick={copy} className="text-[12px] font-medium text-ink-dim hover:text-ink">
+            {copied ? 'Copied' : 'Copy link'}
           </button>
         </div>
       ) : (
-        <p className="mb-2 font-sans text-[11.5px] text-ink-dim">
+        <p className="mb-2 text-[12.5px] text-ink-dim">
           {publication.status === 'unpublished'
             ? `Taken down ${publication.unpublished_at ? relativeTime(publication.unpublished_at) : ''}. The link no longer resolves and the files are gone.`
             : publication.status === 'failed'
@@ -131,7 +133,7 @@ function Row({
       )}
 
       {build && live && (
-        <p className="mb-2 font-sans text-[11.5px] text-ink-dim">
+        <p className="mb-2 text-[12.5px] text-ink-dim">
           {build.page_count} page{build.page_count === 1 ? '' : 's'} · {bytes(build.bytes_total)} ·{' '}
           {publication.published_at ? relativeTime(publication.published_at) : 'just now'} ·{' '}
           {build.renderer}
@@ -228,8 +230,8 @@ export default function Published({
   return (
     <section className="plate overflow-hidden">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule bg-sunk/60 px-3 py-2">
-        <h2 className="text-[11.5px] font-semibold tracking-tight text-ink">Published</h2>
-        <span className="tag text-ink-dim">a link, not a download</span>
+        <h2 className="text-[12.5px] font-semibold tracking-tight text-ink">Published</h2>
+        <span className="text-[12px] font-medium text-ink-dim">A link, not a download</span>
         {canManage && (
           <Button
             variant="hot"
@@ -248,7 +250,7 @@ export default function Published({
 
       {note && (
         <div className="border-b border-rule bg-sunk/40 px-3 py-2">
-          <p className="font-sans text-[11.5px] text-ink-mid">{note}</p>
+          <p className="text-[12.5px] text-ink-mid">{note}</p>
           {/* Offered rather than done. Rebuilding an identical site is a real
               choice somebody may want after changing a renderer, and never one
               they should make by accident. */}
@@ -256,7 +258,7 @@ export default function Published({
             <button
               type="button"
               onClick={() => publish(rebuildable, true, 'publish')}
-              className="tag mt-1 text-hot-ink hover:underline"
+              className="text-[12px] font-medium mt-1 text-hot-ink hover:underline"
             >
               Rebuild anyway →
             </button>
@@ -266,19 +268,19 @@ export default function Published({
 
       {error && (
         <div className="border-b border-rule px-3 py-2">
-          <p className="font-sans text-[11.5px] text-bad">{error}</p>
+          <p className="text-[12.5px] text-bad">{error}</p>
         </div>
       )}
 
       {list.loading ? (
-        <p className="px-3 py-3 font-sans text-[11.5px] text-ink-dim">loading…</p>
+        <p className="px-3 py-3 text-[12.5px] text-ink-dim">loading…</p>
       ) : !list.data?.length ? (
         <div className="px-3 py-4">
-          <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
+          <p className="text-[13px] leading-relaxed text-ink-mid">
             Nothing is published yet. Publishing builds this site once and serves it at a
             URL you can send to somebody who does not have the studio.
           </p>
-          <p className="mt-1.5 font-sans text-[11.5px] text-ink-dim">
+          <p className="mt-1.5 text-[12.5px] text-ink-dim">
             Anyone holding that link can read the site. You can replace the link or take
             it down at any time.
           </p>

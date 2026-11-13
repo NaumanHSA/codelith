@@ -61,22 +61,22 @@ export default function WriteBar({
     // the end of a long scroll of rows that also carry hairlines — so the one control
     // that acts on your selection read as another row. The gap, the heavier edge and
     // the wash are all doing the same job: this is not part of the list.
-    <div className="sticky bottom-0 z-20 -mx-1 mt-10 border-2 border-hot bg-hot-wash shadow-[0_-6px_24px_-8px_rgba(0,0,0,0.25)]">
+    <div className="rounded-xl sticky bottom-0 z-20 -mx-1 mt-10 border-2 border-hot bg-hot-wash shadow-[0_-6px_24px_-8px_rgba(0,0,0,0.25)]">
       <div className="flex flex-wrap items-center gap-3 border-b border-hot-edge px-3 py-2.5">
         <span className="text-[12.5px] font-semibold text-hot-ink">
           {count} page{count === 1 ? '' : 's'} selected
         </span>
         <button
           onClick={onClear}
-          className="tag text-ink-mid transition-colors hover:text-hot-ink"
+          className="text-[12px] font-medium text-ink-mid transition-colors hover:text-hot-ink"
         >
-          clear
+          Clear
         </button>
 
         <ReviewToggle value={review} onChange={onReview} disabled={busy} />
 
-        <span className="tag text-ink-dim">
-          roughly {Math.max(2, count * 3)} min on a local model
+        <span className="text-[12px] font-medium text-ink-dim">
+          Roughly {Math.max(2, count * 3)} min on a local model
         </span>
 
         <Button variant="hot" className="ml-auto" disabled={busy} onClick={onWrite}>
@@ -87,7 +87,7 @@ export default function WriteBar({
       {rewrites > 0 && (
         // Named, not counted. "1 will be replaced" is a number; saying which pages is
         // what lets somebody notice they ticked the wrong row.
-        <p className="border-b border-hot-edge bg-warn-wash px-3 py-1.5 font-sans text-[11.5px] text-warn">
+        <p className="border-b border-hot-edge bg-warn-wash px-3 py-1.5 text-[12.5px] text-warn">
           {rewrites} selected page{rewrites === 1 ? ' is' : 's are'} already written.
           Writing {rewrites === 1 ? 'it' : 'them'} again discards the current text.
         </p>

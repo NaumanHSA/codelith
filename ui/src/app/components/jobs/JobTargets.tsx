@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageMark } from '../docs/PageMark'
 import { isTerminal, type Job, type Site, type SitePage } from '../../lib/types'
+import { NEW_TAB } from '../layout/tabState'
 
 /* ------------------------------------------------------------------ *
  * What this run is writing, and how far each page has got.
@@ -66,24 +67,25 @@ export default function JobTargets({
   const live = !isTerminal(job.status)
 
   return (
-    <div className="mb-3 border border-rule bg-panel">
+    <div className="rounded-xl overflow-hidden mb-3 border border-rule bg-panel">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-rule px-3 py-2">
-        <span className="tag text-ink-dim">writing into</span>
+        <span className="text-[12px] font-medium text-ink-dim">Writing into</span>
         <Link
           to={`/app/projects/${projectId}`}
-          className="text-[12px] font-semibold text-ink transition-colors hover:text-hot-ink"
+          className="text-[13px] font-semibold text-ink transition-colors hover:text-hot-ink"
         >
-          {projectName ?? `project ${projectId}`}
+          {projectName ?? `Codebase ${projectId}`}
         </Link>
         <span className="text-ink-dim">/</span>
         <Link
           to={`/app/projects/${projectId}/docs`}
-          className="text-[12px] text-ink-mid transition-colors hover:text-hot-ink"
+          state={NEW_TAB}
+          className="text-[13px] text-ink-mid transition-colors hover:text-hot-ink"
         >
-          documentation
+          Documentation
         </Link>
         {targets.length > 1 && (
-          <span className="tag ml-auto text-ink-dim">
+          <span className="text-[12px] font-medium ml-auto text-ink-dim">
             {done}/{targets.length} written
           </span>
         )}
@@ -93,11 +95,11 @@ export default function JobTargets({
       {writing && (
         <div className="flex items-center gap-2 border-b border-rule bg-hot-wash/50 px-3 py-1.5">
           <span className="anim-blink block size-[6px] shrink-0 rounded-full bg-hot" />
-          <span className="tag shrink-0 text-hot-ink">now writing</span>
-          <span className="min-w-0 truncate text-[12px] font-semibold text-ink">
+          <span className="text-[12px] font-medium shrink-0 text-hot-ink">Now writing</span>
+          <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
             {writing.page?.title ?? writing.address}
           </span>
-          <span className="tag shrink-0 text-ink-dim">{writing.sectionTitle}</span>
+          <span className="text-[12px] font-medium shrink-0 text-ink-dim">{writing.sectionTitle}</span>
         </div>
       )}
 
@@ -106,12 +108,13 @@ export default function JobTargets({
           reason this is here — and the first written page is the obvious target. */}
       {done > 0 && !live && (
         <div className="flex flex-wrap items-center gap-2 border-b border-rule bg-hot-wash/40 px-3 py-2.5">
-          <span className="tag text-ink-mid">
+          <span className="text-[12px] font-medium text-ink-mid">
             {done === 1 ? 'The page is ready to read' : `${done} pages are ready to read`}
           </span>
           <Link
             to={`/app/projects/${projectId}/docs/${(targets.find(t => t.page?.status === 'ready') ?? targets[0]).address}`}
-            className="ml-auto border border-hot bg-hot px-3 py-[5px] text-[12px] font-semibold tracking-tight text-paper transition-opacity hover:opacity-90"
+            state={NEW_TAB}
+            className="rounded-lg ml-auto border border-hot bg-hot px-3 py-[5px] text-[13px] font-semibold tracking-tight text-on-hot transition-opacity hover:opacity-90"
           >
             Read the document →
           </Link>
@@ -126,25 +129,26 @@ export default function JobTargets({
             <li key={t.address}>
               <Link
                 to={`/app/projects/${projectId}/docs/${t.address}`}
-                className="group flex items-center gap-2.5 px-3 py-2 transition-colors hover:bg-hot-wash/60"
+                state={NEW_TAB}
+                className="group flex items-center gap-2.5 px-3 py-2 transition-colors hover:bg-hover"
               >
                 <PageMark status={status} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12px] text-ink">
+                  <span className="block truncate text-[13px] text-ink">
                     {t.page?.title ?? t.address}
                   </span>
-                  <span className="tag block truncate text-ink-dim">
+                  <span className="text-[12px] font-medium block truncate text-ink-dim">
                     {t.sectionTitle} · {t.address}
                   </span>
                 </span>
                 {t.page?.word_count ? (
-                  <span className="tag hidden shrink-0 text-ink-dim sm:block">
+                  <span className="text-[12px] font-medium hidden shrink-0 text-ink-dim sm:block">
                     {t.page.word_count.toLocaleString()} words
                   </span>
                 ) : null}
-                <span className={`tag shrink-0 ${state.tone}`}>{state.label}</span>
-                <span className="tag shrink-0 text-hot-ink opacity-0 transition-opacity group-hover:opacity-100">
-                  open →
+                <span className={`text-[12px] font-medium shrink-0 ${state.tone}`}>{state.label}</span>
+                <span className="text-[12px] font-medium shrink-0 text-hot-ink opacity-0 transition-opacity group-hover:opacity-100">
+                  Open →
                 </span>
               </Link>
             </li>

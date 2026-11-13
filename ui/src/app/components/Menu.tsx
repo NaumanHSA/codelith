@@ -72,7 +72,7 @@ export default function Menu({
           e.preventDefault()
           setOpen(o => !o)
         }}
-        className={`flex h-[22px] w-[20px] items-center justify-center border text-[13px] leading-none transition-colors ${
+        className={`flex h-[24px] w-[24px] items-center justify-center rounded-md border text-[13px] leading-none transition-colors ${
           open
             ? 'border-hot bg-hot-wash text-hot-ink'
             : 'border-transparent text-ink-dim hover:border-rule hover:bg-panel hover:text-ink'
@@ -85,7 +85,7 @@ export default function Menu({
         <ul
           id={id}
           role="menu"
-          className={`absolute top-full z-40 mt-1 min-w-[190px] border border-rule bg-panel py-1 shadow-lg ${
+          className={`rounded-lg absolute top-full z-40 mt-1 min-w-[190px] border border-rule bg-panel py-1 shadow-lg ${
             align === 'right' ? 'right-0' : 'left-0'
           }`}
         >
@@ -100,17 +100,17 @@ export default function Menu({
                   setOpen(false)
                   item.onSelect()
                 }}
-                className={`block w-full px-3 py-[6px] text-left text-[11.5px] transition-colors ${
+                className={`block w-full px-3 py-[6px] text-left text-[12.5px] transition-colors ${
                   item.disabled
                     ? 'cursor-not-allowed text-ink-dim/60'
                     : item.danger
                       ? 'text-bad hover:bg-bad/10'
-                      : 'text-ink-mid hover:bg-hot-wash hover:text-hot-ink'
+                      : 'text-ink-mid hover:bg-hover hover:text-hot-ink'
                 }`}
               >
                 {item.label}
                 {item.hint && (
-                  <span className="mt-[1px] block text-[10px] leading-snug text-ink-dim">
+                  <span className="mt-[1px] block text-[11.5px] leading-snug text-ink-dim">
                     {item.hint}
                   </span>
                 )}

@@ -79,8 +79,9 @@ export default function CodeView({ file, range, onPickLine, fill = false }: Prop
           no source for it.
         </p>
         <p className="mx-auto mt-1.5 max-w-[46ch] font-sans text-[11.5px] leading-relaxed text-ink-dim">
-          The repository is cloned, read and discarded, so the indexed chunks are the
-          only copy of anything. A file with no code chunks was seen but not stored.
+          This reading was taken before Codelith kept each reading's files, so only
+          the indexed chunks survived, and this file had none. Read the codebase again
+          to keep it whole.
         </p>
       </div>
     )
@@ -172,7 +173,7 @@ function Gap({ segment }: { segment: CodeSegment }) {
         style={{ color: 'var(--code-gutter)' }}
       >
         {n === 1 ? `line ${segment.start}` : `lines ${segment.start}-${segment.end}`} not
-        indexed
+        Indexed
       </span>
     </div>
   )
@@ -196,9 +197,15 @@ function Footnote({
       {/* The page's inks are picked to read on paper. This strip is pinned
           inside the code pane, which is not paper. */}
       <span className="tag" style={{ color: 'var(--code-gutter)' }}>
-        {file.lines_indexed.toLocaleString()} lines from {file.chunks} chunk
-        {file.chunks === 1 ? '' : 's'}
+        {file.whole
+          ? `${file.lines_indexed.toLocaleString()} lines`
+          : `${file.lines_indexed.toLocaleString()} lines from ${file.chunks} chunk${file.chunks === 1 ? '' : 's'}`}
       </span>
+      {file.masked && (
+        <span className="tag" style={{ color: 'var(--hot)' }} title="A real environment file: the names are kept, the values never left the checkout">
+          values masked
+        </span>
+      )}
       {file.lines_missing > 0 && (
         <span className="tag" style={{ color: 'var(--code-number)' }}>
           {file.lines_missing} not indexed

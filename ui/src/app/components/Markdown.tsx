@@ -88,9 +88,9 @@ function Copy({ text }: { text: string }) {
         setCopied(true)
         setTimeout(() => setCopied(false), 1200)
       }}
-      className="absolute right-2 top-2 rounded border border-rule bg-panel px-1.5 py-0.5 text-[10px] text-ink-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-hot-ink"
+      className="absolute right-2 top-2 rounded-md border border-rule bg-panel px-2 py-0.5 text-[11.5px] text-ink-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-hot-ink"
     >
-      {copied ? 'copied' : 'copy'}
+      {copied ? 'Copied' : 'Copy'}
     </button>
   )
 }

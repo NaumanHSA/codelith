@@ -7,6 +7,8 @@ import { formatDuration, elapsedSeconds, humanize, relativeTime } from '../../li
 import { describeJobScope } from '../../lib/site'
 import { isTerminal, type Job } from '../../lib/types'
 import { Button, Chip, PageHead, StatusBadge } from '../../components/ui'
+import { IconTile } from '../../components/primitives'
+import { Icon } from '../../lib/icons'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import ConfirmDelete from '../../components/ConfirmDelete'
 
@@ -47,10 +49,10 @@ export default function JobsPage() {
   const projectName = scoped[0]?.project_name ?? null
 
   return (
-    <div className="mx-auto max-w-[1100px] p-5">
+    <div className="w-full px-6 py-5">
       <PageHead
         index="04"
-        title="Jobs"
+        title="Runs"
         sub={
           projectId
             ? `Every run for ${projectName ?? `project ${projectId}`}, newest first.`
@@ -58,7 +60,7 @@ export default function JobsPage() {
         }
         right={
           <Button variant="ghost" onClick={reload}>
-            ↻ Refresh
+            <Icon name="refresh-cw" size={14} /> Refresh
           </Button>
         }
       />
@@ -71,18 +73,18 @@ export default function JobsPage() {
               next.delete('project')
               setParams(next, { replace: true })
             }}
-            className="tag border border-hot bg-hot-wash px-1.5 py-[3px] text-hot-ink transition-colors hover:bg-hot hover:text-paper"
+            className="inline-flex items-center gap-1.5 rounded-md border border-hot-edge bg-hot-wash px-2 py-[3px] text-[12px] font-medium text-hot-ink transition-colors hover:bg-hot hover:text-on-hot"
           >
-            {projectName ?? `project ${projectId}`} ✕
+            {projectName ?? `project ${projectId}`} <Icon name="x" size={12} />
           </button>
         )}
         {FILTERS.map(f => (
           <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
-            {f}
-            {f !== 'all' && counts[f] ? ` ${counts[f]}` : ''}
+            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {f !== 'all' && counts[f] ? <span className="font-mono text-ink-dim">{counts[f]}</span> : null}
           </Chip>
         ))}
-        <span className="tag ml-auto text-ink-dim">
+        <span className="ml-auto text-[12.5px] text-ink-dim">
           {jobs.length} of {data?.length ?? 0}
         </span>
       </div>
@@ -107,62 +109,75 @@ export default function JobsPage() {
       )}
 
       {jobs.length > 0 && (
-        <ul className="plate divide-y divide-rule">
-          {jobs.map(j => {
-            const live = !isTerminal(j.status)
-            const seconds = elapsedSeconds(j.started_at ?? j.created_at, j.completed_at)
-            return (
-              <li key={j.id} className="flex items-center gap-3 px-3 py-2.5">
-                <span className="tag w-9 shrink-0 text-ink-dim">#{j.id}</span>
-
-                <Link
-                  to={`/app/projects/${j.project_id}/jobs/${j.id}`}
-                  className="min-w-0 flex-1"
-                >
-                  <span className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="text-[12.5px] font-semibold text-ink hover:text-hot-ink">
-                      {humanize(j.job_type)}
-                    </span>
-                    <span className="tag text-ink-dim">{j.project_name ?? `project ${j.project_id}`}</span>
-                  </span>
-                  {/* What the run was for, not just that it ran. An analysis job
-                      has no scope — it reads the whole repository — so it simply
-                      shows its timing rather than an apology for the empty field. */}
-                  <span className="mt-0.5 block truncate text-[11px] text-ink-dim">
-                    {[
-                      describeJobScope(j),
-                      relativeTime(j.created_at),
-                      seconds ? formatDuration(seconds) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                </Link>
-
-                {j.error_message && (
-                  <span
-                    title={j.error_message}
-                    className="hidden max-w-[220px] truncate text-[11px] text-bad md:block"
-                  >
-                    {j.error_message}
-                  </span>
-                )}
-
-                <StatusBadge status={j.status} />
-
-                {can('manager') && (
-                  <button
-                    onClick={() => setDoomed(j)}
-                    title={live ? 'Cancel and remove this run' : 'Remove this run'}
-                    className="tag shrink-0 border border-rule bg-panel px-1.5 py-[3px] text-ink-dim transition-colors hover:border-bad hover:text-bad"
-                  >
-                    ✕
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+        <div className="overflow-x-auto">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Codebase</th>
+                <th>What it did</th>
+                <th className="num">Took</th>
+                <th>When</th>
+                <th>State</th>
+                {can('manager') && <th />}
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map(j => {
+                const live = !isTerminal(j.status)
+                const seconds = elapsedSeconds(j.started_at ?? j.created_at, j.completed_at)
+                const open = () => navigate(`/app/projects/${j.project_id}/jobs/${j.id}`)
+                return (
+                  <tr key={j.id} data-link onClick={open}>
+                    <td>
+                      <Link
+                        to={`/app/projects/${j.project_id}/jobs/${j.id}`}
+                        onClick={e => e.stopPropagation()}
+                        className="flex items-center gap-2.5"
+                      >
+                        <IconTile icon={j.job_type === 'analysis' ? 'radar' : 'pencil'} size={30} />
+                        <span>
+                          <span className="block text-[13.5px] font-medium text-ink">{humanize(j.job_type)}</span>
+                          <span className="font-mono text-[11.5px] text-ink-dim">#{j.id}</span>
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="text-[13px] text-ink-mid">{j.project_name ?? `project ${j.project_id}`}</td>
+                    <td className="max-w-[380px] text-[13px] text-ink-mid">
+                      {j.error_message ? (
+                        <span title={j.error_message} className="line-clamp-2 text-bad">
+                          {j.error_message}
+                        </span>
+                      ) : (
+                        describeJobScope(j) ?? (j.job_type === 'analysis' ? 'Read the whole repository' : '-')
+                      )}
+                    </td>
+                    <td className="num font-mono text-[12.5px] text-ink-mid">{seconds ? formatDuration(seconds) : '-'}</td>
+                    <td className="text-[12.5px] whitespace-nowrap text-ink-dim">{relativeTime(j.created_at)}</td>
+                    <td>
+                      <StatusBadge status={j.status} />
+                    </td>
+                    {can('manager') && (
+                      <td className="w-10">
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setDoomed(j)
+                          }}
+                          title={live ? 'Cancel and remove this run' : 'Remove this run'}
+                          aria-label={live ? 'Cancel and remove this run' : 'Remove this run'}
+                          className="grid size-8 place-items-center rounded-md text-ink-dim transition-colors hover:bg-bad-wash hover:text-bad"
+                        >
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <ConfirmDelete

@@ -30,6 +30,7 @@ from typing import Any
 from codelith.agents.base import BaseAgent
 from codelith.core.cancellation import JobCancelled
 from codelith.db.repositories.knowledge import KnowledgeRepositories
+from codelith.knowledge import incremental
 from codelith.llm.prompts.analysis_prompts import SUGGESTED_QUESTIONS
 from codelith.tracing.artifacts import save_artifact
 
@@ -59,8 +60,12 @@ class QuestionSeederAgent(BaseAgent):
         ) as t:
             await self._update_step(self.name, "running")
 
+            # With the structure unchanged, the questions written from the last
+            # reading's inventory are questions about this one.
+            reuse = state.get("reuse") or {}
+            kept = await self._kept(state, reuse)
             try:
-                questions = await self._write(state)
+                questions = kept if kept is not None else await self._write(state)
             except JobCancelled:
                 raise  # must not be downgraded to "this stage failed"
             except Exception as exc:
@@ -74,7 +79,23 @@ class QuestionSeederAgent(BaseAgent):
             await self._update_step(
                 self.name, "completed", {"questions": len(questions)}
             )
-            return {"suggested_questions": questions}
+            return {
+                "suggested_questions": questions,
+                "reuse": incremental.note(reuse, questions_kept=kept is not None),
+            }
+
+    async def _kept(self, state: dict[str, Any], reuse: dict) -> list[str] | None:
+        if not incremental.structure_unchanged(reuse) or not state.get("kb_id"):
+            return None
+        repos = KnowledgeRepositories.for_session(self.db)
+        previous = await repos.bases.get_by_id(reuse["from_kb"])
+        questions = list((previous.suggested_questions_json if previous else None) or [])
+        if not questions:
+            return None
+        await repos.bases.update(state["kb_id"], suggested_questions_json=questions)
+        await self.db.commit()
+        await self._emit_log("info", f"Structure unchanged; kept {len(questions)} suggested questions")
+        return questions
 
     async def _write(self, state: dict[str, Any]) -> list[str]:
         kb_id = state.get("kb_id")

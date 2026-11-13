@@ -100,10 +100,10 @@ export default function RegisterPage() {
           {busy ? (
             <>
               <span className="anim-spin block size-[9px] rounded-full border border-current border-t-transparent" />
-              creating…
+              Creating…
             </>
           ) : (
-            'Create account →'
+            'Create account'
           )}
         </Button>
       </form>

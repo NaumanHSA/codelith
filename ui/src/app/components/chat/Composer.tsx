@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ContextWheel } from './ContextWheel'
+import { Icon } from '../../lib/icons'
 
 /* ------------------------------------------------------------------ *
  * The thing you type into.
@@ -59,7 +60,7 @@ export function Composer({
     // The wrapper carries the focus state, not the textarea. An outline follows
     // the focused element's own radius, so a square field inside a rounded panel
     // drew a rectangle cutting across the corners — see `.focus-ring-inherit`.
-    <div className="rounded-xl border border-rule bg-panel shadow-sm transition-colors focus-within:border-hot focus-within:ring-1 focus-within:ring-hot/25">
+    <div className="rounded-2xl border border-line-2 bg-panel shadow-[0_12px_32px_-20px_var(--shadow)] transition-[border-color,box-shadow] focus-within:border-hot focus-within:shadow-[0_0_0_3px_var(--hot-wash)]">
       <textarea
         ref={ref}
         value={value}
@@ -74,7 +75,7 @@ export function Composer({
         }}
         rows={1}
         placeholder={placeholder}
-        className="focus-ring-inherit block w-full resize-none bg-transparent px-4 pt-3.5 text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-dim"
+        className="focus-ring-inherit block w-full resize-none bg-transparent px-4 pt-3.5 text-[14px] leading-relaxed text-ink outline-none placeholder:text-ink-dim"
         style={{ maxHeight: MAX_HEIGHT, overflowY: 'auto' }}
       />
 
@@ -91,7 +92,7 @@ export function Composer({
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
-          <span className="hidden text-[10px] text-ink-dim sm:inline">
+          <span className="hidden text-[11.5px] text-ink-dim sm:inline">
             Enter to send · Shift+Enter for a new line
           </span>
         </div>
@@ -102,10 +103,10 @@ export function Composer({
             <button
               type="button"
               onClick={onStop}
-              className="flex h-7 items-center gap-1.5 rounded-md border border-rule px-2.5 text-[11px] text-ink-mid hover:border-hot hover:text-hot-ink"
+              className="flex h-8 items-center gap-1.5 rounded-lg border border-line-2 px-3 text-[12.5px] font-medium text-ink-mid transition-colors hover:border-hot hover:text-hot-ink"
             >
-              <span className="block h-2 w-2 rounded-[1px] bg-current" />
-              stop
+              <span className="block h-2 w-2 rounded-[2px] bg-current" />
+              Stop
             </button>
           ) : (
             <button
@@ -113,11 +114,9 @@ export function Composer({
               onClick={onSend}
               disabled={!canSend}
               aria-label="Send"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-hot text-white transition-opacity disabled:opacity-30"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-hot text-on-hot transition-[opacity,background-color] hover:bg-hot-ink disabled:opacity-30"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 19V5M5 12l7-7 7 7" />
-              </svg>
+              <Icon name="send-horizontal" size={15} />
             </button>
           )}
         </div>

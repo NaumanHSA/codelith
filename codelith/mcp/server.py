@@ -38,6 +38,7 @@ from codelith.db.session import AsyncSessionLocal
 from codelith.knowledge.constants import KBStatus
 from codelith.knowledge.preflight import PreflightService
 from codelith.knowledge.tools import TOOL_SCHEMAS, CodebaseTools
+from codelith.models.agent_call import AgentCall
 from codelith.models.knowledge import KnowledgeBase
 from codelith.models.project import Project
 
@@ -93,6 +94,46 @@ _PREFLIGHT = {
 }
 
 
+#: The other half of `before_edit`: after the edit, before the agent says it is done.
+#: Not in the shared list for the same reason — a chat model has no change to review.
+_REVIEW = {
+    "type": "function",
+    "function": {
+        "name": "review_changes",
+        "description": (
+            "Call this AFTER editing, before you say the work is done. Reads the uncommitted "
+            "change in the repository and checks it against what Codelith knows about the "
+            "codebase: which parts and functions it touches, what else could break, which "
+            "tests to run, which written pages now need checking, routes or settings it "
+            "adds or removes, and whether it breaks the codebase's shape — an import that "
+            "runs backwards between parts, a new dependency between two parts, a new loop, "
+            "a deleted file something still imports. No model call. Fix anything under "
+            "'Stop and look' before finishing."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "The repository folder. Optional: defaults to the folder the codebase "
+                        "is read from, or the directory this server runs in."
+                    ),
+                },
+                "against": {
+                    "type": "string",
+                    "description": (
+                        "A commit or branch to compare with. Optional: defaults to the commit "
+                        "the knowledge was read at, or HEAD."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
 def _with_codebase(schema: dict) -> Tool:
     """One of the KB tools, plus the codebase it applies to.
 
@@ -116,6 +157,7 @@ def build_server() -> Server:
     tools = [
         _LIST_CODEBASES,
         _with_codebase(_PREFLIGHT),
+        _with_codebase(_REVIEW),
         *(_with_codebase(s) for s in TOOL_SCHEMAS),
     ]
 
@@ -133,17 +175,64 @@ def build_server() -> Server:
         tool. A sentence explaining the problem lets it try something else — the same
         rule `CodebaseTools.run` already follows.
         """
+        args = dict(arguments or {})
+        ok = True
         try:
-            text = await _dispatch(name, arguments or {})
+            # A copy: dispatch takes the codebase id out of what it is handed.
+            text = await _dispatch(name, dict(args), client=_client_name(server))
         except Exception as exc:  # pragma: no cover - defensive boundary
             logger.warning("mcp_tool_failed", tool=name, error=str(exc))
             text = f"That lookup failed: {exc}"
+            ok = False
+        await record_call(_client_name(server), name, args, text, ok)
         return [TextContent(type="text", text=text)]
 
     return server
 
 
-async def _dispatch(name: str, args: dict[str, Any]) -> str:
+def _client_name(server: Server) -> str:
+    """What the agent called itself in the handshake, or `unknown`."""
+    try:
+        params = server.request_context.session.client_params
+        info = getattr(params, "clientInfo", None) if params else None
+        return (getattr(info, "name", None) or "unknown")[:120]
+    except Exception:  # noqa: BLE001 - outside a request, or the SDK moved it
+        return "unknown"
+
+
+async def record_call(client: str, tool: str, args: dict[str, Any], text: str, ok: bool) -> None:
+    """
+    Keep one row per call, so the studio can show which agents are attached and what
+    they asked. Never raises: an answer the agent needs must not fail because its
+    record could not be written.
+    """
+    try:
+        raw = args.get("codebase_id")
+        kb_id = int(raw) if raw is not None else None
+        rest = {k: v for k, v in args.items() if k != "codebase_id"}
+        first = next((line for line in text.strip().splitlines() if line.strip()), "")
+        async with AsyncSessionLocal() as db:
+            project_id = None
+            if kb_id is not None:
+                kb = await db.get(KnowledgeBase, kb_id)
+                project_id = kb.project_id if kb else None
+            db.add(
+                AgentCall(
+                    client=client,
+                    tool=tool,
+                    kb_id=kb_id,
+                    project_id=project_id,
+                    args_json=rest,
+                    summary=first[:300] or None,
+                    ok=ok,
+                )
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001 - see the docstring
+        logger.warning("mcp_call_not_recorded", tool=tool, error=str(exc))
+
+
+async def _dispatch(name: str, args: dict[str, Any], client: str | None = None) -> str:
     if name == "list_codebases":
         return await _list_codebases()
 
@@ -161,14 +250,111 @@ async def _dispatch(name: str, args: dict[str, Any]) -> str:
                 "Analysis has to finish first."
             )
 
+        if name == "review_changes":
+            return await _review(db, kb, args, client)
+
         if name == "before_edit":
             report = await PreflightService(db, kb.id, kb.project_id).inspect(
                 str(args.get("target") or "")
             )
-            return report.brief()
+            text = report.brief()
+        else:
+            text, _evidence = await CodebaseTools(db, kb.id, kb.project_id).run(name, args)
+        return text + "\n\n" + await _provenance(db, kb)
 
-        text, _evidence = await CodebaseTools(db, kb.id, kb.project_id).run(name, args)
-        return text
+
+async def _review(db, kb, args: dict[str, Any], client: str | None) -> str:
+    """Collect the working copy's change, review it, keep it for the studio."""
+    import asyncio
+    import os
+    from pathlib import Path
+
+    from codelith.knowledge import changes as change_io
+    from codelith.services import review_service
+
+    folder = Path(args.get("path") or (await review_service.local_folder(db, kb.project_id)) or os.getcwd())
+    against = args.get("against") or None
+
+    def collect():
+        base = against
+        if not base:
+            base = kb.commit_sha if kb.commit_sha and change_io.has_commit(folder, kb.commit_sha) else "HEAD"
+        return change_io.collect(folder, base)
+
+    try:
+        change = await asyncio.to_thread(collect)
+    except change_io.ChangeError as exc:
+        return f"Could not read the change: {exc}"
+    if not change.files:
+        return (
+            f"Nothing has changed in {folder} against {change.base[:8]}. "
+            "Review reads uncommitted and untracked files; pass `against` to compare with another commit."
+        )
+    row, review = await review_service.run_and_keep(
+        db, kb.project_id, change, source="mcp", client=client, kb=kb
+    )
+    return review.brief() + "\n" + f"(Kept as review #{row.id}; it is on the codebase's Review page in the studio.)"
+
+
+#: Commits-behind per codebase, briefly. An agent calls several tools in a row, and the
+#: answer does not change between them.
+_behind_cache: dict[int, tuple[float, int | None]] = {}
+_BEHIND_TTL = 30.0
+
+
+async def _provenance(db, kb) -> str:
+    """
+    The line every answer ends with: which commit it describes, and — for a codebase on
+    this machine — how far the code has moved since. An answer about code as it was is
+    accurate and still misleading if nothing says so.
+    """
+    commit = (getattr(kb, "commit_sha", None) or "")[:8] or "an unknown commit"
+    try:
+        behind = await _commits_behind(db, kb)
+    except Exception as exc:
+        # Never lose an answer over the line that dates it — the log line included: a
+        # rendered traceback draws boxes a cp1252 console cannot encode, and the write
+        # itself raised. The error as text says enough.
+        logger.warning("mcp_provenance_failed", kb_id=getattr(kb, "id", None), error=f"{type(exc).__name__}: {exc}")
+        behind = None
+    if behind:
+        return (
+            f"(Read at {commit}. The code has {behind} newer commit{'s' if behind != 1 else ''} "
+            "since; analyse it again for answers about the current code.)"
+        )
+    if kb.status == KBStatus.STALE:
+        return f"(Read at {commit}. A newer reading of this codebase exists; call list_codebases.)"
+    return f"(Read at {commit}, the latest reading of this codebase.)"
+
+
+async def _commits_behind(db, kb) -> int | None:
+    import asyncio
+    import time
+
+    from sqlalchemy import select
+
+    from codelith.models.project import ProjectSource
+    from codelith.services.auto_read import local_head
+    from codelith.services.head_check import commits_between
+
+    if not getattr(kb, "commit_sha", None):
+        return None
+    hit = _behind_cache.get(kb.id)
+    if hit and time.monotonic() - hit[0] < _BEHIND_TTL:
+        return hit[1]
+    behind: int | None = None
+    source = (
+        await db.execute(
+            select(ProjectSource).where(ProjectSource.project_id == kb.project_id).order_by(ProjectSource.id).limit(1)
+        )
+    ).scalar_one_or_none()
+    # Local only: a hosted repository would cost a network round trip per tool call.
+    if source is not None and source.source_type == "local" and kb.commit_sha:
+        head = await asyncio.to_thread(local_head, source.url_or_path)
+        if head and head != kb.commit_sha:
+            behind = await asyncio.to_thread(commits_between, source.url_or_path, kb.commit_sha, head)
+    _behind_cache[kb.id] = (time.monotonic(), behind)
+    return behind
 
 
 async def _list_codebases() -> str:

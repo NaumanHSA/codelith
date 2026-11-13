@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 /* ------------------------------------------------------------------ *
@@ -6,7 +7,16 @@ import { Link } from 'react-router-dom'
  * Four sections list codebases in the same shape. Three of them had
  * grown their own copy of the markup and had already drifted apart on
  * marker size and hover colour, so the shape lives here now.
+ *
+ * A row leads with what it is — a language logo for a codebase, a book
+ * for its documentation — rather than the bare diamond it used to share
+ * with every other row.
  * ------------------------------------------------------------------ */
+
+export const railRowClass = (active: boolean) =>
+  `group flex items-center gap-2.5 rounded-[7px] px-2.5 py-[6px] transition-colors ${
+    active ? 'bg-sunk text-ink shadow-[inset_0_0_0_1px_var(--rule)]' : 'text-ink-mid hover:bg-hover hover:text-ink'
+  }`
 
 export function RailRow({
   to,
@@ -14,6 +24,8 @@ export function RailRow({
   label,
   sub,
   title,
+  lead,
+  trail,
 }: {
   to: string
   active: boolean
@@ -21,31 +33,19 @@ export function RailRow({
   /** Second line. Say something true about this row, or omit it. */
   sub?: string
   title?: string
+  /** An icon or logo for what the row is. */
+  lead?: ReactNode
+  /** A status mark at the far end. */
+  trail?: ReactNode
 }) {
   return (
-    <Link
-      to={to}
-      title={title ?? label}
-      className={`group relative flex items-center gap-2 py-[6px] pr-2 pl-4 transition-colors ${
-        active ? 'bg-hot-wash' : 'hover:bg-sunk'
-      }`}
-    >
-      {active && <span className="absolute top-0 left-0 h-full w-[3px] bg-hot" />}
-      <span
-        className={`block size-[5px] shrink-0 rotate-45 ${
-          active ? 'bg-hot' : 'bg-rule group-hover:bg-hot'
-        }`}
-      />
+    <Link to={to} title={title ?? label} className={railRowClass(active)}>
+      {lead && <span className="flex size-4 shrink-0 items-center justify-center">{lead}</span>}
       <span className="min-w-0 flex-1">
-        <span
-          className={`block truncate text-[12px] ${
-            active ? 'font-semibold text-hot-ink' : 'text-ink-mid group-hover:text-ink'
-          }`}
-        >
-          {label}
-        </span>
-        {sub && <span className="block truncate text-[10px] text-ink-dim">{sub}</span>}
+        <span className={`block truncate text-[13px] ${active ? 'font-medium' : ''}`}>{label}</span>
+        {sub && <span className="block truncate text-[11px] text-ink-dim">{sub}</span>}
       </span>
+      {trail}
     </Link>
   )
 }
@@ -57,16 +57,14 @@ export function RailAction({
   active = false,
 }: {
   to: string
-  children: React.ReactNode
+  children: ReactNode
   active?: boolean
 }) {
   return (
     <Link
       to={to}
-      className={`group flex items-center gap-2 py-[6px] pr-2 pl-4 text-[11.5px] transition-colors ${
-        active
-          ? 'font-semibold text-hot-ink'
-          : 'text-ink-dim hover:bg-sunk hover:text-ink'
+      className={`group flex items-center gap-2.5 rounded-[7px] px-2.5 py-[6px] text-[12.5px] transition-colors ${
+        active ? 'bg-sunk text-ink' : 'text-ink-dim hover:bg-hover hover:text-ink'
       }`}
     >
       {children}
@@ -75,8 +73,6 @@ export function RailAction({
 }
 
 /** What a section says when it has nothing to list. */
-export function RailNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-4 py-1 text-[10.5px] leading-snug text-ink-dim">{children}</p>
-  )
+export function RailNote({ children }: { children: ReactNode }) {
+  return <p className="px-2.5 py-1 text-[12px] leading-snug text-ink-dim">{children}</p>
 }

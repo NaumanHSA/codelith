@@ -160,6 +160,8 @@ class JobType(StrEnum):
     #: is already decided and the existing text is an input, not something to replace
     #: unseen.
     REVISION = "revision"
+    #: A QA run: the checks asked for, against one reading (`apps/qa`).
+    QA = "qa"
 
 
 __all__ = [

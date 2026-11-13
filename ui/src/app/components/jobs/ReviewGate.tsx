@@ -22,19 +22,19 @@ function Verdict({ page }: { page: ReviewPage }) {
     <li className="border-b border-rule px-3 py-2.5 last:border-b-0">
       <div className="flex items-start gap-2">
         <span
-          className={`tag mt-0.5 shrink-0 ${page.approved ? 'text-ink-dim' : 'text-[var(--warn)]'}`}
+          className={`text-[12px] font-medium mt-0.5 shrink-0 ${page.approved ? 'text-ink-dim' : 'text-[var(--warn)]'}`}
         >
-          {page.approved ? 'passed' : 'flagged'}
+          {page.approved ? 'Passed' : 'Flagged'}
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[12.5px] font-semibold text-ink">{page.title}</div>
-          <div className="tag mt-0.5 text-ink-dim">
+          <div className="text-[12px] font-medium mt-0.5 text-ink-dim">
             {[claims, page.score != null ? `score ${page.score}` : null]
               .filter(Boolean)
               .join(' · ') || page.key}
           </div>
           {page.notes && !page.approved && (
-            <p className="mt-1.5 font-sans text-[12px] leading-relaxed text-ink-mid">
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-mid">
               {page.notes}
             </p>
           )}
@@ -81,14 +81,14 @@ export default function ReviewGate({
   return (
     <Panel title="Waiting for your review" index="!!">
       <div className="border-b border-rule bg-warn-wash px-3 py-2.5">
-        <p className="font-sans text-[12.5px] leading-relaxed text-ink">
+        <p className="text-[12.5px] leading-relaxed text-ink">
           <strong>{data.pages_written}</strong>{' '}
           {data.pages_written === 1 ? 'page was written' : 'pages were written'} and{' '}
           <strong>{data.flagged_count}</strong>{' '}
           {data.flagged_count === 1 ? 'did not pass' : 'did not pass'} the fact check.
           Nothing has been published yet.
         </p>
-        <p className="tag mt-1 text-ink-dim">
+        <p className="text-[12px] font-medium mt-1 text-ink-dim">
           Approve to publish all of them · Reject to discard the run
         </p>
       </div>
@@ -103,7 +103,7 @@ export default function ReviewGate({
         <div className="border-t border-rule">
           <button
             onClick={() => setShowPassed(v => !v)}
-            className="tag w-full px-3 py-2 text-left text-ink-dim transition-colors hover:text-hot-ink"
+            className="text-[12px] font-medium w-full px-3 py-2 text-left text-ink-dim transition-colors hover:text-hot-ink"
           >
             {showPassed ? '−' : '+'} {passed.length} page{passed.length === 1 ? '' : 's'} passed
           </button>
@@ -118,7 +118,7 @@ export default function ReviewGate({
       )}
 
       {error && (
-        <p className="border-t border-rule px-3 py-2 text-[12px] text-[var(--bad)]">{error}</p>
+        <p className="border-t border-rule px-3 py-2 text-[13px] text-[var(--bad)]">{error}</p>
       )}
 
       <footer className="flex flex-wrap items-center gap-2 border-t border-rule bg-sunk/60 px-3 py-2.5">
@@ -128,8 +128,8 @@ export default function ReviewGate({
         <Button disabled={busy !== null} onClick={() => void decide(false)}>
           {busy === 'reject' ? 'discarding…' : 'Reject'}
         </Button>
-        <span className="tag ml-auto text-ink-dim">
-          approving publishes the pages above; it does not rewrite them
+        <span className="text-[12px] font-medium ml-auto text-ink-dim">
+          Approving publishes the pages above; it does not rewrite them
         </span>
       </footer>
     </Panel>

@@ -150,6 +150,78 @@ TOOL_SCHEMAS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "trace_flow",
+            "description": (
+                "How a request travels through the code: from a way in — an API route such "
+                "as 'POST /orders', a command, a scheduled job — through each function it "
+                "calls, to the code that reads or writes data or calls an outside service. "
+                "Reach for it on 'how does X work' and 'what happens when' questions. Give "
+                "the route, command or handler name; with no argument it lists the ways in."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entry": {
+                        "type": "string",
+                        "description": "A route ('POST /orders'), a command name, or a handler or file name.",
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "how_to",
+            "description": (
+                "How things of a kind are done in THIS codebase: where they are declared, "
+                "where new ones are registered, and an existing one to copy. Call it before "
+                "adding a route, a command, a setting, a scheduled job, an event handler, a "
+                "model or a test, so the new code follows the house style instead of a "
+                "generic one. With `run`: what it needs, and how to install, run and test it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["route", "command", "scheduled_job", "event", "setting", "model", "test", "run"],
+                    }
+                },
+                "required": ["kind"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "qa_findings",
+            "description": (
+                "What Codelith's QA runs found and nobody has dismissed: security holes, data "
+                "leaks, poor error handling, code that will break, dependency problems, failing "
+                "tests — each with its exact line, how sure it is and how to fix it. Also says "
+                "which areas QA has never checked. Call it when a question is about bugs, risks, "
+                "security, vulnerabilities, quality or tests, or before changing a file. Never "
+                "say there are no problems in an area it reports as unchecked."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "A file, a folder or a file name. Optional."},
+                    "area": {
+                        "type": "string",
+                        "enum": ["security", "leakage", "dependencies", "errors", "breaks", "performance", "config", "tests"],
+                    },
+                    "min_severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "info"]},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 TOOL_NAMES = frozenset(t["function"]["name"] for t in TOOL_SCHEMAS)
@@ -313,6 +385,108 @@ class CodebaseTools:
             kind="entity", title=f"{kind} facts", body=body, why=f"listed {kind} entities",
         )]
         return f"{len(rows)} {kind}:\n{body}", evidence
+
+    async def _trace_flow(self, args: dict) -> tuple[str, list[Evidence]]:
+        from codelith.knowledge.flows import FlowService
+        from codelith.models.knowledge import KnowledgeBase
+
+        kb = await self.db.get(KnowledgeBase, self.kb_id)
+        if kb is None:
+            return "This knowledge base no longer exists.", []
+        service = FlowService(self.db, kb)
+        entry = str(args.get("entry") or "").strip()
+        if not entry:
+            flows = await service.flows()
+            if not flows:
+                return (
+                    "The analysis found no ways into this code — no routes, commands, "
+                    "scheduled jobs or entry points — so there is no request to trace.",
+                    [],
+                )
+            body = "\n".join(
+                f"  {f.name}  ({f.label}, {len(f.chain)} step(s)"
+                + (f", reaches {f.ends}" if f.ends else "")
+                + ")"
+                for f in flows[: _LIMIT * 3]
+            )
+            return f"{len(flows)} way(s) in. Trace one by name:\n{body}", []
+
+        flow = await service.find(entry)
+        if flow is None:
+            return (
+                f"No route, command or entry point matches '{entry}'. Call trace_flow with no "
+                "argument to list them.",
+                [],
+            )
+        body = flow.brief()
+        evidence = [Evidence(kind="graph", title=f"flow of {flow.name}", body=body, why=f"traced {flow.name}")]
+        return body, evidence
+
+    async def _how_to(self, args: dict) -> tuple[str, list[Evidence]]:
+        from codelith.knowledge.guide import RECIPE_IDS, GuideService
+        from codelith.models.knowledge import KnowledgeBase
+
+        kind = str(args.get("kind") or "").strip()
+        if kind not in (*RECIPE_IDS, "run"):
+            return f"how_to needs a kind: one of {', '.join((*RECIPE_IDS, 'run'))}.", []
+        kb = await self.db.get(KnowledgeBase, self.kb_id)
+        if kb is None:
+            return "This knowledge base no longer exists.", []
+        if kind == "run":
+            from codelith.knowledge.runbook import RunbookService
+
+            book = await RunbookService(self.db, kb).build()
+            body = book.markdown("How to run it") if book.available else book.reason
+            if book.available and book.empty:
+                body = "The reading found no manifest, Makefile, compose file or env template saying how to run this."
+            return body, [Evidence(kind="graph", title="how to run it", body=body, why="the runbook")]
+        recipe = await GuideService(self.db, kb).recipe(kind)
+        if recipe is None:
+            return (
+                f"This codebase has no {kind.replace('_', ' ')}s to learn from — the analysis looked and "
+                "found none. Follow the language's usual conventions and keep to the layout of the "
+                "nearest similar code.",
+                [],
+            )
+        body = recipe.text()
+        return body, [Evidence(kind="graph", title=f"how to: {kind}", body=body, why=f"house style for {kind}")]
+
+    async def _qa_findings(self, args: dict) -> tuple[str, list[Evidence]]:
+        from codelith.knowledge.findings import QA_AREAS, SEVERITIES, FindingsReader
+
+        path = str(args.get("path") or "").strip() or None
+        area = str(args.get("area") or "").strip() or None
+        severity = str(args.get("min_severity") or "").strip() or None
+        if area and area not in QA_AREAS:
+            return f"area is one of: {', '.join(QA_AREAS)}.", []
+        if severity and severity not in SEVERITIES:
+            return f"min_severity is one of: {', '.join(SEVERITIES)}.", []
+        reader = FindingsReader(self.db, self.project_id)
+        coverage = await reader.coverage()
+        if not coverage.areas:
+            body = (
+                "QA has never been run on this codebase, so nothing is known about its security, "
+                "bugs, dependencies or tests either way. Running QA (the studio's QA page, or "
+                "`codelith qa`) would find out."
+            )
+            return body, [Evidence(kind="qa", title="QA coverage", body=body, why="no QA run yet")]
+        found = await reader.open(path=path, areas=[area] if area else None, min_severity=severity, coverage=coverage)
+        head = coverage.brief([area] if area else None)
+        lines = ["What QA has checked:", head, ""]
+        where = f" in {path}" if path else ""
+        if found:
+            lines.append(f"{len(found)} open finding(s){where}, most severe first:")
+            lines += [k.brief() for k in found[:_LIMIT]]
+            if len(found) > _LIMIT:
+                lines.append(f"... and {len(found) - _LIMIT} more: narrow by path, area or min_severity.")
+        else:
+            lines.append(f"No open findings{where} in the areas checked above.")
+        evidence = [
+            Evidence(kind="qa", title=k.where, body=k.brief() + f"\n{k.message[:500]}", why=f"open QA finding #{k.id}")
+            for k in found[:_LIMIT]
+        ]
+        evidence.append(Evidence(kind="qa", title="QA coverage", body=head, why="which areas QA has checked"))
+        return "\n".join(lines), evidence
 
     @staticmethod
     def _render(evidence: list[Evidence]) -> str:

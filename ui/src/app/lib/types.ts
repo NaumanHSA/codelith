@@ -56,6 +56,8 @@ export interface ProjectSource {
       languages?: Record<string, number>
       commit_sha?: string
     }
+    /** "Read every commit", for a local folder. See `services/auto_read.py`. */
+    auto_read?: { on?: boolean; by?: number; since?: string }
   } | null
   created_at: string
 }
@@ -404,6 +406,11 @@ export interface ChatMessage {
     /** Stored with the answer, so a reply that searched nothing still says so when
      *  the conversation is reopened a week later. */
     scope?: ChatScope
+    /** Searches the model chose to make after the first retrieval, in order. */
+    tools?: ChatToolStep[]
+    /** A QA run worth offering under the answer: areas never checked, or checked at
+     *  an older reading. */
+    suggest_qa?: { areas: string[]; reason: 'unchecked' | 'behind' }
   }
   citations: string[]
   /** Citations the model produced that did not resolve, and were demoted. */
@@ -438,6 +445,25 @@ export interface ChatScope {
   decided_by?: string
 }
 
+/** A search the model made on its own, beyond the first retrieval. */
+export interface ChatToolStep {
+  name: string
+  args: Record<string, unknown>
+  step: number
+}
+
+/** What a question retrieves, from the development-only inspector. */
+export interface RetrievalInspection {
+  kb_id: number
+  question: string
+  intents: string[]
+  symbols: string[]
+  paths: string[]
+  entity_kinds: string[]
+  counts: Record<string, number>
+  items: { kind: string; title: string; body: string; why: string; score: number | null }[]
+}
+
 /** One frame of a streamed answer. */
 export type ChatEvent =
   | { type: 'thread'; thread_id: number; title: string }
@@ -450,6 +476,8 @@ export type ChatEvent =
       sources: ChatSource[]
     }
   | { type: 'token'; text: string }
+  | ({ type: 'tool' } & ChatToolStep)
+  | { type: 'reset' }
   | { type: 'usage'; prompt_tokens: number; answer_tokens: number; context_window: number }
   | { type: 'done'; text: string; citations: string[]; stripped: string[] }
   | { type: 'stopped' }
@@ -615,6 +643,28 @@ export interface Preflight {
   /** `reach_weight`: capped reach plus five per written page. The ranking every
    *  caller is meant to sort on. */
   weight: number
+  /** Open QA findings in these files. */
+  findings: PreflightFinding[]
+}
+
+export interface PreflightFinding {
+  id: number
+  rule: string
+  area: string
+  severity: QASeverity
+  confidence: string
+  title: string
+  path: string | null
+  line: number | null
+  run_id: number
+}
+
+/** What QA has checked and what is open, for the map and the codebase page. */
+export interface FindingsMap {
+  checked: { area: string; label: string; run_id: number; finished_at: string | null; commit: string | null; behind: boolean }[]
+  unchecked: string[]
+  open: Partial<Record<QASeverity, number>>
+  files: { path: string; worst: QASeverity; count: number }[]
 }
 
 /** How much detail a written page goes into. Mirrors `apps/documentation/depth.py`;
@@ -630,9 +680,17 @@ export interface AnalysisPreview {
   changed: boolean
   analysed_commit: string | null
   current_commit: string | null
+  /** Commits since the last reading, for a folder on this machine; null when unknown. */
+  behind: number | null
   branch: string | null
   reason: string | null
   summary: string
+}
+
+export interface AutoRead {
+  available: boolean
+  on: boolean
+  since: string | null
 }
 
 /* ── Model registry: what this installation can talk to ──────────────────── */
@@ -658,6 +716,10 @@ export interface ConfiguredModel {
     detail?: string
     dimensions?: number | null
     served_model?: string | null
+    /** What the endpoint accepts beyond a plain message, probed at test time.
+     *  `null` where the probe could not tell. Absent on tests run before probing. */
+    capabilities?: ModelCapabilities | null
+    capability_detail?: Record<string, string> | null
     at?: string
   }
   /** Tiers currently pointed at this one. */
@@ -671,11 +733,19 @@ export interface ModelRegistry {
   unassigned: Tier[]
 }
 
+export interface ModelCapabilities {
+  temperature?: boolean | null
+  tools?: boolean | null
+  reasoning?: boolean | null
+}
+
 export interface ModelTest {
   ok: boolean
   detail: string
   dimensions: number | null
   served_model: string | null
+  capabilities?: ModelCapabilities | null
+  capability_detail?: Record<string, string> | null
 }
 
 /** What a form sends. `api_key` blank on an update means "leave the stored one". */
@@ -879,6 +949,10 @@ export interface SourceFile {
   lines_missing: number
   chunks: number
   indexed: boolean
+  /** The whole file, from the reading's own copy, rather than rebuilt from chunks. */
+  whole?: boolean
+  /** A real environment file: names kept, values masked before it was stored. */
+  masked?: boolean
 }
 
 /* --- Modules -------------------------------------------------------- *
@@ -913,4 +987,617 @@ export interface Modules {
   modules: ModuleEntry[]
   without_summary: number
   total_loc: number
+}
+
+/* ── QA (`apps/qa`) ───────────────────────────────────────────────────────── */
+
+export type QASeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export interface QAArea {
+  id: string
+  label: string
+  blurb: string
+  looks_for: string[]
+  icon: string
+}
+
+export interface QADepth {
+  id: string
+  label: string
+  blurb: string
+  available: boolean
+  why_not: string
+}
+
+export interface QACatalog {
+  areas: QAArea[]
+  depths: QADepth[]
+  online_available: boolean
+}
+
+/** Whether Docker answers, for the Run tests depth. */
+export interface QASandbox {
+  ready: boolean
+  reason: string
+}
+
+export interface QARunSummary {
+  total?: number
+  open?: number
+  by_severity?: Partial<Record<QASeverity, number>>
+  by_area?: Record<string, number>
+  new?: number
+  fixed?: number
+  compared_with?: number | null
+  files?: number
+  scope?: string
+  commit?: string | null
+  checks?: { id: string; title: string; found: number }[]
+  notes?: string[]
+  suppressed?: number
+  /** How the designed tests came out, by outcome. */
+  designed?: Partial<Record<QADesignedOutcome, number>>
+}
+
+export interface QARun {
+  id: number
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | (string & {})
+  areas: string[]
+  depth: string
+  scope: { kind: string; parts?: string[]; paths?: string[]; kb_id?: number }
+  online: boolean
+  kb_id: number | null
+  job_id: number | null
+  summary: QARunSummary
+  error: string | null
+  created_at: string
+  finished_at: string | null
+  stages: string[]
+  steps: { name: string; status: string }[]
+}
+
+export interface QAImpact {
+  part?: string | null
+  kind?: string | null
+  reach?: number
+  direct?: number
+  tests?: number
+  pages?: number
+  routes?: string[]
+  route_count?: number
+  entries?: number | { kind: string; name: string; line: number | null; ends: string | null }[]
+  exposure?: 'public' | 'authenticated' | 'route' | 'entry' | 'internal'
+  read_in?: string[]
+  /** The function the finding is in. */
+  function?: string | null
+  /** From the route to the finding: the route, then each function called on the way. */
+  chain?: string[]
+  /** The severity before a public route reaching it raised it. */
+  raised_from?: QASeverity
+  params?: string[]
+  route?: string
+}
+
+export interface QAFinding {
+  id: number
+  fingerprint: string
+  rule: string
+  /** The rule's short name, the same for every finding of it: what the list groups by. */
+  group: string
+  area: string
+  severity: QASeverity
+  confidence: 'confirmed' | 'likely' | 'suspected' | (string & {})
+  source: string
+  title: string
+  message: string
+  fix: string
+  patch: string | null
+  path: string | null
+  line: number | null
+  end_line: number | null
+  snippet: string
+  impact: QAImpact
+  is_new: boolean
+  status: 'open' | 'dismissed' | 'accepted'
+  reason: string
+  /** When the sandbox ran: the tests with this finding's patch applied. */
+  verified?: string | null
+  /** What the patch changes beyond the line. */
+  fix_note?: string | null
+}
+
+export interface QAFindingDetail extends QAFinding {
+  /** `[line, text]` around the finding, as the reading kept the file; secrets masked. */
+  context: [number, string][]
+  /** The designed test that raised or reproduced it. */
+  designed_test: QADesignedTest | null
+}
+
+export type QADesignedOutcome = 'passed' | 'bug' | 'wrong' | 'did-not-run'
+
+/** A test the model wrote and the sandbox ran (`apps/qa/designed.py`). */
+export interface QADesignedTest {
+  id: number
+  target_path: string
+  target_name: string
+  target_line: number | null
+  /** `untested` (nothing tested it) or `finding` (to reproduce one). */
+  reason: 'untested' | 'finding'
+  runtime: string
+  framework: string
+  /** Where it ran from, relative to the codebase's root. */
+  file_path: string
+  code: string
+  /** The cases, as listed before the code was written. */
+  cases: { name: string; checks: string; expect: string }[]
+  /** Each case's outcome in the last run. */
+  results: { name: string; outcome: string; message: string }[]
+  outcome: QADesignedOutcome
+  tries: number
+  verdict: string
+  output: string
+  finding_fingerprint: string | null
+}
+
+/* ── Readings, and two of them compared (`knowledge/compare.py`) ─────────── */
+
+export interface Reading {
+  id: number
+  commit: string | null
+  status: string
+  created_at: string
+  /** Files the reading kept; 0 for one taken before readings kept their files. */
+  files: number
+}
+
+/** One reading against the one before it (`knowledge/history.py`). */
+export interface HistoryStep {
+  reading: Reading
+  previous: number | null
+  /** Files by what happened to them: added, modified, removed, renamed. */
+  changed: Record<string, number>
+  added: number
+  removed: number
+  /** The parts with most lines changed. */
+  parts: string[]
+  /** Commits between; null when none are kept for this reading. */
+  commits: number | null
+  commits_complete: boolean
+  /** Readings that kept no files, when that is why there are no numbers. */
+  missing: number[]
+}
+
+export interface FileHistoryStep {
+  reading: Reading
+  status: 'added' | 'modified' | 'removed'
+  previous: number | null
+}
+
+export interface CommitInfo {
+  sha: string
+  author: string
+  when: string | null
+  subject: string
+  files: string[]
+  merge: boolean
+}
+
+export interface CommitsBetween {
+  known: boolean
+  complete: boolean
+  reason: string
+  commits: CommitInfo[]
+}
+
+/** What the kept source takes (`GET /settings/storage`). */
+export interface Storage {
+  blobs: number
+  bytes: number
+  stored_bytes: number
+  keep_readings: number
+  codebases: { id: number; name: string; readings_with_files: number; blobs: number; bytes: number; stored_bytes: number }[]
+}
+
+export interface FileChange {
+  path: string
+  status: 'added' | 'removed' | 'modified' | 'renamed'
+  old_path: string | null
+  added: number
+  removed: number
+  language: string | null
+  /** A project file's kind (`manifest`, `env`, ...); null for source code. */
+  kind: string | null
+  /** Too long to count or show whole. */
+  large: boolean
+  similarity: number | null
+  part: string | null
+  reach: number
+  direct: number
+  tests: number
+  pages: number
+}
+
+export interface Comparison {
+  available: boolean
+  reason: string
+  before: Reading | null
+  after: Reading | null
+  /** The readings that kept no files, when that is why it is unavailable. */
+  missing: number[]
+  files: FileChange[]
+  added: number
+  removed: number
+}
+
+export interface DiffRow {
+  kind: 'context' | 'add' | 'del'
+  old: number | null
+  new: number | null
+  text: string
+  /** Character ranges that changed, for a line paired with its replacement. */
+  marks: [number, number][]
+}
+
+export interface FileDiff {
+  path: string
+  old_path: string | null
+  status: FileChange['status']
+  language: string | null
+  rows: DiffRow[]
+  /** Every line; false for a file too long, which comes as hunks. */
+  whole: boolean
+  old_lines: number
+  new_lines: number
+  masked: boolean
+}
+
+/* ── How to run it (`knowledge/runbook.py`) ───────────────────────────────── */
+
+export interface RunbookStep {
+  command: string
+  note: string
+  /** The file that says it. */
+  source: string
+}
+
+export interface RunbookEnv {
+  name: string
+  declared_in: string[]
+  read_in: string[]
+  has_default: boolean
+  secret: boolean
+  /** Read by the code, declared in no template, compose file or Dockerfile. */
+  missing: boolean
+}
+
+export interface Runbook {
+  available: boolean
+  reason: string
+  commit: string | null
+  needs: { what: string; version: string | null; source: string; kind: 'runtime' | 'service' | (string & {}) }[]
+  install: RunbookStep[]
+  run: RunbookStep[]
+  test: RunbookStep[]
+  container: RunbookStep[]
+  ci: RunbookStep[]
+  env: RunbookEnv[]
+  markdown: string
+}
+
+/* ── Atlas: the codebase as a map ────────────────────────────────────────── */
+
+export interface AtlasComponent {
+  name: string
+  description: string
+  /** `component` for one analysis named; `tests`, `scripts`, `setup` or `other` for
+   *  the parts made for files analysis did not place; `config` or `outside` for the
+   *  fact groups. */
+  group: 'component' | 'tests' | 'scripts' | 'setup' | 'other' | 'config' | 'outside' | (string & {})
+}
+
+export interface AtlasNode {
+  /** The repository path for a file, `@kind:name` for a fact. */
+  id: string
+  path: string
+  kind: string
+  /** Index into `components`. */
+  component: number
+  loc: number
+  language: string | null
+  symbols: number
+  /** The entity kind, for a node that is a fact rather than a file. */
+  fact: string | null
+  detail: string | null
+  /** The file that declares a fact node. */
+  source: string | null
+  /** Why a file is in its part, in one sentence. */
+  why?: string | null
+}
+
+export interface Atlas {
+  commit: string | null
+  components: AtlasComponent[]
+  nodes: AtlasNode[]
+  /** `[importer, imported]` as indexes into `nodes`; `[file, fact]` for facts. */
+  edges: [number, number][]
+  kinds: Record<string, number>
+  /** Each component's column (`knowledge/shape.py`), -1 when empty. Absent from an older
+   *  server, when the studio works them out itself. */
+  tiers?: number[]
+}
+
+export interface AtlasSymbol {
+  name: string | null
+  qname: string
+  kind: string | null
+  line: number | null
+  end_line: number | null
+}
+
+export interface AtlasCall {
+  caller: string
+  /** The other file: where the callee lives, or where the caller lives. */
+  path: string
+  callee: string
+}
+
+export interface FileCalls {
+  path: string
+  symbols: AtlasSymbol[]
+  outgoing: AtlasCall[]
+  incoming: AtlasCall[]
+}
+
+/* ── Codebase: facts and where it is fragile ─────────────────────────────── */
+
+export interface Fact {
+  kind: string
+  name: string
+  source_path: string | null
+  source_line: number | null
+  data: Record<string, unknown>
+}
+
+export interface Facts {
+  kinds: Record<string, number>
+  items: Fact[]
+  truncated: boolean
+}
+
+export interface FileRisk {
+  path: string
+  kind: string
+  component: string
+  direct: number
+  reach: number
+  tests: number
+  pages: number
+  /** `reach_weight`: reach capped at 40, plus five per citing page. */
+  weight: number
+  level: 'low' | 'moderate' | 'high'
+}
+
+export interface RiskRanking {
+  depth: number
+  /** How many files were ranked; tests are not. */
+  ranked: number
+  files: FileRisk[]
+}
+
+/* ── Agents attached over MCP ────────────────────────────────────────────── */
+
+export interface ConnectedAgent {
+  client: string
+  calls: number
+  first_seen: string
+  last_seen: string
+}
+
+export interface AgentCall {
+  id: number
+  client: string
+  tool: string
+  project_id: number | null
+  project_name: string | null
+  args: Record<string, unknown>
+  summary: string | null
+  ok: boolean
+  created_at: string
+}
+
+export interface AgentActivity {
+  agents: ConnectedAgent[]
+  calls: AgentCall[]
+}
+
+/* ── Documentation across codebases ──────────────────────────────────────── */
+
+export interface CodebaseDocs {
+  project_id: number
+  /** Page status → count, live site only. */
+  pages: Record<string, number>
+  total: number
+  /** Pages with text: written, including those now out of date. */
+  written: number
+  words: number
+  last_written_at: string | null
+  versions: number
+  documents: number
+  published: 'building' | 'live' | 'failed' | 'unpublished' | null
+  published_slug: string | null
+}
+
+/* ── Review: a change, checked against the knowledge (`knowledge/review.py`) ── */
+
+export type ReviewVerdict = 'clear' | 'check' | 'stop'
+export type ReviewSeverity = 'stop' | 'warn' | 'note'
+
+export interface ReviewFinding {
+  kind: string
+  severity: ReviewSeverity
+  message: string
+  path: string | null
+  line: number | null
+}
+
+export interface ReviewFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  old_path: string | null
+  part: string | null
+  symbols: string[]
+  dependents: number
+  reach: number
+  tests: string[]
+  pages: { address: string; title: string }[]
+  risk: string
+  imports_added: string[]
+  imports_removed: string[]
+}
+
+export interface ReviewLink {
+  source: number
+  target: number
+  file: string
+  imports: string
+  line: number | null
+  kind: 'new' | 'backwards' | 'loop' | 'existing'
+}
+
+export interface ReviewReport {
+  commit: string | null
+  base: string
+  head: string | null
+  files: ReviewFile[]
+  findings: ReviewFinding[]
+  links: ReviewLink[]
+  parts: { index: number; name: string; tier: number; touched: boolean }[]
+  facts_added: string[]
+  facts_removed: string[]
+  tests: string[]
+  pages: { address: string; title: string }[]
+  risk: string
+  verdict: ReviewVerdict
+  summary: string
+  skipped: number
+  brief?: string
+}
+
+export interface ReviewSummary {
+  id: number
+  created_at: string
+  source: 'studio' | 'cli' | 'mcp'
+  client: string | null
+  base: string
+  head: string | null
+  verdict: ReviewVerdict
+  risk: string
+  file_count: number
+  summary: string
+}
+
+export interface ReviewDetail extends ReviewSummary {
+  kb_id: number | null
+  report: ReviewReport
+}
+
+export interface ReviewList {
+  reviews: ReviewSummary[]
+  can_review_working_copy: boolean
+  commit: string | null
+}
+
+/* ── Flows: the path a request takes (`knowledge/flows.py`) ── */
+
+export interface FlowSummary {
+  id: string
+  kind: string
+  label: string
+  name: string
+  path: string
+  line: number | null
+  steps: number
+  chain: number
+  ends: 'data' | 'outside' | null
+  parts: string[]
+}
+
+export interface FlowStep {
+  qname: string
+  path: string
+  line: number | null
+  depth: number
+  parent: number | null
+  kind: string | null
+  part: string | null
+  ends: 'data' | 'outside' | null
+}
+
+export interface FlowDetail extends FlowSummary {
+  all_steps: FlowStep[]
+  chain_steps: number[]
+  brief: string
+  diagram: string | null
+}
+
+/* ── tour (apps/tour) ─────────────────────────────────────────────────── */
+
+export interface TourStop {
+  id: string
+  title: string
+  /** Markdown: two to four sentences, sometimes a short list. */
+  body: string
+  /** Parts to open, by name. */
+  parts: string[]
+  files: { path: string; note: string }[]
+  /** A flow to play in the 2D panel. */
+  flow: string | null
+}
+
+export interface Tour {
+  project: string
+  commit: string | null
+  stops: TourStop[]
+}
+
+/* ── health over time (knowledge/hotspots.py, knowledge/timeline.py) ──── */
+
+export interface Hotspot {
+  path: string
+  kind: string
+  component: string
+  /** Commits that touched it in the window used. */
+  changes: number
+  changes_total: number
+  reach: number
+  tests: number
+  score: number
+  level: 'hot' | 'warm'
+}
+
+export interface Hotspots {
+  commit: string | null
+  available: boolean
+  reason: string
+  /** `recent`: the last `days` days. `all`: the whole history read. */
+  window: 'recent' | 'all'
+  days: number
+  commits: number
+  recent_commits: number
+  since: string | null
+  shallow: boolean
+  hotspots: Hotspot[]
+}
+
+export interface TimelineReading {
+  kb_id: number
+  commit: string | null
+  completed_at: string | null
+  files: number
+  loc: number
+  links: number
+  backwards: [string, string][]
+  tangled: [string, string][]
+  new_backwards: [string, string][]
+  parts: { name: string; files: number; loc: number; links_out: number }[]
 }

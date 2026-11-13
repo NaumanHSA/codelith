@@ -4,9 +4,10 @@ The source, as the knowledge base retained it.
 Two things shape every type here, and both are consequences of how analysis works
 rather than choices this module made.
 
-**The clone is gone.** Analysis discards the checkout when it finishes, so
-`code_chunks` is the only copy of any file. What a reader can be shown is exactly
-what was indexed, and never more.
+**The clone is gone.** Analysis discards the checkout when it finishes. A reading
+taken since readings kept their files (`reading_files`) shows each file whole, from
+its own copy; an older one has only `code_chunks`, and what a reader can be shown of
+it is exactly what was indexed, and never more.
 
 **Chunks do not tile a file.** They overlap in places and leave gaps in others.
 A file therefore comes back as an ordered list of segments rather than a string,
@@ -80,6 +81,11 @@ class FileOut(BaseModel):
     #: False when nothing was retained. The viewer says why instead of showing an
     #: empty pane.
     indexed: bool = True
+    #: True when this is the whole file, from the reading's own copy, rather than a
+    #: reconstruction from chunks.
+    whole: bool = False
+    #: True when the values were masked before the file was kept (a real `.env`).
+    masked: bool = False
 
 
 __all__ = [

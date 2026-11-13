@@ -89,6 +89,28 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
         )
         return result.scalars().first()
 
+    async def get_previous_reading(self, project_id: int, exclude_id: int) -> KnowledgeBase | None:
+        """
+        The reading a new one may take unchanged work from: the newest finished reading
+        of the project other than `exclude_id`.
+
+        Stale readings count. Being superseded is what makes a reading stale, and its
+        modules, chunks and narratives are kept, so it is exactly the one the next
+        reading should copy from.
+        """
+        result = await self.session.execute(
+            select(KnowledgeBase)
+            .where(
+                KnowledgeBase.project_id == project_id,
+                KnowledgeBase.id != exclude_id,
+                KnowledgeBase.status.in_([KBStatus.READY, KBStatus.DEGRADED, KBStatus.STALE]),
+                KnowledgeBase.completed_at.is_not(None),
+            )
+            .order_by(KnowledgeBase.completed_at.desc(), KnowledgeBase.id.desc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
     async def list_for_project(
         self, project_id: int, limit: int = 20, offset: int = 0
     ) -> Sequence[KnowledgeBase]:
@@ -134,8 +156,9 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
 
         from codelith.models.chunk import CodeChunk
         from codelith.models.knowledge import KBEntity, KBModule, KBNarrative
+        from codelith.models.source import ReadingFile
 
-        for model in (KBModule, KBEntity, KBNarrative):
+        for model in (KBModule, KBEntity, KBNarrative, ReadingFile):
             await self.session.execute(delete(model).where(model.kb_id == kb_id))
         await self.session.execute(delete(CodeChunk).where(CodeChunk.kb_id == kb_id))
         await self.session.flush()

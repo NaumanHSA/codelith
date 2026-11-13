@@ -144,6 +144,11 @@ class QuestionPlan:
     #: Recorded so evidence can say honestly how it was reached — a traversal from
     #: an inferred anchor is a weaker claim than one from a path the asker named.
     anchored: bool = False
+    #: The QA areas the question is about (`knowledge/findings.py`), and of those the
+    #: ones no QA run has checked, or checked only at an older reading.
+    qa_areas: list[str] = field(default_factory=list)
+    qa_unchecked: list[str] = field(default_factory=list)
+    qa_behind: list[str] = field(default_factory=list)
 
     def describe(self) -> str:
         bits = [f"via={self.routed_by}", f"intents={self.intents or ['semantic']}"]
@@ -442,6 +447,15 @@ class QuestionRouter:
         # the repository does not build.
         await self._add_artefact_profile(bundle)
 
+        # "What happens when somebody calls POST /orders?" is answered by the chain of
+        # calls from the handler to the data — which a model that refuses tools could
+        # never fetch for itself, so a question naming a way in gets it unasked.
+        await self._add_flows(bundle, question)
+
+        # A question about bugs, security or tests gets what QA found, and what it has
+        # never looked at — so the answer cannot call an unchecked area clean.
+        await self._add_findings(bundle, question)
+
         # Semantic first when a traversal is wanted but nothing traversable was
         # named. Measured on the question set: all three of "what calls the tool
         # registry", "what breaks if I change the config module" and "what imports
@@ -602,6 +616,83 @@ class QuestionRouter:
                         else "default topic — the router named none"
                     ),
                 ))
+
+    async def _add_findings(self, bundle: EvidenceBundle, question: str) -> None:
+        from codelith.knowledge.findings import FindingsReader, areas_asked
+
+        areas = areas_asked(question)
+        paths = bundle.plan.paths[:3]
+        if not areas and not paths:
+            return
+        try:
+            reader = FindingsReader(self.db, self.project_id)
+            coverage = await reader.coverage()
+            found = await reader.open(areas=areas, limit=10, coverage=coverage) if areas else []
+            for p in paths:
+                found += await reader.open(path=p, limit=6, coverage=coverage)
+        except Exception as exc:  # pragma: no cover - defensive: QA is extra evidence, never the answer
+            logger.warning("findings_evidence_failed", error=str(exc))
+            return
+        plan = bundle.plan
+        plan.qa_areas = areas
+        plan.qa_unchecked = coverage.unchecked(areas) if areas else []
+        plan.qa_behind = [a for a in areas if coverage.behind(a)]
+        seen: set[int] = set()
+        for k in found:
+            if k.id in seen:
+                continue
+            seen.add(k.id)
+            bundle.items.append(
+                Evidence(
+                    kind="qa",
+                    title=k.where,
+                    body=(
+                        f"QA finding #{k.id}: {k.title}\n[{k.severity}, {k.confidence}, {k.area}; QA run #{k.run_id}]\n"
+                        f"{k.message[:600]}\nFix: {k.fix}"
+                    ),
+                    why=f"open QA finding #{k.id}",
+                )
+            )
+        if areas:
+            bundle.items.append(
+                Evidence(kind="qa", title="QA coverage", body=coverage.brief(areas), why="which areas QA has checked")
+            )
+
+    async def _add_flows(self, bundle: EvidenceBundle, question: str) -> None:
+        """The flow of any route, command or handler the question names. Non-fatal."""
+        try:
+            from codelith.knowledge.flows import FlowService
+            from codelith.models.knowledge import KnowledgeBase
+
+            kb = await self.db.get(KnowledgeBase, self.kb_id)
+            if kb is None:
+                return
+            flows = await FlowService(self.db, kb).flows()
+            text = question.lower()
+            symbols = {s.split(".")[-1].lower() for s in bundle.plan.symbols}
+            picked = []
+            for flow in flows:
+                if not flow.chain or len(picked) >= 2:
+                    continue
+                name = flow.name.lower()
+                path = name.split(" ", 1)[1] if " " in name and name.split(" ", 1)[1].startswith("/") else ""
+                handler = flow.steps[flow.chain[0]].qname.split(".")[-1].lower()
+                if (
+                    name in text
+                    or (len(path) >= 4 and path in text)
+                    or (flow.kind != "route" and len(name) >= 4 and f" {name}" in f" {text}")
+                    or handler in symbols
+                ):
+                    picked.append(flow)
+            for flow in picked:
+                bundle.items.append(Evidence(
+                    kind="graph",
+                    title=f"flow of {flow.name}",
+                    body=flow.brief(),
+                    why="question names a way into the code; the call graph traced it",
+                ))
+        except Exception as exc:  # pragma: no cover - evidence is best effort
+            logger.warning("question_flows_unavailable", error=str(exc))
 
     async def _add_graph(self, bundle: EvidenceBundle) -> None:
         """

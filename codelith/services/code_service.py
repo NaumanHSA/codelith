@@ -33,6 +33,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from codelith.db.repositories.knowledge.knowledge_base_repo import KnowledgeBaseRepository
+from codelith.db.repositories.knowledge.source_repo import SourceRepository
 from codelith.memory.sql_graph_store import SqlGraphStore
 from codelith.memory.vector_store import VectorStore
 from codelith.models.chunk import CodeChunk
@@ -135,8 +136,16 @@ class CodeService:
         self.bases = KnowledgeBaseRepository(db)
         self.chunks = VectorStore(db)
         self.graph = SqlGraphStore(db)
+        self.sources = SourceRepository(db)
 
-    async def tree(self, project_id: int, user: User) -> FileTreeOut:
+    async def _reading(self, project_id: int, reading: int | None):
+        """The latest usable reading, or the one asked for when it is this codebase's."""
+        if reading is None:
+            return await self.bases.get_latest_usable(project_id)
+        kb = await self.bases.get_by_id(reading)
+        return kb if kb is not None and kb.project_id == project_id else None
+
+    async def tree(self, project_id: int, user: User, reading: int | None = None) -> FileTreeOut:
         """
         Every file the reading covered, whether or not its source survived.
 
@@ -148,7 +157,7 @@ class CodeService:
         """
         await self.projects.get(project_id, user)
 
-        kb = await self.bases.get_latest_usable(project_id)
+        kb = await self._reading(project_id, reading)
         if kb is None:
             return FileTreeOut(available=False)
 
@@ -157,20 +166,22 @@ class CodeService:
             path: (language, total, code)
             for path, language, total, code in await self.chunks.indexed_paths(kb.id)
         }
+        kept = {f.path: f for f in await self.sources.files(kb.id)}
 
         files: list[FileEntry] = []
         without_source = 0
-        for path in sorted(set(parsed) | set(indexed)):
+        for path in sorted(set(parsed) | set(indexed) | set(kept)):
             meta = parsed.get(path) or {}
             language, _total, code_chunks = indexed.get(path, ("", 0, 0))
-            has_source = code_chunks > 0
+            own = kept.get(path)
+            has_source = code_chunks > 0 or own is not None
             if not has_source:
                 without_source += 1
             files.append(
                 FileEntry(
                     path=path,
-                    language=(meta.get("language") or language or ""),
-                    loc=int(meta.get("loc") or 0),
+                    language=(meta.get("language") or (own.language if own else "") or language or ""),
+                    loc=int(meta.get("loc") or (own.lines if own else 0)),
                     symbols=int(meta.get("symbols") or 0),
                     lines_indexed=0,
                     has_source=has_source,
@@ -185,7 +196,7 @@ class CodeService:
             total_loc=sum(f.loc for f in files),
         )
 
-    async def file(self, project_id: int, path: str, user: User) -> FileOut | None:
+    async def file(self, project_id: int, path: str, user: User, reading: int | None = None) -> FileOut | None:
         """
         One file, rebuilt, with its outline.
 
@@ -196,7 +207,7 @@ class CodeService:
         """
         await self.projects.get(project_id, user)
 
-        kb = await self.bases.get_latest_usable(project_id)
+        kb = await self._reading(project_id, reading)
         if kb is None:
             return None
 
@@ -206,8 +217,18 @@ class CodeService:
         meta = inventory.get(path, {})
         loc = int(meta.get("loc") or 0)
 
-        chunks = await self.chunks.chunks_for_file(kb.id, path)
-        segments, indexed, missing = rebuild(chunks, loc)
+        # The reading's own copy, when it kept one: the whole file, no gaps.
+        own = await self.sources.entry(kb.id, path)
+        text = await self.sources.content(kb.id, path) if own else None
+        if own is not None and text is not None:
+            lines = text.splitlines()
+            chunks: list = []
+            segments = [CodeSegment(kind="code", start=1, end=len(lines), text="\n".join(lines))] if lines else []
+            indexed, missing = len(lines), 0
+            loc = loc or len(lines)
+        else:
+            chunks = await self.chunks.chunks_for_file(kb.id, path)
+            segments, indexed, missing = rebuild(chunks, loc)
 
         symbols = [
             SymbolEntry(
@@ -223,7 +244,9 @@ class CodeService:
 
         return FileOut(
             path=path,
-            language=(meta.get("language") or (chunks[0].language if chunks else "") or ""),
+            language=(
+                meta.get("language") or (own.language if own else "") or (chunks[0].language if chunks else "") or ""
+            ),
             loc=loc,
             commit_sha=kb.commit_sha,
             segments=segments,
@@ -231,7 +254,9 @@ class CodeService:
             lines_indexed=indexed,
             lines_missing=missing,
             chunks=len(chunks),
-            indexed=bool(chunks),
+            indexed=bool(chunks) or own is not None,
+            whole=own is not None,
+            masked=bool(own and own.masked),
         )
 
 

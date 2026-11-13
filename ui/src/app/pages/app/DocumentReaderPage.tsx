@@ -67,7 +67,7 @@ export default function DocumentReaderPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1100px] p-5">
+      <div className="w-full px-6 py-5">
         <SkeletonPanel rows={8} />
       </div>
     )
@@ -75,14 +75,14 @@ export default function DocumentReaderPage() {
 
   if (error || !doc) {
     return (
-      <div className="mx-auto max-w-[1100px] p-5">
+      <div className="w-full px-6 py-5">
         <ErrorState message={error ?? 'Document not found.'} onRetry={reload} />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] p-5">
+    <div className="w-full px-6 py-5">
       <PageHead
         index={humanize(doc.doc_type).slice(0, 3).toUpperCase()}
         title={doc.title}
@@ -113,7 +113,7 @@ export default function DocumentReaderPage() {
       {actionError && <ErrorState message={actionError} compact />}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_210px]">
-        <article className="doc min-w-0 border border-rule bg-panel px-5 py-4 md:px-8 md:py-6">
+        <article className="rounded-xl doc min-w-0 border border-rule bg-panel px-5 py-4 md:px-8 md:py-6">
           <DocMarkdown>{doc.content_markdown}</DocMarkdown>
         </article>
 

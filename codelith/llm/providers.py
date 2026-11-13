@@ -29,9 +29,15 @@ not enough to place a call once the tiers can sit on different endpoints.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from codelith.config import get_settings
+
+#: OpenAI's o-series, recognised by prefix.
+_O_SERIES = ("o1", "o3", "o4")
+#: The GPT generation number, so `gpt-6-luna` reads as generation 6.
+_GPT_GENERATION = re.compile(r"gpt-(\d+)")
 
 LOCAL = "local"
 OPENAI = "openai"
@@ -114,16 +120,25 @@ class ModelSpec:
         OpenAI's reasoning families, which accept only their default `temperature`.
 
         Nothing sends a hosted model a token ceiling, so the only thing this decides
-        is whether a temperature travels with the request. Matching on the family
-        prefix is how OpenAI itself distinguishes them, and it lives here so there is
-        one place to correct when the next family lands.
+        is whether a temperature travels with the request.
+
+        Every GPT generation from 5 on, plus the o-series. It used to be a list of
+        prefixes ending at `gpt-5`, and the next family arrived exactly as the old
+        docstring warned: `gpt-6-luna` answered the settings page's connection test
+        (which sends no temperature) and then rejected every real call with "'temperature'
+        does not support 0.2 with this model". Keyed on the generation number, the
+        next one needs no edit here.
 
         Local endpoints are excluded whatever the model is called: LM Studio serves
         reasoning models too — qwen3.5 is one — and accepts the ordinary parameters.
         """
-        return self.provider == OPENAI and self.model.lower().startswith(
-            ("o1", "o3", "o4", "gpt-5")
-        )
+        if self.provider != OPENAI:
+            return False
+        name = self.model.lower()
+        if name.startswith(_O_SERIES):
+            return True
+        generation = _GPT_GENERATION.match(name)
+        return bool(generation) and int(generation.group(1)) >= 5
 
     def __str__(self) -> str:  # what shows up in logs and traces
         return f"{self.provider}:{self.model}"

@@ -1,3 +1,4 @@
+import { Icon } from '../../lib/icons'
 import { useMemo } from 'react'
 import { collapseDiff, diffLines, diffStat } from '../../lib/site'
 
@@ -25,24 +26,24 @@ export default function PageDiff({
   return (
     <section className="plate">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule bg-sunk/60 px-3 py-2">
-        <span className="tag text-hot-ink">DIFF</span>
-        <h2 className="text-[11.5px] font-semibold tracking-tight text-ink">
+        <Icon name="git-compare-arrows" size={15} className="text-ink-dim" />
+        <h2 className="text-[12.5px] font-semibold tracking-tight text-ink">
           What the last rewrite changed
         </h2>
-        <span className="tag text-ok">+{added}</span>
-        <span className="tag text-bad">−{removed}</span>
-        <button onClick={onClose} className="tag ml-auto text-ink-dim hover:text-ink">
-          show the page
+        <span className="text-[12px] font-medium text-ok">+{added}</span>
+        <span className="text-[12px] font-medium text-bad">−{removed}</span>
+        <button onClick={onClose} className="text-[12px] font-medium ml-auto text-ink-dim hover:text-ink">
+          Show the page
         </button>
       </header>
 
       {added + removed === 0 ? (
-        <p className="px-3 py-3 text-[11.5px] text-ink-mid">
+        <p className="px-3 py-3 text-[12.5px] text-ink-mid">
           The rewrite produced the same text.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <pre className="min-w-full font-mono text-[11px] leading-[1.6]">
+          <pre className="min-w-full font-mono text-[12px] leading-[1.6]">
             {rows.map((row, i) =>
               row === null ? (
                 <div key={`gap-${i}`} className="bg-sunk/60 px-3 py-[3px] text-ink-dim">

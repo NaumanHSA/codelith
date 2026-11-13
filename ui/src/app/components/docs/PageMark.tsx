@@ -20,7 +20,7 @@ export function PageMark({ status }: { status: PageStatus | string }) {
             : status === 'orphaned'
               ? 'bg-ink-dim'
               : 'bg-rule'
-  return <span className={`block size-[5px] shrink-0 rotate-45 ${tone}`} aria-hidden />
+  return <span className={`block size-[5px] shrink-0 rounded-full ${tone}`} aria-hidden />
 }
 
 export default PageMark

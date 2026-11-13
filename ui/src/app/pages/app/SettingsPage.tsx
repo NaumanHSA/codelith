@@ -1,10 +1,15 @@
 import { useState } from 'react'
+import { KeptSource } from '../../components/settings/KeptSource'
 import { api, ApiError } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import type { ConfiguredModel, LLMSettings, ModelRegistry, Tier } from '../../lib/types'
 import { Dialog, PageHead, Panel } from '../../components/ui'
+import { Pill } from '../../components/primitives'
+import { BrandMark } from '../../lib/brands'
+import { Icon, type IconName } from '../../lib/icons'
 import { ErrorState, SkeletonPanel } from '../../components/States'
 import ModelForm from '../../components/settings/ModelForm'
+import AgentActivity from '../../components/settings/AgentActivity'
 
 /* ------------------------------------------------------------------ *
  * The models this installation talks to.
@@ -83,10 +88,10 @@ function RowAction({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`tag border px-2 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         tone === 'bad'
           ? 'border-bad/40 bg-bad-wash text-bad hover:border-bad hover:bg-bad hover:text-on-hot'
-          : 'border-rule bg-panel text-ink-mid hover:border-ink hover:text-ink'
+          : 'border-line-2 bg-sunk text-ink hover:bg-hover'
       }`}
     >
       {children}
@@ -94,25 +99,99 @@ function RowAction({
   )
 }
 
+/** What each probed capability means for the studio when it is missing. */
+const CAPABILITY: Record<string, { label: string; icon: IconName; missing: string }> = {
+  tools: {
+    label: 'Tool calls',
+    icon: 'wrench',
+    missing:
+      'Refuses tool calls, so the assistant cannot search again after its first retrieval: answers rest on what that one search found.',
+  },
+  temperature: {
+    label: 'Temperature',
+    icon: 'gauge',
+    missing: 'Rejects a set temperature. Codelith leaves it out for this model.',
+  },
+  reasoning: {
+    label: 'Reasoning',
+    icon: 'brain',
+    missing: '',
+  },
+}
+
 /** What the selected endpoint is, under the dropdown that chose it. */
 function SelectedDetail({ model }: { model: ConfiguredModel }) {
   const t = model.last_test
+  const caps = t?.capabilities
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 pb-2.5 text-[11px] text-ink-dim">
-      <span className="tag border border-rule bg-sunk px-1.5">
-        {PROVIDER_LABEL[model.provider] ?? model.provider}
-      </span>
-      {model.base_url && <span>{model.base_url}</span>}
-      {model.context_window ? <span>context {model.context_window.toLocaleString()}</span> : null}
-      {model.provider !== 'local' && (
-        <span className={model.api_key_set ? '' : 'text-warn'}>
-          {model.api_key_set ? 'key stored' : 'no key, this will not work'}
+    <div className="flex flex-col gap-3 px-4 pb-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-ink-dim">
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-rule px-2 py-0.5 text-ink-mid">
+          {model.provider === 'openai' ? (
+            <BrandMark name="openai" size={13} decorative />
+          ) : model.provider === 'anthropic' ? (
+            <BrandMark name="anthropic" size={13} decorative />
+          ) : (
+            <Icon name="cpu" size={13} />
+          )}
+          {PROVIDER_LABEL[model.provider] ?? model.provider}
         </span>
+        {model.base_url && <span className="font-mono">{model.base_url}</span>}
+        {model.context_window ? <span>context {model.context_window.toLocaleString()}</span> : null}
+        {model.provider !== 'local' && (
+          <span className={model.api_key_set ? '' : 'text-warn'}>
+            {model.api_key_set ? 'Key stored' : 'No key, so this will not work'}
+          </span>
+        )}
+        {t?.dimensions ? <span>{t.dimensions} dimensions</span> : null}
+        {t?.ok === true && (
+          <Pill tone="good" icon="check">
+            Connected
+          </Pill>
+        )}
+        {t?.ok === false && (
+          <Pill tone="bad" icon="x" title={t.detail}>
+            {t.detail}
+          </Pill>
+        )}
+        {t?.ok === undefined && <span>Not tested yet</span>}
+      </div>
+      {caps && model.kind === 'chat' && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {Object.entries(CAPABILITY).map(([k, c]) => {
+              const v = caps[k as keyof typeof caps]
+              if (k === 'reasoning')
+                return v ? (
+                  <Pill key={k} icon={c.icon}>
+                    Reasoning model
+                  </Pill>
+                ) : null
+              return (
+                <Pill
+                  key={k}
+                  tone={v === true ? 'good' : v === false ? 'warn' : 'plain'}
+                  icon={c.icon}
+                  title={t?.capability_detail?.[k]}
+                >
+                  {c.label}: {v === true ? 'yes' : v === false ? 'refused' : 'unknown'}
+                </Pill>
+              )
+            })}
+          </div>
+          {Object.entries(CAPABILITY)
+            .filter(([k, c]) => c.missing && caps[k as keyof typeof caps] === false)
+            .map(([k, c]) => (
+              <p key={k} className="flex items-start gap-2 text-[12.5px] leading-relaxed text-warn">
+                <Icon name="triangle-alert" size={14} className="mt-0.5 shrink-0" />
+                {c.missing}
+              </p>
+            ))}
+        </div>
       )}
-      {t?.dimensions ? <span>{t.dimensions} dims</span> : null}
-      {t?.ok === true && <span className="text-ok">✓ connected</span>}
-      {t?.ok === false && <span className="text-bad">✕ {t.detail}</span>}
-      {t?.ok === undefined && <span>untested</span>}
+      {t?.ok === true && model.kind === 'chat' && !caps && (
+        <p className="text-[12.5px] text-ink-dim">Test again to see which parameters this model accepts.</p>
+      )}
     </div>
   )
 }
@@ -148,13 +227,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[900px] p-5">
-      <PageHead index="06" title="Models" sub="What this installation can talk to" />
+    <div className="w-full px-6 py-5">
+      <PageHead index="06" title="Settings" sub="The models this installation talks to, and the agents that talk to it" />
 
-      <div className="mb-5 border border-rule bg-sunk/40 px-4 py-3">
+      <div className="mb-5 max-w-[960px] rounded-xl border border-rule bg-panel px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <span className="mt-1 block size-[7px] shrink-0 rotate-45 bg-hot" />
-          <p className="font-sans text-[12px] leading-relaxed text-ink-mid">
+          <Icon name="info" size={16} className="mt-0.5 shrink-0 text-ink-dim" />
+          <p className="text-[13px] leading-relaxed text-ink-mid">
             Add the endpoints you have and pick one per tier. Changes apply to the next
             call, and nothing needs restarting. A tier with nothing selected falls back to
             whatever <code className="text-hot-ink">.env</code> says, so an existing
@@ -183,20 +262,22 @@ export default function SettingsPage() {
                 title={`${tier.label} model`}
                 index={tier.index}
                 action={
-                  <RowAction onClick={() => setAdding(tier.id)}>+ Add a model</RowAction>
+                  <RowAction onClick={() => setAdding(tier.id)}>
+                    <Icon name="plus" size={14} /> Add a model
+                  </RowAction>
                 }
               >
-                <p className="px-3 pt-2.5 pb-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
+                <p className="px-4 pt-3 pb-2.5 text-[13px] leading-relaxed text-ink-mid">
                   {tier.blurb}
                 </p>
 
                 {candidates.length === 0 ? (
-                  <div className="border-t border-rule px-3 py-3">
-                    <p className="font-sans text-[12px] text-ink-mid">
+                  <div className="border-t border-rule px-4 py-3">
+                    <p className="text-[13px] text-ink-mid">
                       Nothing configured for this tier yet.
                     </p>
                     {fallbackModel && (
-                      <p className="mt-1 font-sans text-[11.5px] text-warn">
+                      <p className="mt-1 text-[12.5px] text-warn">
                         Falling back to <code>.env</code>: {String(fallbackModel)} (
                         {String(fallbackProvider)}).
                       </p>
@@ -204,7 +285,7 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-wrap items-center gap-2 border-t border-rule px-3 pt-2.5 pb-2">
+                    <div className="flex flex-wrap items-center gap-2 border-t border-rule px-4 pt-3 pb-3">
                       <select
                         value={selected ?? ''}
                         onChange={e =>
@@ -212,7 +293,7 @@ export default function SettingsPage() {
                             api.assignTier(tier.id, Number(e.target.value)),
                           )
                         }
-                        className="min-w-[240px] flex-1 border border-rule bg-panel px-2 py-1.5 font-mono text-[12px] text-ink focus:border-hot focus:outline-none"
+                        className="min-w-[240px] flex-1 rounded-lg border border-line-2 bg-sunk px-3 py-[7px] text-[13px] text-ink focus:border-hot focus:outline-none"
                       >
                         <option value="">nothing selected</option>
                         {candidates.map(m => (
@@ -228,13 +309,14 @@ export default function SettingsPage() {
                         onClick={() => current && void test(current, tier.id)}
                         disabled={!current || testing === current?.id}
                       >
-                        {testing === current?.id ? 'testing…' : 'Test'}
+                        <Icon name={testing === current?.id ? 'loader' : 'zap'} size={14} className={testing === current?.id ? 'anim-spin' : ''} />
+                        {testing === current?.id ? 'Testing…' : 'Test'}
                       </RowAction>
                       <RowAction
                         onClick={() => current && setEditing({ model: current, tier: tier.id })}
                         disabled={!current}
                       >
-                        Edit
+                        <Icon name="pencil" size={14} /> Edit
                       </RowAction>
                       <RowAction
                         tone="bad"
@@ -242,14 +324,14 @@ export default function SettingsPage() {
                         title="Point this tier elsewhere first"
                         onClick={() => current && void act(() => api.deleteModel(current.id))}
                       >
-                        Remove
+                        <Icon name="trash" size={14} /> Remove
                       </RowAction>
                     </div>
 
                     {current && <SelectedDetail model={current} />}
 
                     {!selected && fallbackModel && (
-                      <p className="border-t border-rule bg-warn-wash px-3 py-2 font-sans text-[11.5px] text-warn">
+                      <p className="border-t border-rule bg-warn-wash px-4 py-2 text-[12.5px] text-warn">
                         Nothing selected, so this tier is still using <code>.env</code>:{' '}
                         {String(fallbackModel)} ({String(fallbackProvider)}).
                       </p>
@@ -261,6 +343,14 @@ export default function SettingsPage() {
           })}
         </div>
       )}
+
+      <div className="mt-8 max-w-[1100px]">
+        <AgentActivity />
+      </div>
+
+      <div className="mt-8 max-w-[1100px]">
+        <KeptSource />
+      </div>
 
       <Dialog
         open={!!adding || !!editing}

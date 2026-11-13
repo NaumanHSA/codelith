@@ -89,6 +89,12 @@ def _is_managed(path: Path) -> bool:
     return True
 
 
+def is_scratch_clone(path: Path) -> bool:
+    """Whether `path` is a clone this application made, which it may change (fetch more
+    history into, delete) — as opposed to a `local` source, which is the user's own."""
+    return _is_managed(path)
+
+
 def track(path: Path) -> None:
     """Register a clone this process just made, for removal when the job ends."""
     if not _is_managed(path):

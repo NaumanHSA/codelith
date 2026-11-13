@@ -2,8 +2,12 @@
  * Design tokens. Every colour in the studio comes from here.
  *
  * Values live on :root as raw custom properties and are mapped into
- * Tailwind through `@theme inline`, so a `.dark` block can override them
- * at runtime without a single component changing. Light ships today.
+ * Tailwind through `@theme inline`, so the palette can change without a
+ * single component changing — which is exactly how the redesign started:
+ * these names still say paper and ink, and now hold the dark values from
+ * the approved prototype (.dev/redesign/codelith-studio.html). Dark only.
+ * The names move to the prototype's vocabulary page by page, and the old
+ * ones are then deleted (Phase 1 of .dev/REDESIGN_PLAN.md).
  *
  * Fonts are bundled from src/assets/fonts — the studio makes no network
  * request to any origin other than the API.
@@ -25,72 +29,70 @@
   font-display: swap;
 }
 
+/* Headings. Geist, SIL Open Font License 1.1, from @fontsource-variable/geist 5.2.8. */
+@font-face {
+  font-family: 'Geist';
+  src: url('../assets/fonts/geist-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  /* ground */
-  --paper: #f4f3ef;
-  --panel: #ffffff;
-  --sunk: #eceae4;
+  color-scheme: dark;
+
+  /* ground: the page, a raised panel, and a recessed well (inputs, bubbles) */
+  --paper: #0b0b0d;
+  --panel: #121215;
+  --sunk: #18181c;
 
   /* ink */
-  --ink: #14120f;
-  --ink-mid: #55504a;
-  --ink-dim: #8a847c;
-  --on-ink: #efe9e1;
+  --ink: #ececee;
+  --ink-mid: #a3a3ad;
+  --ink-dim: #83838f;
+  /* text on an ink-coloured fill; ink is light now, so this is dark */
+  --on-ink: #0b0b0d;
 
   /* structure */
-  --rule: #dcd8d0;
+  --rule: #26262c;
+  /* v3 names, introduced as the shell needs them. A row under the pointer, and a
+     line that has to show on a raised surface where --rule disappears */
+  --hover: #1f1f24;
+  --line-2: rgba(255, 255, 255, 0.13);
+  /* the shadow under anything that floats: menus, dialogs, a lifted plate */
+  --shadow: rgba(0, 0, 0, 0.85);
 
-  /* the one hot accent — #ff6b35 fails AA as text on paper, so graphics
-     use --hot and any text uses the darkened --hot-ink */
+  /* the one hot accent. On a dark ground the orange itself reads as text, and
+     --hot-ink is lifted rather than darkened; text on an orange fill is dark */
   --hot: #ff6b35;
   --hot-press: #e8551f;
-  --hot-ink: #c2400c;
-  --hot-wash: #fff0e9;
-  --hot-edge: #ffc7ac;
-  --on-hot: #ffffff;
-
-  /* Categorical hues, for the knowledge graph.
-   *
-   * Distinct from --hot, which means "the thing you are pointing at" everywhere
-   * in the studio and cannot also mean "this one is an API module". Six is the
-   * whole set: a seventh kind folds into --ink-dim rather than getting a
-   * generated hue, because a colour nobody chose is a colour nobody can name.
-   *
-   * Validated rather than eyeballed, against a light surface: every hue sits in
-   * the L 0.43-0.77 band, clears the chroma floor, holds 3:1 against the paper,
-   * and separates for deuteranopia and tritanopia across every pair. The closest
-   * pair is --cat-5 against --cat-2 at deltaE 7.2 deutan, which is inside the
-   * 6-8 floor band and legal only because every node in the graph is directly
-   * labelled and the legend names each colour. Do not add a hue without
-   * re-running the check. */
-  --cat-1: #3b5bdb;
-  --cat-2: #2f9e44;
-  --cat-3: #c2255c;
-  --cat-4: #0b9fb8;
-  --cat-5: #8f6a00;
-  --cat-6: #862e9c;
+  --hot-ink: #ff8a5c;
+  --hot-wash: #2a1610;
+  --hot-edge: #6b3420;
+  --on-hot: #1a0b04;
 
   /* signal */
-  --ok: #1f7a4d;
-  --ok-wash: #edf8f2;
-  --warn: #9a5b00;
-  --warn-wash: #fdf6e7;
-  --bad: #c0271a;
-  --bad-wash: #fdefee;
+  --ok: #3ecf8e;
+  --ok-wash: #0f2a1f;
+  --warn: #f5b83d;
+  --warn-wash: #2a2210;
+  --bad: #f2555a;
+  --bad-wash: #2c1415;
 
-  /* terminal surfaces — the one place we go dark in a light theme */
-  --term: #14120f;
-  --term-rule: #2e2820;
-  --term-text: #d5cdc2;
-  --term-dim: #8a8178;
-  --term-ok: #7fc79c;
+  /* terminal surfaces: a shade apart from the page, so a log still reads as a
+     block now that everything around it is dark too */
+  --term: #0e0e11;
+  --term-rule: #26262c;
+  --term-text: #d5d5dc;
+  --term-dim: #83838f;
+  --term-ok: #3ecf8e;
 
   /* code surfaces — a fenced block is a terminal surface, which is what makes it
      read as a block rather than as oddly-coloured prose. Inline code stays light,
      so the two are never confused. Token colours are warm on purpose: the palette
      has one accent and syntax highlighting must not introduce a second. */
-  --code-bg: #14120f;
-  --code-rule: #2e2820;
+  --code-bg: #0e0e11;
+  --code-rule: #26262c;
   --code-text: #ded5c8;
   --code-gutter: #6f665d;
 
@@ -104,9 +106,7 @@
   --code-add: #7fc79c;
   --code-del: #e08d84;
 
-  --grid-line: rgba(20, 18, 15, 0.045);
-  --hatch-line: rgba(20, 18, 15, 0.05);
-  --scroll-thumb: #c3bdb4;
+  --scroll-thumb: #2c2c33;
 }
 
 @theme inline {
@@ -120,6 +120,8 @@
   --color-on-ink: var(--on-ink);
 
   --color-rule: var(--rule);
+  --color-hover: var(--hover);
+  --color-line-2: var(--line-2);
 
   --color-hot: var(--hot);
   --color-hot-press: var(--hot-press);
@@ -143,6 +145,7 @@
 
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-head: 'Geist', 'Inter', system-ui, sans-serif;
 
   --radius-none: 0px;
 }

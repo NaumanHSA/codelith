@@ -1,101 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
-import { countLabel, languageShares, relativeTime, shortSha } from '../../lib/format'
+import { countLabel, languageShares, relativeTime } from '../../lib/format'
+import { BrandMark, languageBrand, sourceBrand } from '../../lib/brands'
+import { Icon } from '../../lib/icons'
+import { CodebaseMark, Pill } from '../../components/primitives'
 import type { Project } from '../../lib/types'
-import { Button, Chip, PageHead, StatusBadge } from '../../components/ui'
+import { Button, Chip, PageHead } from '../../components/ui'
 import ConfirmDelete from '../../components/ConfirmDelete'
-import { EmptyState, ErrorState, SkeletonGrid } from '../../components/States'
+import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
 import NewProjectDialog from '../../components/projects/NewProjectDialog'
 
 function probeOf(p: Project) {
   return p.sources?.[0]?.config_json?.probe
-}
-
-function ProjectCard({
-  p, i, onOpen, onDelete,
-}: {
-  p: Project
-  i: number
-  onOpen: () => void
-  onDelete?: () => void
-}) {
-  const probe = probeOf(p)
-  const shares = languageShares(probe?.languages)
-  const source = p.sources?.[0]
-
-  return (
-    <div className="relative" style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}>
-      {onDelete && (
-        <button
-          onClick={onDelete}
-          title={`Delete ${p.name}`}
-          aria-label={`Delete ${p.name}`}
-          className="tag absolute top-2 right-2 z-10 border border-rule bg-panel px-1.5 py-[2px] text-ink-dim opacity-0 transition-all group-hover/card:opacity-100 hover:border-bad hover:text-bad focus:opacity-100"
-        >
-          ✕
-        </button>
-      )}
-    <button
-      onClick={onOpen}
-      className="plate plate-lift anim-rise group/card flex w-full flex-col text-left"
-    >
-      <span className="flex items-center gap-2 border-b border-rule bg-sunk/60 px-3 py-2">
-        <span className="tag text-ink-dim">{String(p.id).padStart(2, '0')}</span>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-bold tracking-tight text-ink">
-          {p.name}
-        </span>
-        {p.latest_job && <StatusBadge status={p.latest_job.status} />}
-      </span>
-
-      <span className="flex-1 px-3 py-2.5">
-        <span className="mb-2.5 line-clamp-2 block min-h-[2.4em] font-sans text-[11.5px] leading-relaxed text-ink-mid">
-          {p.description || source?.url_or_path || 'No description.'}
-        </span>
-
-        {shares.length > 0 ? (
-          <>
-            <span className="flex h-[6px] w-full overflow-hidden border border-rule">
-              {shares.slice(0, 6).map((l, li) => (
-                <span
-                  key={l.name}
-                  title={`${l.name} · ${countLabel(l.count, 'file')}`}
-                  style={{ width: `${l.pct}%`, opacity: 1 - li * 0.13 }}
-                  className="block bg-hot"
-                />
-              ))}
-            </span>
-            <span className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-1">
-              {shares.slice(0, 3).map(l => (
-                <span key={l.name} className="tag text-ink-dim">
-                  {l.name} {Math.round(l.pct)}%
-                </span>
-              ))}
-            </span>
-          </>
-        ) : (
-          <span className="tag block text-ink-dim">not analysed yet</span>
-        )}
-      </span>
-
-      <span className="grid grid-cols-4 gap-px border-t border-rule bg-rule">
-        {[
-          ['files', probe?.file_count?.toLocaleString() ?? '-'],
-          ['jobs', p.stats?.job_count ?? 0],
-          ['docs', p.stats?.doc_count ?? 0],
-          ['sha', shortSha(probe?.commit_sha)],
-        ].map(([k, v]) => (
-          <span key={k as string} className="block bg-panel px-2 py-1.5">
-            <span className="tag mb-[3px] block text-ink-dim">{k as string}</span>
-            <span className="block truncate text-[11.5px] font-semibold text-ink">{v}</span>
-          </span>
-        ))}
-      </span>
-    </button>
-    </div>
-  )
 }
 
 export default function ProjectsPage() {
@@ -103,7 +22,6 @@ export default function ProjectsPage() {
   const { can } = useAuth()
   const { data, error, loading, reload, setData } = useAsync(() => api.projects(50, 0), [])
   const [q, setQ] = useState('')
-  const [view, setView] = useState<'grid' | 'table'>('grid')
   const [searchParams, setSearchParams] = useSearchParams()
   // `?new=1` opens the form directly, so "Add a codebase" on Home lands on
   // the action rather than on a list the reader then has to find the button in.
@@ -132,46 +50,43 @@ export default function ProjectsPage() {
   const canCreate = can('manager')
 
   return (
-    <div className="mx-auto max-w-[1180px] p-5">
+    <div className="w-full px-6 py-5">
       <PageHead
         index="02"
-        title="Projects"
-        sub="Every repository under analysis, and what has been written from each."
+        title="Codebases"
+        sub="Every repository Codelith has been pointed at, and what has been done with each."
         right={
           canCreate ? (
             <Button variant="hot" onClick={() => setCreating(true)}>
-              + New project
+              <Icon name="folder-plus" size={15} /> Add a codebase
             </Button>
           ) : (
-            <Chip title="Requires the manager role">read-only role</Chip>
+            <Chip title="Requires the manager role">Read-only role</Chip>
           )
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 border border-rule bg-panel px-2 py-1.5">
-        <span className="tag pl-1 text-hot">/</span>
-        <input
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          placeholder="filter projects…"
-          className="min-w-[160px] flex-1 bg-transparent py-1 text-[12px] text-ink placeholder:text-ink-dim focus:outline-none"
-        />
-        <span className="tag text-ink-dim">{countLabel(filtered.length, 'project')}</span>
-        <span className="h-4 w-px bg-rule" />
-        {(['grid', 'table'] as const).map(v => (
-          <Chip key={v} active={view === v} onClick={() => setView(v)}>
-            {v}
-          </Chip>
-        ))}
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <label className="flex h-9 w-[min(420px,100%)] items-center gap-2 rounded-lg border border-line-2 bg-sunk px-3 focus-within:border-hot">
+          <Icon name="search" size={15} className="text-ink-dim" />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Find a codebase by name, description or URL"
+            aria-label="Find a codebase"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-ink-dim focus:outline-none"
+          />
+        </label>
+        <span className="text-[12.5px] text-ink-dim">{countLabel(filtered.length, 'codebase')}</span>
       </div>
 
-      {loading && <SkeletonGrid count={6} />}
+      {loading && <SkeletonPanel rows={6} />}
 
       {!loading && error && <ErrorState message={error} onRetry={reload} />}
 
       {!loading && !error && filtered.length === 0 && (
         <EmptyState
-          title={q ? 'Nothing matches that filter' : 'No projects yet'}
+          title={q ? 'Nothing matches that' : 'No codebases yet'}
           body={
             q
               ? 'Try a different name, or clear the filter.'
@@ -184,71 +99,113 @@ export default function ProjectsPage() {
               </Button>
             ) : canCreate ? (
               <Button variant="hot" onClick={() => setCreating(true)}>
-                + New project
+                <Icon name="folder-plus" size={15} /> Add a codebase
               </Button>
             ) : null
           }
         />
       )}
 
-      {!loading && !error && filtered.length > 0 && view === 'grid' && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((p, i) => (
-            <ProjectCard
-              key={p.id}
-              p={p}
-              i={i}
-              onOpen={() => navigate(`/app/projects/${p.id}`)}
-              onDelete={canCreate ? () => setDoomed(p) : undefined}
-            />
-          ))}
-        </div>
-      )}
-
-      {!loading && !error && filtered.length > 0 && view === 'table' && (
-        <div className="overflow-x-auto border border-rule bg-panel">
-          <table className="w-full border-collapse text-left">
+      {!loading && !error && filtered.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="tbl">
             <thead>
-              <tr className="bg-sunk/60">
-                {['', 'project', 'source', 'files', 'jobs', 'docs', 'updated', 'status'].map(h => (
-                  <th key={h} className="tag border-b border-rule px-2.5 py-2 text-ink-dim">
-                    {h}
-                  </th>
-                ))}
+              <tr>
+                <th>Codebase</th>
+                <th>Languages</th>
+                <th className="num">Files</th>
+                <th className="num">Runs</th>
+                <th className="num">Pages</th>
+                <th>Reading</th>
+                <th>Updated</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {filtered.map(p => {
                 const probe = probeOf(p)
+                const shares = languageShares(probe?.languages)
+                const host = sourceBrand(p.sources?.[0]?.source_type)
                 return (
-                  <tr
-                    key={p.id}
-                    onClick={() => navigate(`/app/projects/${p.id}`)}
-                    className="cursor-pointer border-b border-rule transition-colors last:border-b-0 hover:bg-hot-wash/50"
-                  >
-                    <td className="tag px-2.5 py-2 text-ink-dim">{p.id}</td>
-                    <td className="px-2.5 py-2 text-[12px] font-semibold text-ink">{p.name}</td>
-                    <td className="max-w-[240px] truncate px-2.5 py-2 text-[11px] text-ink-dim">
-                      {p.sources?.[0]?.url_or_path ?? '-'}
+                  <tr key={p.id} data-link onClick={() => navigate(`/app/projects/${p.id}`)}>
+                    <td>
+                      <span className="flex items-center gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-sunk shadow-[inset_0_0_0_1px_var(--line-2)]">
+                          <CodebaseMark project={p} size={18} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[14px] font-medium text-ink">{p.name}</span>
+                          <span className="flex max-w-[420px] items-center gap-1.5 truncate font-mono text-[11.5px] text-ink-dim">
+                            {host ? <BrandMark name={host} size={11} decorative /> : <Icon name="folder" size={11} />}
+                            {p.sources?.[0]?.url_or_path ?? '-'}
+                          </span>
+                        </span>
+                      </span>
                     </td>
-                    <td className="px-2.5 py-2 text-[11.5px] tabular-nums text-ink-mid">
-                      {probe?.file_count?.toLocaleString() ?? '-'}
+                    <td>
+                      <span className="flex items-center gap-2.5">
+                        {shares.slice(0, 4).map(l => {
+                          const b = languageBrand(l.name)
+                          return (
+                            <span key={l.name} title={`${l.name} ${Math.round(l.pct)}%`} className="flex items-center gap-1 text-[12px] text-ink-dim">
+                              {b ? <BrandMark name={b} size={15} decorative /> : <span>{l.name}</span>}
+                              {Math.round(l.pct)}%
+                            </span>
+                          )
+                        })}
+                      </span>
                     </td>
-                    <td className="px-2.5 py-2 text-[11.5px] tabular-nums text-ink-mid">
-                      {p.stats?.job_count ?? 0}
+                    <td className="num font-mono text-[12.5px] text-ink-mid">
+                      {(probe?.analysable_files ?? probe?.file_count)?.toLocaleString() ?? '-'}
                     </td>
-                    <td className="px-2.5 py-2 text-[11.5px] tabular-nums text-ink-mid">
-                      {p.stats?.doc_count ?? 0}
-                    </td>
-                    <td className="px-2.5 py-2 text-[11px] text-ink-dim">
-                      {relativeTime(p.updated_at)}
-                    </td>
-                    <td className="px-2.5 py-2">
-                      {p.latest_job ? (
-                        <StatusBadge status={p.latest_job.status} />
+                    <td className="num font-mono text-[12.5px] text-ink-mid">{p.stats?.job_count ?? 0}</td>
+                    <td className="num font-mono text-[12.5px] text-ink-mid">{p.stats?.page_count ?? 0}</td>
+                    <td>
+                      {p.latest_job?.status === 'running' ? (
+                        <Pill tone="hot" icon="loader">Analysing</Pill>
+                      ) : p.kb_status === 'stale' ? (
+                        <Pill tone="warn" icon="clock">Stale</Pill>
+                      ) : p.apps_ready ? (
+                        <Pill tone="good" icon="check">Read</Pill>
                       ) : (
-                        <span className="tag text-ink-dim">never run</span>
+                        <Pill icon="circle-dashed">Not read yet</Pill>
                       )}
+                    </td>
+                    <td className="text-[12.5px] whitespace-nowrap text-ink-dim">{relativeTime(p.updated_at)}</td>
+                    <td>
+                      <span className="flex justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        {p.apps_ready && (
+                          <>
+                            <Link
+                              to={`/app/projects/${p.id}/graph`}
+                              title="Open the knowledge graph"
+                              aria-label={`Open the knowledge graph of ${p.name}`}
+                              className="grid size-8 place-items-center rounded-md text-ink-dim transition-colors hover:bg-hover hover:text-ink"
+                            >
+                              <Icon name="waypoints" size={15} />
+                            </Link>
+                            <Link
+                              to={`/app/chat?project=${p.id}&thread=new`}
+                              title="Ask about it"
+                              aria-label={`Ask about ${p.name}`}
+                              className="grid size-8 place-items-center rounded-md text-ink-dim transition-colors hover:bg-hover hover:text-ink"
+                            >
+                              <Icon name="message-square" size={15} />
+                            </Link>
+                          </>
+                        )}
+                        {canCreate && (
+                          <button
+                            type="button"
+                            onClick={() => setDoomed(p)}
+                            title="Delete this codebase"
+                            aria-label={`Delete ${p.name}`}
+                            className="grid size-8 place-items-center rounded-md text-ink-dim transition-colors hover:bg-bad-wash hover:text-bad"
+                          >
+                            <Icon name="trash" size={15} />
+                          </button>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 )
@@ -275,13 +232,13 @@ export default function ProjectsPage() {
           if (doomed) await api.deleteProject(doomed.id)
           reload()
         }}
-        title={`Delete ${doomed?.name ?? 'project'}`}
+        title={`Delete ${doomed?.name ?? 'this codebase'}`}
         actionLabel="Delete everything"
         confirmText={doomed?.name}
         body={
           <>
             <p>
-              This removes the project and everything derived from it: its knowledge
+              This removes the codebase and everything derived from it: its knowledge
               base, every job, every document, and the whole documentation site with
               its pages and versions.
             </p>

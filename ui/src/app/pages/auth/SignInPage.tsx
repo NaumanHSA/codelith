@@ -85,7 +85,7 @@ export default function SignInPage() {
           <Link to="/register" className="font-semibold text-hot-ink hover:underline">
             Create one
           </Link>
-          <span className="tag mt-3 block text-ink-dim">api · {API_BASE}</span>
+          <span className="mt-2 block font-mono text-[11.5px] text-ink-dim">API {API_BASE}</span>
         </>
       }
     >
@@ -120,11 +120,11 @@ export default function SignInPage() {
         <Button type="submit" variant="hot" disabled={busy !== null} className="mt-1 w-full py-2.5">
           {busy === 'form' ? (
             <>
-              <span className="anim-spin block size-[9px] rounded-full border border-current border-t-transparent" />
-              signing in…
+              <span className="anim-spin block size-[11px] rounded-full border-[1.5px] border-current border-t-transparent" />
+              Signing in…
             </>
           ) : (
-            'Sign in →'
+            'Sign in'
           )}
         </Button>
       </form>
@@ -139,8 +139,8 @@ export default function SignInPage() {
           >
             {busy === 'guest' ? (
               <>
-                <span className="anim-spin block size-[9px] rounded-full border border-current border-t-transparent" />
-                signing in…
+                <span className="anim-spin block size-[11px] rounded-full border-[1.5px] border-current border-t-transparent" />
+                Signing in…
               </>
             ) : (
               'Sign in as guest'
@@ -149,8 +149,8 @@ export default function SignInPage() {
           {/* The account, not the word "guest". It signs in with real credentials and
               real permissions, and a caption saying so is what keeps it from being
               read as an anonymous session. */}
-          <p className="tag mt-2 text-center text-ink-dim">
-            local testing · seeded account {GUEST.email}
+          <p className="mt-2 text-center text-[12px] text-ink-dim">
+            For local testing: signs in as the seeded account {GUEST.email}
           </p>
         </div>
       )}

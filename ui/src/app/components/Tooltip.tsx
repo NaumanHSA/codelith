@@ -55,7 +55,7 @@ export default function Tooltip({
       {open && (
         <span
           role="tooltip"
-          className={`pointer-events-none absolute left-0 z-50 w-[260px] border border-rule bg-panel px-2.5 py-1.5 text-[11px] leading-relaxed font-normal tracking-normal text-ink-mid shadow-lg ${
+          className={`rounded-lg pointer-events-none absolute left-0 z-50 w-[260px] border border-rule bg-panel px-2.5 py-1.5 text-[12px] leading-relaxed font-normal tracking-normal text-ink-mid shadow-lg ${
             side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
           }`}
         >

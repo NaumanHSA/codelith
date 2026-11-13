@@ -111,6 +111,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:  # pragma: no cover - never stop the app booting over cleanup
         logger.warning("clone_sweep_failed", exc_info=True)
 
+    # Read every commit, for the local codebases that asked to. Off with
+    # AUTO_READ_INTERVAL_SECONDS=0.
+    import asyncio
+    import contextlib
+
+    from codelith.config import get_settings
+
+    watcher: asyncio.Task | None = None
+    interval = get_settings().AUTO_READ_INTERVAL_SECONDS
+    if interval > 0:
+        from codelith.services.auto_read import run_forever
+
+        watcher = asyncio.create_task(run_forever(interval))
+
     yield
     logger.info("application_shutdown")
+    if watcher is not None:
+        watcher.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watcher
     await engine.dispose()

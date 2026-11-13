@@ -201,7 +201,7 @@ def _settings_prefix(node: ast.ClassDef) -> str | None:
     return ""
 
 
-def settings_env_vars(tree: ast.Module) -> list[tuple[str, int]]:
+def settings_env_vars(tree: ast.Module) -> list[tuple[str, int, bool]]:
     """
     Variables declared by a settings class, which name themselves nowhere.
 
@@ -216,7 +216,7 @@ def settings_env_vars(tree: ast.Module) -> list[tuple[str, int]]:
     citations. Codelith uses the same idiom in `app/config.py`, so until now
     it could not document its own configuration.
     """
-    found: list[tuple[str, int]] = []
+    found: list[tuple[str, int, bool]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
             continue
@@ -232,7 +232,8 @@ def settings_env_vars(tree: ast.Module) -> list[tuple[str, int]]:
             name = item.target.id
             if name in _SETTINGS_META or name.startswith("_"):
                 continue
-            found.append((f"{prefix}{name}".upper(), item.lineno))
+            # A field with no default must be set, or the settings will not load.
+            found.append((f"{prefix}{name}".upper(), item.lineno, item.value is None))
     return found
 
 
@@ -251,20 +252,23 @@ def env_vars(source: str) -> list[DetectedEntity]:
     out: list[DetectedEntity] = []
     seen: set[str] = set()
 
-    def record(name: str | None, line: int) -> None:
+    def record(name: str | None, line: int, required: bool | None = None) -> None:
         if name and name not in seen and name.replace("_", "").isalnum():
             seen.add(name)
-            out.append(DetectedEntity(kind=EntityKind.ENV_VAR, name=name, line=line))
+            data = {} if required is None else {"required": required}
+            out.append(DetectedEntity(kind=EntityKind.ENV_VAR, name=name, line=line, data=data))
 
-    for name, line in settings_env_vars(tree):
-        record(name, line)
+    # `required`: the code fails without it (`os.environ["X"]`, a settings field with
+    # no default); False when the code has a default or copes with it unset.
+    for name, line, required in settings_env_vars(tree):
+        record(name, line, required)
 
     for node in ast.walk(tree):
         # os.getenv("X") / os.environ.get("X")
         if isinstance(node, ast.Call):
             callee = _dotted(node.func)
             if callee in ("os.getenv", "os.environ.get", "getenv", "environ.get") and node.args:
-                record(_literal(node.args[0]), node.lineno)
+                record(_literal(node.args[0]), node.lineno, False)
             # A project that reads more than two variables writes a helper, and then
             # `os.getenv` never appears at the call sites again. neurosurfer's
             # `env_int("CONTEXT_WINDOW", …)` and `env_bool_opt("SUPPORTS_VISION")`
@@ -277,10 +281,10 @@ def env_vars(source: str) -> list[DetectedEntity]:
             elif node.args and _is_env_helper(callee):
                 name = _literal(node.args[0])
                 if name and name.isupper():
-                    record(name, node.lineno)
+                    record(name, node.lineno, False if len(node.args) > 1 else None)
         # os.environ["X"]
         elif isinstance(node, ast.Subscript) and _dotted(node.value) == "os.environ":
-            record(_literal(node.slice), node.lineno)
+            record(_literal(node.slice), node.lineno, True)
 
     return out
 

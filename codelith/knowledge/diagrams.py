@@ -130,6 +130,36 @@ def system_context(entities: list[dict], project_name: str) -> str | None:
     return diagram.render()
 
 
+def request_flow(name: str, chain: list[dict], ends: str | None) -> str | None:
+    """
+    One request through the code: the entry, each function it calls on the way, and
+    where it meets data or the outside world (`knowledge/flows.py`).
+
+    `chain` is the flow's steps in order, each `{qname, path, part}`. Every box is a
+    function the call graph recorded and every arrow a call it resolved, so the
+    diagram can be wrong only by stopping early — never by inventing a step.
+    """
+    if len(chain) < 2:
+        return None
+    diagram = D2Diagram(title=f"{name} — how a request flows", direction="right")
+    entry = diagram.node(name, key="__entry__", shape="page")
+    previous = entry
+    for i, step in enumerate(chain[:10]):
+        label = step["qname"].split(".")[-1] if "." in step["qname"] else step["qname"]
+        where = step.get("part") or step["path"].rsplit("/", 1)[-1]
+        node = diagram.node(f"{label} · {where}", key=f"step::{i}::{step['qname']}", tooltip=step["path"])
+        diagram.edge(previous, node, label="handled by" if previous == entry else "calls")
+        previous = node
+    if ends:
+        last = diagram.node(
+            "data" if ends == "data" else "outside service",
+            key="__end__",
+            shape=SHAPE_STORE if ends == "data" else "cloud",
+        )
+        diagram.edge(previous, last, label="reads/writes" if ends == "data" else "calls")
+    return diagram.render()
+
+
 def blast_radius(path: str, dependents: list[dict]) -> str | None:
     """
     What a change to one file reaches.

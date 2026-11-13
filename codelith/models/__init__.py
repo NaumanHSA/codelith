@@ -1,3 +1,4 @@
+from codelith.models.agent_call import AgentCall
 from codelith.models.audit import AuditLog
 from codelith.models.chat import ChatMessage, ChatThread
 from codelith.models.chunk import CodeChunk
@@ -16,8 +17,11 @@ from codelith.models.model_config import ModelConfig, TierAssignment
 from codelith.models.organization import Organization, OrgMember
 from codelith.models.project import Project, ProjectSource
 from codelith.models.publication import DocSitePublication, DocSitePublicationBuild
+from codelith.models.qa import QADesignedTest, QAFinding, QAFindingState, QARun
+from codelith.models.review import ChangeReview
 from codelith.models.setting import SystemSetting
 from codelith.models.site import DocPage, DocSite, DocSiteVersion
+from codelith.models.source import ReadingFile, SourceBlob, SourceCommit
 from codelith.models.user import OAuthAccount, User
 
 __all__ = [
@@ -41,6 +45,13 @@ __all__ = [
     "KBModule",
     "KBEntity",
     "KBNarrative",
+    "QADesignedTest",
+    "QAFinding",
+    "QAFindingState",
+    "QARun",
+    "ReadingFile",
+    "SourceBlob",
+    "SourceCommit",
     "DocSite",
     "DocPage",
     "DocSiteVersion",
@@ -54,4 +65,6 @@ __all__ = [
     "GraphImport",
     "GraphPackage",
     "GraphCall",
+    "AgentCall",
+    "ChangeReview",
 ]

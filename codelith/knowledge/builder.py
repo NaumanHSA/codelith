@@ -493,9 +493,12 @@ def read_manifest_files(root, max_depth: int = 2) -> list[SourceFile]:
     records zero dependencies.
 
     Shallow by design: a manifest deeper than a couple of levels is usually a vendored
-    or nested package, not the project's own.
+    or nested package, not the project's own. One under a test, fixture or sample
+    folder is not the project's either, and its dependencies are not this project's.
     """
     from pathlib import Path
+
+    from codelith.knowledge.detectors import in_sample_dir
 
     root = Path(root)
     if not root.is_dir():
@@ -511,7 +514,8 @@ def read_manifest_files(root, max_depth: int = 2) -> list[SourceFile]:
             out.append(_read_manifest(path, root))
         for depth in range(1, max_depth + 1):
             for path in root.glob("/".join(["*"] * depth) + f"/{name}"):
-                if not registry.should_skip(path.relative_to(root).as_posix()):
+                relative = path.relative_to(root).as_posix()
+                if not registry.should_skip(relative) and not in_sample_dir(relative):
                     out.append(_read_manifest(path, root))
     return [f for f in out if f is not None]
 

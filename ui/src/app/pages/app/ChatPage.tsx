@@ -2,39 +2,42 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import type {
-  ChatMessage,
   ChatScope,
   ChatSource,
   ChatThread,
+  ChatToolStep,
   KnowledgeBase,
   Project,
 } from '../../lib/types'
 import { AssistantMessage, UserMessage } from '../../components/chat/Message'
-import SourcesPanel from '../../components/chat/SourcesPanel'
-import RepositoryPicker from '../../components/chat/RepositoryPicker'
+import InsightPane, { type InsightTab, type InsightTarget } from '../../components/chat/InsightPane'
+import AnswerTrace from '../../components/chat/AnswerTrace'
+import { messageTrace, traceSteps } from '../../components/chat/trace'
+import ChatWelcome from '../../components/chat/ChatWelcome'
 import { Composer } from '../../components/chat/Composer'
 import ConfirmDelete from '../../components/ConfirmDelete'
 import { SkeletonPanel } from '../../components/States'
+import { CodebaseMark } from '../../components/primitives'
 import { useChatThreads } from '../../chat-threads'
 import { useAsync } from '../../lib/hooks'
+import { Icon } from '../../lib/icons'
 
 /* ------------------------------------------------------------------ *
  * Ask the codebase.
  *
- * Top level rather than inside a project, because it is a way of
- * working rather than a property of one repository — but the knowledge
- * base *is* per project, so the page picks one. Deep-linkable as
- * ?project=2 so a conversation can be shared or bookmarked.
+ * Three panes, as the user asked to keep them: conversations down the
+ * left (the sidebar), the conversation in the middle, and beside it what
+ * the answer in focus was built from — citations, sources, thinking.
  *
- * The layout follows the reference: input centred in an empty room,
- * and the moment there is something to read it moves to the bottom and
- * gets out of the way.
+ * Top level rather than inside a project, because it is a way of working
+ * rather than a property of one repository — but the knowledge base *is*
+ * per project, so the page picks one. Deep-linkable as ?project=2, and
+ * `?ask=` arrives with a question already typed (the atlas sends one).
  * ------------------------------------------------------------------ */
 
-/** Real questions, taken from the set this substrate was measured against. */
 /** How many of the stored questions to offer on an empty conversation, and how many
- *  to offer as follow-ups after an answer. Fourteen are written during analysis; a
- *  list that long is a menu nobody reads. */
+ *  as follow-ups after an answer. Fourteen are written during analysis; a list that
+ *  long is a menu nobody reads. */
 const OPENING = 5
 const FOLLOW_UPS = 3
 
@@ -43,10 +46,18 @@ interface Live {
   answer: string
   sources: ChatSource[]
   counts: Record<string, number>
+  intents?: string[]
+  routedBy?: string
+  tools: ChatToolStep[]
+  retrieved: boolean
   /** What the gate made of the question. Absent until it has decided, which is the
    *  only moment the page can honestly say whether the code is being searched. */
   scope?: ChatScope
 }
+
+/** Which answer the pane shows: a stored one by id, the streaming one, or (null)
+ *  whichever is newest. */
+type Focus = number | 'live' | null
 
 export default function ChatPage() {
   const [params, setParams] = useSearchParams()
@@ -56,10 +67,12 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [draft, setDraft] = useState('')
-  /** Which answer's sources are open in the side panel, by message id. `-1` is the
-   *  one still streaming, which has no id yet. Null closes the panel. */
-  const [openSources, setOpenSources] = useState<number | null>(null)
-  /** A citation clicked in an answer. The panel opens at it rather than making the
+  const [focus, setFocus] = useState<Focus>(null)
+  const [tab, setTab] = useState<InsightTab>('citations')
+  /** Below the wide breakpoint the pane overlays the conversation, so it opens on
+   *  request. Above it the pane is always there. */
+  const [paneOpen, setPaneOpen] = useState(false)
+  /** A citation clicked in an answer. The pane opens at it rather than making the
    *  reader find the same reference again in a list of twenty-nine. */
   const [focusRef, setFocusRef] = useState<string | null>(null)
   const [live, setLive] = useState<Live | null>(null)
@@ -69,27 +82,23 @@ export default function ChatPage() {
   const bottom = useRef<HTMLDivElement>(null)
   const { refresh: refreshThreads } = useChatThreads()
 
-  const projectId = Number(params.get('project')) || projects?.[0]?.id || null
+  // No default: without a codebase in the URL the page asks for one first.
+  const projectId = Number(params.get('project')) || null
   const project = projects?.find(p => p.id === projectId) ?? null
 
   /** What the selected reading actually contains. The name alone does not say what
-   *  you are asking about, and most projects carry no description — this is the
-   *  substance that is always there. */
+   *  you are asking about, and most projects carry no description. */
   const kb = useAsync<KnowledgeBase | null>(
     sig => (projectId ? api.knowledgeBase(projectId, sig) : Promise.resolve(null)),
     [projectId],
   )
 
-  /** Written during analysis, about this repository. Empty for a reading taken
-   *  before that existed — in which case nothing is offered, because a generic
-   *  suggestion on this page advertises that the code has not been read. */
+  /** Written during analysis, about this repository. Shuffled once per thread so a
+   *  second conversation does not offer the same five of fourteen. */
   const suggestions = useMemo(() => {
     const all = kb.data?.suggested_questions ?? []
-    // Shuffled, so opening a second conversation does not offer the same five.
-    // Fourteen are written and five are shown; always taking the first five would
-    // mean nine of them were never seen. Fixed for the life of this thread —
-    // re-drawing on every keystroke would move a row out from under the cursor.
     return [...all].sort(() => Math.random() - 0.5)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kb.data, thread?.id])
 
   // `new` is a real state, not the absence of one. Without it, pressing New chat
@@ -97,6 +106,22 @@ export default function ChatPage() {
   const threadParam = params.get('thread')
   const wantsNew = threadParam === 'new'
   const wantedId = Number(threadParam) || null
+
+  // A question handed over by another page: typed in, not sent. Sending on arrival
+  // would spend a model call on a link somebody only meant to look at.
+  useEffect(() => {
+    const ask = params.get('ask')
+    if (!ask) return
+    setDraft(ask)
+    setParams(
+      p => {
+        const next = new URLSearchParams(p)
+        next.delete('ask')
+        return next
+      },
+      { replace: true },
+    )
+  }, [params, setParams])
 
   useEffect(() => {
     api
@@ -111,6 +136,8 @@ export default function ChatPage() {
       setLoading(false)
       return
     }
+    setFocus(null)
+    setFocusRef(null)
     if (wantsNew) {
       setThread(null)
       setLive(null)
@@ -130,22 +157,16 @@ export default function ChatPage() {
     }
   }, [projectId, wantedId, wantsNew])
 
-  const messages = thread?.messages ?? []
+  const messages = useMemo(() => thread?.messages ?? [], [thread])
 
-  /** Questions this conversation has not covered. Drawn from the same stored set
-   *  rather than generated per answer: it costs nothing, adds no latency, and every
-   *  one of them is still about this repository. A genuinely contextual follow-up
-   *  would need another model call after every reply, which is a lot to pay for a
-   *  suggestion somebody may not click. */
+  /** Questions this conversation has not covered, from the same stored set. */
   const unasked = useMemo(() => {
-    const asked = new Set(
-      messages.filter(m => m.role === 'user').map(m => m.content.trim().toLowerCase()),
-    )
+    const asked = new Set(messages.filter(m => m.role === 'user').map(m => m.content.trim().toLowerCase()))
     return suggestions.filter(q => !asked.has(q.trim().toLowerCase()))
   }, [suggestions, messages])
 
-  /** Whether the question being answered is already in `messages`. See where it is
-   *  used: the same question would otherwise be rendered twice mid-stream. */
+  /** Whether the question being answered is already in `messages`: streaming puts
+   *  the new thread id in the URL, which re-fetches the thread with the question. */
   const questionAlreadyStored = useMemo(() => {
     const last = messages[messages.length - 1]
     return !!live && !!last && last.role === 'user' && last.content === live.question
@@ -159,14 +180,32 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: live ? 'auto' : 'smooth' })
-  }, [messages.length, live?.answer])
+  }, [messages.length, live?.answer, live?.retrieved])
 
   const used = useMemo(() => {
     const stored = thread?.token_count ?? 0
-    // The draft is counted at roughly four characters a token. It is an estimate
-    // and labelled as one — the authoritative number arrives with each answer.
+    // The draft is counted at roughly four characters a token, an estimate labelled
+    // as one; the authoritative number arrives with each answer.
     return stored + Math.ceil(draft.length / 4)
   }, [thread?.token_count, draft])
+
+  const liveSteps = useMemo(
+    () =>
+      live
+        ? traceSteps({
+            scope: live.scope,
+            intents: live.intents,
+            routedBy: live.routedBy,
+            counts: live.counts,
+            sources: live.sources,
+            tools: live.tools,
+            retrieved: live.retrieved,
+            answering: !!live.answer,
+            done: false,
+          })
+        : [],
+    [live],
+  )
 
   const send = useCallback(
     async (text: string) => {
@@ -175,7 +214,9 @@ export default function ChatPage() {
 
       setDraft('')
       setError(null)
-      setLive({ question, answer: '', sources: [], counts: {} })
+      setFocus(null)
+      setFocusRef(null)
+      setLive({ question, answer: '', sources: [], counts: {}, tools: [], retrieved: false })
 
       const controller = new AbortController()
       abort.current = controller
@@ -191,31 +232,36 @@ export default function ChatPage() {
                   t ?? { id: event.thread_id, title: event.title, messages: [], token_count: 0, context_window: 0 },
                 )
                 // A new conversation now has an id. Putting it in the URL is what
-                // makes reload, the back button and the rail's highlight all agree
-                // about which conversation is open.
+                // makes reload, the back button and the rail's highlight agree.
                 if (wantsNew || !wantedId) {
-                  setParams(
-                    { project: String(projectId), thread: String(event.thread_id) },
-                    { replace: true },
-                  )
+                  setParams({ project: String(projectId), thread: String(event.thread_id) }, { replace: true })
                 }
                 break
               case 'scope':
                 setLive(l =>
+                  l ? { ...l, scope: { verdict: event.verdict, reason: event.reason, decided_by: event.decided_by } } : l,
+                )
+                break
+              case 'evidence':
+                setLive(l =>
                   l
                     ? {
                         ...l,
-                        scope: {
-                          verdict: event.verdict,
-                          reason: event.reason,
-                          decided_by: event.decided_by,
-                        },
+                        sources: event.sources,
+                        counts: event.counts,
+                        intents: event.intents,
+                        routedBy: event.routed_by,
+                        retrieved: true,
                       }
                     : l,
                 )
                 break
-              case 'evidence':
-                setLive(l => (l ? { ...l, sources: event.sources, counts: event.counts } : l))
+              case 'tool':
+                setLive(l => (l ? { ...l, tools: [...l.tools, { name: event.name, args: event.args, step: event.step }] } : l))
+                break
+              case 'reset':
+                // The model spoke before reaching for a tool; that was a preamble.
+                setLive(l => (l ? { ...l, answer: '' } : l))
                 break
               case 'token':
                 setLive(l => (l ? { ...l, answer: l.answer + event.text } : l))
@@ -235,13 +281,12 @@ export default function ChatPage() {
       } finally {
         abort.current = null
         setLive(null)
-        // Reload rather than splice: the server holds the checked citations and
-        // the authoritative token counts, and guessing them here would show the
-        // reader something different from what was kept.
+        setFocus(f => (f === 'live' ? null : f))
+        // Reload rather than splice: the server holds the checked citations and the
+        // authoritative token counts.
         if (projectId) {
           api.chatThread(projectId, thread?.id).then(setThread).catch(() => undefined)
         }
-        // The rail shows titles and orders by recency; both just changed.
         void refreshThreads()
       }
     },
@@ -253,6 +298,7 @@ export default function ChatPage() {
     await api.clearChat(projectId, thread.id)
     const fresh = await api.chatThread(projectId, thread.id).catch(() => null)
     setThread(fresh)
+    setFocus(null)
     void refreshThreads()
   }, [projectId, thread, refreshThreads])
 
@@ -270,116 +316,143 @@ export default function ChatPage() {
     }
   }, [projectId, thread])
 
-  if (projects === null) return <SkeletonPanel rows={6} />
+  /* The answer the pane shows, and everything it needs about it. */
+  const effective: Focus = focus ?? (live ? 'live' : lastAnswerId)
+  const target: InsightTarget | null = useMemo(() => {
+    if (effective === 'live' && live) {
+      return {
+        question: live.question,
+        sources: live.sources,
+        counts: live.counts,
+        citations: [],
+        stripped: [],
+        scope: live.scope,
+        intents: live.intents,
+        routedBy: live.routedBy,
+        tools: live.tools,
+        steps: liveSteps,
+        streaming: true,
+      }
+    }
+    const ix = messages.findIndex(m => m.id === effective)
+    if (ix < 0) return null
+    const m = messages[ix]
+    const asked = [...messages.slice(0, ix)].reverse().find(x => x.role === 'user')
+    return {
+      question: asked?.content ?? null,
+      sources: m.evidence?.sources ?? [],
+      counts: m.evidence?.counts ?? {},
+      citations: m.citations ?? [],
+      stripped: m.stripped ?? [],
+      scope: m.evidence?.scope,
+      intents: m.evidence?.intents,
+      routedBy: m.evidence?.routed_by,
+      tools: m.evidence?.tools,
+      steps: messageTrace(m),
+      streaming: false,
+    }
+  }, [effective, live, liveSteps, messages])
+
+  const open = (id: Focus, t: InsightTab, ref: string | null = null) => {
+    setFocus(id)
+    setTab(t)
+    setFocusRef(ref)
+    setPaneOpen(true)
+  }
+
+  if (projects === null)
+    return (
+      <div className="w-full px-6 py-5">
+        <SkeletonPanel rows={6} />
+      </div>
+    )
 
   if (!projects.length) {
     return (
-      <Empty title="No projects yet">
-        Analyse a repository first: there is nothing to ask about until one has been
-        read. <Link to="/app/projects" className="text-hot-ink underline">Add a project</Link>.
-      </Empty>
+      <div className="grid h-full place-items-center px-6">
+        <div className="max-w-[460px] text-center">
+          <Icon name="folder-plus" size={28} className="mx-auto text-ink-dim" />
+          <h2 className="mt-3 text-[17px] font-semibold text-ink">No codebases yet</h2>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-mid">
+            Analyse a repository first: there is nothing to ask about until one has been read.
+          </p>
+          <Link
+            to="/app/projects"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-hot px-3.5 py-2 text-[13px] font-medium text-on-hot hover:bg-hot-ink"
+          >
+            <Icon name="plus" size={15} /> Add a codebase
+          </Link>
+        </div>
+      </div>
     )
   }
 
+  if (!projectId) {
+    return (
+      <ChatWelcome
+        projects={projects}
+        onPick={id => {
+          setParams({ project: String(id), thread: 'new' })
+          setThread(null)
+        }}
+      />
+    )
+  }
+
+  const stats = kb.data?.knowledge_base
+
   return (
-    /* `h-full` rather than a viewport calculation: the outlet's container is a
-       flex item with a definite height, so this stays right when the running-job
-       bar appears above it and changes what "the rest of the screen" means. */
     <div className="flex h-full min-h-0 flex-col">
-      {/* The bar had no ground of its own and its one control read as body text.
-          A panel background, a rule under it and real padding give it a shelf to
-          sit on; the actions are bordered so they look like things you press. */}
-      <header className="shrink-0 border-b border-rule bg-panel px-4 py-2.5">
-        {/* Full width, not centred on 980px. The picker was the first thing on the
-            line and still landed in the middle of the screen, floating away from the
-            edge everything else in the studio is anchored to. */}
-        <div className="flex items-center gap-4">
-          {/* Empty until there is a conversation. On a new one the picker is in
-              the middle of the page, where the reader is looking, and repeating it
-              up here would be two controls for one choice. */}
-          {messages.length > 0 && (
-            <div className="flex min-w-0 shrink-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="tag shrink-0 text-ink-dim">asking</span>
-                {/* Shown, not offered. Changing the repository mid-thread would leave
-                    every answer above grounded in a codebase no longer selected — the
-                    citations would still resolve, against a knowledge base nobody is
-                    looking at. */}
-                <span className="max-w-[260px] truncate text-[12px] font-semibold text-ink">
-                  {project?.name ?? '-'}
+      <header className="flex shrink-0 items-center gap-4 border-b border-rule px-4 py-3 md:px-6">
+        {messages.length > 0 && project && (
+          <div className="hidden min-w-0 shrink-0 items-center gap-2.5 md:flex">
+            <CodebaseMark project={project} size={18} />
+            <div className="min-w-0">
+              <div className="truncate text-[13.5px] font-medium text-ink">{project.name}</div>
+              <div className="flex flex-wrap gap-x-2 text-[11.5px] text-ink-dim">
+                <span className={project.kb_status === 'stale' ? 'text-warn' : 'text-ok'}>
+                  {project.kb_status === 'stale' ? 'Reading is stale' : 'Analysed'}
                 </span>
-              </div>
-              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 pl-[52px] text-[10.5px] text-ink-dim">
-                {project?.kb_status && (
-                  <span className={project.kb_status === 'stale' ? 'text-warn' : 'text-ok'}>
-                    {project.kb_status === 'stale' ? 'reading is stale' : 'analysed'}
-                  </span>
-                )}
-                {kb.data?.knowledge_base && (
-                  <>
-                    <span>{kb.data.module_count} modules</span>
-                    <span>{kb.data.entity_count} entities</span>
-                    {kb.data.knowledge_base.commit_sha && (
-                      <span className="font-mono">
-                        @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
-                      </span>
-                    )}
-                  </>
-                )}
+                {kb.data && <span>{kb.data.module_count} modules</span>}
+                {kb.data && <span>{kb.data.entity_count} facts</span>}
+                {stats?.commit_sha && <span className="font-mono">{stats.commit_sha.slice(0, 7)}</span>}
               </div>
             </div>
-          )}
-
-          {/* Left-aligned to the conversation column, not centred on the window.
-              A title centred on the screen sits over the middle of the messages; the
-              same 760px column the answers are in is the line the eye is following,
-              so the title starts where they start. */}
-          <div className="min-w-0 flex-1 px-4">
-            <div className="mx-auto max-w-[760px]">
-            <h1 className="truncate text-[13.5px] leading-snug text-ink">
-              {thread && messages.length ? thread.title : 'New conversation'}
-            </h1>
-            {project?.description ? (
-              <p
-                className="truncate font-sans text-[11px] text-ink-mid"
-                title={project.description}
-              >
-                {project.description}
-              </p>
-            ) : (
-              project?.sources?.[0]?.url_or_path && (
-                <p
-                  className="truncate font-mono text-[10.5px] text-ink-dim"
-                  title={project.sources[0].url_or_path}
-                >
-                  {project.sources[0].url_or_path}
-                </p>
-              )
-            )}
-            </div>
           </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            {!!messages.length && (
-              <button
-                type="button"
-                onClick={share}
-                className="border border-rule px-2.5 py-[5px] text-[11px] text-ink-mid transition-colors hover:border-hot hover:text-hot-ink"
-              >
-                {copied ? 'link copied' : 'share'}
-              </button>
-            )}
-            {!!messages.length && (
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                className="border border-hot bg-hot-wash px-2.5 py-[5px] text-[11px] font-semibold text-hot-ink transition-colors hover:bg-hot hover:text-paper"
-              >
-                clear conversation
-              </button>
-            )}
-          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[15px] leading-snug font-semibold text-ink">
+            {thread && messages.length ? thread.title : 'New conversation'}
+          </h1>
         </div>
+        {!!messages.length && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={share}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line-2 px-3 text-[12.5px] font-medium text-ink-mid transition-colors hover:bg-hover hover:text-ink"
+            >
+              <Icon name={copied ? 'check' : 'link'} size={14} />
+              <span className="hidden sm:inline">{copied ? 'Link copied' : 'Copy link'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line-2 px-3 text-[12.5px] font-medium text-ink-mid transition-colors hover:border-bad/50 hover:bg-bad-wash hover:text-bad"
+            >
+              <Icon name="trash" size={14} />
+              <span className="hidden sm:inline">Clear</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaneOpen(o => !o)}
+              aria-label="Citations, sources and thinking"
+              className="grid size-8 place-items-center rounded-lg border border-line-2 text-ink-mid transition-colors hover:bg-hover hover:text-ink xl:hidden"
+            >
+              <Icon name="panel-right" size={15} />
+            </button>
+          </div>
+        )}
       </header>
 
       <ConfirmDelete
@@ -392,94 +465,52 @@ export default function ChatPage() {
       />
 
       {loading ? (
-        <div className="pt-6">
+        <div className="px-6 pt-6">
           <SkeletonPanel rows={5} />
         </div>
       ) : empty ? (
         /* Nothing said yet: the composer sits in the middle of the room. */
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8">
           <div className="w-full max-w-[820px]">
-            {/* The choice belongs where the eye already is, and it needs to be
-                readable before it is made — in the header it was a name in a
-                drop-down that told you nothing about what you were choosing
-                between. */}
-            <div className="mb-6">
-              <RepositoryPicker
-                projects={projects}
-                selectedId={projectId}
-                onSelect={id => {
-                  setParams({ project: String(id), thread: 'new' })
-                  setThread(null)
-                }}
-              />
-
-              {/* What was found in it. The same material the codebase page leads
-                  with, so the reader recognises it rather than parsing something
-                  new — a name alone does not distinguish two analysed repositories. */}
+            <div className="mb-8 flex flex-col gap-2">
+              <div className="flex items-center gap-3 rounded-xl border border-rule bg-panel px-4 py-3">
+                {project && (
+                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-sunk shadow-[inset_0_0_0_1px_var(--line-2)]">
+                    <CodebaseMark project={project} size={18} />
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-medium text-ink">{project?.name ?? 'Codebase'}</span>
+                  <span className="block truncate font-mono text-[11.5px] text-ink-dim">
+                    {project?.sources?.[0]?.url_or_path ?? project?.slug}
+                  </span>
+                </span>
+                <Link
+                  to="/app/chat"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line-2 bg-sunk px-3 py-1.5 text-[12.5px] font-medium text-ink-mid transition-colors hover:bg-hover hover:text-ink"
+                >
+                  <Icon name="folder-git-2" size={14} /> Change codebase
+                </Link>
+              </div>
               {kb.data && (
-                <div className="border border-t-0 border-rule bg-sunk/40 px-3 py-2.5">
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] text-ink-dim">
-                    <span className="text-ink">{kb.data.module_count} modules</span>
-                    <span>{kb.data.entity_count} entities</span>
-                    {!!kb.data.knowledge_base.stats?.indexed_chunks && (
-                      <span>
-                        {kb.data.knowledge_base.stats.indexed_chunks.toLocaleString()} indexed
-                      </span>
-                    )}
-                    {kb.data.knowledge_base.commit_sha && (
-                      <span className="font-mono">
-                        @{kb.data.knowledge_base.commit_sha.slice(0, 8)}
-                      </span>
-                    )}
-                    {!!kb.data.languages?.length && (
-                      <span className="ml-auto flex flex-wrap gap-1">
-                        {kb.data.languages.map(l => (
-                          <span
-                            key={l}
-                            className="tag border border-hot-edge bg-hot-wash px-1.5 py-px text-hot-ink"
-                          >
-                            {l}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* What this repository is. The project's own description when it
-                      has one; otherwise the largest module's summary, because an
-                      accurate sentence about the biggest thing in the repository
-                      beats a blank line. The fallback is written about a module and
-                      says so — "This module manages…" under a repository heading
-                      reads as a mistake — so it is only reached when nothing better
-                      exists. */}
-                  {(() => {
-                    const fallback = kb.data.top_modules?.[0]?.summary
-                    const blurb =
-                      project?.description ||
-                      (fallback ? fallback.split('. ').slice(0, 2).join('. ') : null)
-                    return blurb ? (
-                      <p className="mt-2 font-sans text-[11.5px] leading-relaxed text-ink-mid">
-                        {blurb}
-                      </p>
-                    ) : null
-                  })()}
-
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[12.5px] text-ink-dim">
+                  <span className="text-ink-mid">{kb.data.module_count} modules</span>
+                  <span>{kb.data.entity_count} facts</span>
+                  {!!stats?.stats?.indexed_chunks && <span>{stats.stats.indexed_chunks.toLocaleString()} indexed</span>}
+                  {stats?.commit_sha && <span className="font-mono">{stats.commit_sha.slice(0, 7)}</span>}
                   {!!kb.data.entrypoints?.length && (
-                    <p className="mt-1.5 truncate font-mono text-[10.5px] text-ink-dim">
-                      entry: {kb.data.entrypoints.slice(0, 3).join('  ·  ')}
-                    </p>
+                    <span className="min-w-0 truncate font-mono">entry: {kb.data.entrypoints.slice(0, 2).join(', ')}</span>
                   )}
                 </div>
               )}
             </div>
 
-            <h2 className="mb-1 text-center text-[22px] text-ink">
-              What do you want to know about{' '}
-              <span className="text-hot-ink">{project?.name ?? 'this codebase'}</span>?
+            <h2 className="mb-2 text-center text-[26px] font-semibold text-ink">
+              What do you want to know about <span className="text-hot-ink">{project?.name ?? 'this codebase'}</span>?
             </h2>
-            <p className="mb-6 text-center text-[12px] text-ink-dim">
-              Answers are grounded in the analysed source, and every reference is
-              checked against what was actually retrieved.
+            <p className="mb-6 text-center text-[13.5px] text-ink-mid">
+              Answers are grounded in the analysed source, and every reference is checked against what was
+              actually retrieved.
             </p>
 
             <Composer
@@ -493,19 +524,18 @@ export default function ChatPage() {
               autoFocus
             />
 
-            {/* One per line. As pills they wrapped into a paragraph of fragments —
-                readable only as shapes, and a question is a sentence you read. */}
             {!!suggestions.length && (
-              <ul className="mt-5 border-t border-rule pt-3">
+              <ul className="mt-6 flex flex-col">
+                <li className="tag mb-1 px-2 text-ink-dim">Questions analysis wrote for this codebase</li>
                 {suggestions.slice(0, OPENING).map(q => (
                   <li key={q}>
                     <button
                       type="button"
                       onClick={() => send(q)}
-                      className="group flex w-full items-baseline gap-2 py-[5px] text-left text-[12px] text-ink-mid transition-colors hover:text-hot-ink"
+                      className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[13.5px] text-ink-mid transition-colors hover:bg-hover hover:text-ink"
                     >
-                      <span className="text-hot opacity-60 group-hover:opacity-100">→</span>
-                      <span className="underline-offset-4 group-hover:underline">{q}</span>
+                      <Icon name="message-square" size={15} className="text-ink-dim group-hover:text-hot" />
+                      {q}
                     </button>
                   </li>
                 ))}
@@ -515,178 +545,103 @@ export default function ChatPage() {
         </div>
       ) : (
         <div className="relative flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
-            <div className="mx-auto flex max-w-[760px] flex-col gap-6">
-              {messages.map(m =>
-                m.role === 'user' ? (
-                  <UserMessage key={m.id} content={m.content} />
-                ) : (
-                  <AssistantMessage
-                    key={m.id}
-                    message={m}
-                    followUps={
-                      // Only under the newest answer: three suggestions after every
-                      // message in a long thread is a page of them.
-                      m.id === lastAnswerId ? unasked.slice(0, FOLLOW_UPS) : []
-                    }
-                    onAsk={send}
-                    sourcesOpen={openSources === m.id}
-                    onOpenSources={() => {
-                      setFocusRef(null)
-                      setOpenSources(o => (o === m.id ? null : m.id))
-                    }}
-                    onCitation={ref => {
-                      setOpenSources(m.id)
-                      setFocusRef(ref)
-                    }}
-                  />
-                ),
-              )}
-
-              {live && (
-                <>
-                  {/* The optimistic copy, only while the stored one has not arrived.
-                      Streaming puts the new thread id in the URL, which re-fetches the
-                      thread — and that fetch already contains the question, so both
-                      were on screen until the answer finished and the live block was
-                      cleared. */}
-                  {!questionAlreadyStored && <UserMessage content={live.question} />}
-                  {live.answer ? (
-                    <AssistantMessage
-                      streaming
-                      sourcesOpen={openSources === -1}
-                      onOpenSources={() => {
-                        setFocusRef(null)
-                        setOpenSources(o => (o === -1 ? null : -1))
-                      }}
-                      onCitation={ref => {
-                        setOpenSources(-1)
-                        setFocusRef(ref)
-                      }}
-                      message={{
-                        content: live.answer,
-                        citations: [],
-                        stripped: [],
-                        evidence: {
-                          sources: live.sources,
-                          counts: live.counts,
-                          scope: live.scope,
-                        },
-                      }}
-                    />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+              <div className="mx-auto flex max-w-[900px] flex-col gap-7">
+                {messages.map(m =>
+                  m.role === 'user' ? (
+                    <UserMessage key={m.id} content={m.content} />
                   ) : (
-                    <Retrieving counts={live.counts} scope={live.scope} />
-                  )}
-                </>
-              )}
+                    <AssistantMessage
+                      key={m.id}
+                      message={m}
+                      steps={messageTrace(m)}
+                      focused={effective === m.id}
+                      openTab={tab}
+                      followUps={m.id === lastAnswerId && !live ? unasked.slice(0, FOLLOW_UPS) : []}
+                      onAsk={send}
+                      projectId={projectId ?? undefined}
+                      onOpen={t => open(m.id, t)}
+                      onCitation={ref => open(m.id, 'citations', ref)}
+                    />
+                  ),
+                )}
 
-              {error && (
-                <p className="rounded-lg border border-bad/40 bg-bad/5 px-3 py-2 text-[12px] text-bad">
-                  {error}
-                </p>
-              )}
-              <div ref={bottom} />
+                {live && (
+                  <>
+                    {!questionAlreadyStored && <UserMessage content={live.question} />}
+                    {live.answer ? (
+                      <AssistantMessage
+                        streaming
+                        steps={liveSteps}
+                        focused={effective === 'live'}
+                        onCitation={ref => open('live', 'citations', ref)}
+                        message={{
+                          content: live.answer,
+                          citations: [],
+                          stripped: [],
+                          evidence: { sources: live.sources, counts: live.counts, scope: live.scope },
+                        }}
+                      />
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <AnswerTrace steps={liveSteps} onOpen={() => open('live', 'thinking')} />
+                        <p className="flex items-center gap-2 text-[13px] text-ink-dim">
+                          <span className="flex items-center gap-1">
+                            {[0, 1, 2].map(i => (
+                              <span
+                                key={i}
+                                className="block size-[5px] rounded-full bg-hot"
+                                style={{ animation: `chat-bounce 1.05s ease-in-out ${i * 0.16}s infinite` }}
+                              />
+                            ))}
+                          </span>
+                          {liveSteps.find(s => s.state === 'active')?.detail ?? 'Working'}…
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {error && (
+                  <p className="flex items-start gap-2 rounded-lg border border-bad/40 bg-bad-wash px-3 py-2 text-[13px] text-bad">
+                    <Icon name="circle-x" size={15} className="mt-0.5" />
+                    {error}
+                  </p>
+                )}
+                <div ref={bottom} />
+              </div>
+            </div>
+
+            <div className="shrink-0 px-6 pb-5">
+              <div className="mx-auto max-w-[900px]">
+                <Composer
+                  value={draft}
+                  onChange={setDraft}
+                  onSend={() => send(draft)}
+                  onStop={() => abort.current?.abort()}
+                  busy={!!live}
+                  used={used}
+                  total={thread?.context_window ?? 0}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="shrink-0 px-4 pb-4">
-            <div className="mx-auto max-w-[760px]">
-              <Composer
-                value={draft}
-                onChange={setDraft}
-                onSend={() => send(draft)}
-                onStop={() => abort.current?.abort()}
-                busy={!!live}
-                used={used}
-                total={thread?.context_window ?? 0}
+          {projectId !== null && (
+            <div className={`${paneOpen ? 'contents' : 'hidden'} xl:contents`}>
+              <InsightPane
+                projectId={projectId}
+                target={target}
+                tab={tab}
+                onTab={setTab}
+                focusRef={focusRef}
+                onClose={() => setPaneOpen(false)}
               />
             </div>
-          </div>
-        </div>
-
-        {/* Beside the conversation, so the claim being checked stays on screen.
-            Only for the answer whose button was pressed — a panel showing "the
-            sources", unqualified, would be the sources of whichever answer
-            happened to be last. */}
-        {openSources !== null && projectId !== null && (() => {
-          const target =
-            openSources === -1
-              ? live && {
-                  evidence: { sources: live.sources, counts: live.counts },
-                  stripped: [] as string[],
-                }
-              : messages.find(m => m.id === openSources)
-          if (!target) return null
-          return (
-            <SourcesPanel
-              projectId={projectId}
-              sources={target.evidence?.sources ?? []}
-              counts={target.evidence?.counts ?? {}}
-              unverified={target.stripped ?? []}
-              focusRef={focusRef}
-              onClose={() => {
-                setOpenSources(null)
-                setFocusRef(null)
-              }}
-            />
-          )
-        })()}
+          )}
         </div>
       )}
     </div>
-  )
-}
-
-/**
- * The gap between asking and the first token is real — retrieval routes the
- * question with a model, then embeds, then traverses. Saying what is happening
- * is better than a spinner that could mean anything.
- */
-function Retrieving({
-  counts,
-  scope,
-}: {
-  counts: Record<string, number>
-  scope?: ChatScope
-}) {
-  const found = Object.entries(counts)
-  /* Three stages, and they are three different things happening. The gate reads the
-     question first, so "Searching the codebase…" was a claim about work that had not
-     started — and for a question the gate declines, work that never starts at all. */
-  const label = found.length
-    ? `Reading ${found.map(([k, v]) => `${v} ${k}`).join(', ')}…`
-    : !scope
-      ? 'Reading the question…'
-      : scope.verdict === 'code'
-        ? 'Searching the codebase…'
-        : 'Answering without searching the code…'
-  return (
-    <div className="flex items-center gap-2.5">
-      {/* Three dots out of phase. One pulsing dot is indistinguishable from a
-          rendering artefact, and this stage can run for several seconds before a
-          token appears — long enough that "is it working?" is a real question. */}
-      <span className="flex items-center gap-1">
-        {[0, 1, 2].map(i => (
-          <span
-            key={i}
-            className="block size-[5px] rounded-full bg-hot"
-            style={{ animation: `chat-bounce 1.05s ease-in-out ${i * 0.16}s infinite` }}
-          />
-        ))}
-      </span>
-      <span className="text-[12px] text-ink-dim">{label}</span>
-      {/* The counts arrive before the answer does, so this line changes as evidence
-          lands — the movement above says "running", this says what it is doing. */}
-    </div>
-  )
-}
-
-function Empty({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="plate mx-auto mt-10 max-w-[520px] p-6 text-center">
-      <h2 className="text-[14px] text-ink">{title}</h2>
-      <p className="mt-2 text-[12px] leading-relaxed text-ink-mid">{children}</p>
-    </section>
   )
 }

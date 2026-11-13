@@ -45,8 +45,8 @@ export function DepthPicker({
   const current = DEPTHS.find(d => d.id === value) ?? DEPTHS[1]
   return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-      <span className="tag text-ink-dim">depth</span>
-      <div className="flex border border-rule">
+      <span className="text-[12.5px] font-medium text-ink-mid">Depth</span>
+      <div className="flex gap-0.5 rounded-lg border border-rule bg-paper p-[3px]">
         {DEPTHS.map(d => (
           <button
             key={d.id}
@@ -54,10 +54,11 @@ export function DepthPicker({
             disabled={disabled}
             title={d.blurb}
             onClick={() => onChange(d.id)}
-            className={`tag border-r border-rule px-2 py-1 transition-colors last:border-r-0 disabled:cursor-not-allowed ${
+            aria-pressed={d.id === value}
+            className={`rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed ${
               d.id === value
-                ? 'bg-hot text-on-hot'
-                : 'bg-panel text-ink-mid hover:bg-sunk hover:text-ink'
+                ? 'bg-sunk text-ink shadow-[inset_0_0_0_1px_var(--line-2)]'
+                : 'text-ink-mid hover:text-ink'
             }`}
           >
             {d.label}
@@ -66,7 +67,7 @@ export function DepthPicker({
       </div>
       {/* The blurb rather than a tooltip alone: the difference between these is the
           whole decision, and a tooltip is not readable on a touch device. */}
-      <span className="font-sans text-[11px] text-ink-dim">{current.blurb}</span>
+      <span className="text-[12.5px] text-ink-dim">{current.blurb}</span>
     </div>
   )
 }
@@ -92,7 +93,7 @@ export function ReviewToggle({
         onChange={e => onChange(e.target.checked)}
         className="accent-[var(--hot)]"
       />
-      <span className="tag text-ink-dim">hold flagged pages for review</span>
+      <span className="text-[12.5px] text-ink-mid">Hold pages QA flags for my review before they are published</span>
     </label>
   )
 }

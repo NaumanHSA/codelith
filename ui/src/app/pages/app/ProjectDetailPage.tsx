@@ -1,288 +1,455 @@
-import { useState } from 'react'
+import AgentGuide from '../../components/projects/AgentGuide'
+import { Runbook } from '../../components/projects/Runbook'
+import TourInvite from '../../components/projects/TourInvite'
+import { Hotspots, Timeline } from '../../components/projects/Health'
+import { AutoReadSwitch, Freshness } from '../../components/projects/Freshness'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAsync } from '../../lib/hooks'
 import { useAuth } from '../../auth'
 import { useRunningJobs } from '../../running-jobs'
+import { BrandMark, languageBrand, sourceBrand } from '../../lib/brands'
 import { countLabel, humanize, languageShares, relativeTime, shortSha } from '../../lib/format'
-import type { KnowledgeBase, Project } from '../../lib/types'
-import { Button, Meter, PageHead, Panel, Stat, StatusBadge } from '../../components/ui'
+import { Icon, type IconName } from '../../lib/icons'
+import { APP_LOOKS, TOPIC_ICONS, brandFor, factKindOf, kindOf, lookOf } from '../../lib/kinds'
+import { useFill } from '../../lib/motion'
+import type { Fact, Narrative, Project, ProjectApp } from '../../lib/types'
+import { Button, Dialog, StatusBadge } from '../../components/ui'
+import { CodebaseMark, IconTile, Pill, StatBlock } from '../../components/primitives'
 import { EmptyState, ErrorState, SkeletonPanel } from '../../components/States'
-import Preflight from '../../components/projects/Preflight'
+import { Markdown } from '../../components/Markdown'
 import ReanalyseDialog from '../../components/projects/ReanalyseDialog'
 import ModuleExplorer from '../../components/projects/ModuleExplorer'
-import KnowledgeGraph from '../../components/projects/KnowledgeGraph'
-import ArchitectureMap from '../../components/projects/ArchitectureMap'
-import NarrativeReader from '../../components/projects/NarrativeReader'
 import ConfirmDelete from '../../components/ConfirmDelete'
-import AppGrid from '../../components/projects/AppGrid'
 import { coverage, describeJobScope } from '../../lib/site'
 
 /* ------------------------------------------------------------------ *
- * A project has two lives: before analysis and after.
+ * A codebase: how fresh the reading is, what is in it, and where it is
+ * fragile, above the fold. Then the ways into it (atlas, assistant,
+ * changes, library), what it is built with and talks to, every fact the
+ * reading found, and the prose analysis wrote.
  *
- * GET /knowledge-base resolves to null when a project has never been
- * analysed — that null is the signal, not an error, and it decides
- * which of the two screens below is shown.
+ * Replaces the 718-line page whose graph, architecture map and module
+ * tabs the atlas now does better. The module list stays, below: it is the
+ * one place the per-module prose is readable.
  * ------------------------------------------------------------------ */
 
-/**
- * Where the code came from, across the top of the page.
- *
- * It used to be a panel in the rail, below the fold, under everything written
- * about the repository - which is backwards. The repository is what all of it is
- * about, and the URL, the commit and the language mix are three facts that read
- * perfectly well as one line.
- */
-function SourceStrip({ project }: { project: Project }) {
-  const source = project.sources?.[0]
-  const probe = source?.config_json?.probe
-  const shares = languageShares(probe?.languages)
-
+function Section({
+  title,
+  sub,
+  right,
+  children,
+  className = '',
+}: {
+  title: string
+  sub?: React.ReactNode
+  right?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-rule bg-panel px-3 py-2">
-      <span className="tag shrink-0 text-ink-dim">{source?.source_type ?? 'source'}</span>
+    <section className={`flex min-w-0 flex-col gap-3.5 ${className}`}>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[17px] font-semibold text-ink">{title}</h2>
+          {sub && <p className="mt-1 max-w-[70ch] text-[13px] text-ink-mid">{sub}</p>}
+        </div>
+        {right}
+      </header>
+      {children}
+    </section>
+  )
+}
 
-      <a
-        href={source?.source_type === 'local' ? undefined : source?.url_or_path}
-        target="_blank"
-        rel="noreferrer"
-        className="min-w-0 flex-1 truncate text-[12px] text-hot-ink hover:underline"
-      >
-        {source?.url_or_path ?? 'No source attached.'}
-      </a>
+/* ── header ──────────────────────────────────────────────────────────── */
 
-      <span className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="tag text-ink-dim">branch {source?.branch ?? 'default'}</span>
-        <span className="tag text-ink-dim">sha {shortSha(probe?.commit_sha)}</span>
-        <span className="tag text-ink-dim">
-          {probe?.file_count != null ? countLabel(probe.file_count, 'file') : 'unmeasured'}
-        </span>
-      </span>
+/* ── the ways in ─────────────────────────────────────────────────────── */
 
-      {shares.length > 0 && (
-        <span className="flex shrink-0 items-center gap-2">
-          <span className="flex h-[6px] w-[130px] overflow-hidden border border-rule">
-            {shares.slice(0, 6).map((l, i) => (
-              <span
-                key={l.name}
-                title={`${l.name} · ${countLabel(l.count, 'file')}`}
-                style={{ width: `${l.pct}%`, opacity: 1 - i * 0.13 }}
-                className="block bg-hot"
-              />
-            ))}
-          </span>
-          {shares.slice(0, 3).map(l => (
-            <span key={l.name} className="tag text-ink-dim">
-              {l.name} {Math.round(l.pct)}%
+function WaysIn({ projectId, apps, files }: { projectId: number; apps: ProjectApp[]; files: number | null }) {
+  const site = useAsync(s => api.site(projectId, null, s), [projectId])
+  const qa = useAsync(s => api.findingsMap(projectId, s), [projectId])
+  const qaOpen = Object.values(qa.data?.open ?? {}).reduce((a, b) => a + (b ?? 0), 0)
+  const qaWorst = (['critical', 'high'] as const).filter(s => qa.data?.open[s]).map(s => `${qa.data!.open[s]} ${s}`)
+  const c = coverage(site.data ?? null)
+  const app = (id: string) => apps.find(a => a.id === id)
+  const look = (k: keyof typeof APP_LOOKS) => ({ icon: APP_LOOKS[k].icon as IconName, color: APP_LOOKS[k].color as string, title: APP_LOOKS[k].label as string })
+  const rows: { icon: IconName; color: string; title: string; line: string; to: string | null; reason?: string }[] = [
+    {
+      ...look('graph'),
+      line: files ? `${files.toLocaleString()} files on a map, and what breaks if each one changes` : 'Every file on a map',
+      to: `/app/projects/${projectId}/graph`,
+    },
+    {
+      ...look('assistant'),
+      line: app('ask')?.short ?? 'Ask the code, with checked citations',
+      to: app('ask')?.state === 'available' ? app('ask')!.route : null,
+      reason: app('ask')?.reason,
+    },
+    {
+      ...look('changes'),
+      line: app('drift')?.short ?? 'What moved between two readings',
+      to: app('drift')?.state === 'available' ? app('drift')!.route : null,
+      reason: app('drift')?.reason,
+    },
+    {
+      ...look('qa'),
+      line: qa.data?.checked.length
+        ? `${qaOpen} open${qaWorst.length ? ` (${qaWorst.join(', ')})` : ''} in ${qa.data.checked.length} of 8 areas checked`
+        : app('qa')?.short ?? 'Security, leaks, error handling, deployment and test gaps',
+      to: app('qa')?.state === 'available' ? app('qa')!.route : null,
+      reason: app('qa')?.reason,
+    },
+    {
+      ...look('documentation'),
+      line:
+        site.data && site.data.sections.length
+          ? `${c.pct}% of ${c.total - c.orphaned} planned pages written`
+          : app('documentation')?.short ?? 'Documentation written from the reading',
+      to: app('documentation')?.state === 'available' ? app('documentation')!.route : null,
+      reason: app('documentation')?.reason,
+    },
+  ]
+  return (
+    <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-rule sm:grid-cols-2 xl:grid-cols-5">
+      {rows.map((r, i) => {
+        const body = (
+          <>
+            <IconTile icon={r.icon} color={r.color} tint size={38} />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 text-[14px] font-medium text-ink">
+                {r.title}
+                {r.to && <Icon name="arrow-right" size={14} className="plate-arrow text-ink-dim transition-transform" />}
+              </span>
+              <span className="mt-0.5 block text-[12.5px] leading-snug text-ink-mid">{r.to ? r.line : r.reason || r.line}</span>
             </span>
-          ))}
-        </span>
-      )}
+          </>
+        )
+        const cls = `plate-lift flex items-start gap-3 p-4 transition-colors ${i ? 'border-t border-rule sm:border-t-0 sm:border-l' : ''} ${
+          r.to ? 'hover:bg-hover' : 'opacity-60'
+        }`
+        return r.to ? (
+          <Link key={r.title} to={r.to} className={cls}>
+            {body}
+          </Link>
+        ) : (
+          <div key={r.title} className={cls}>
+            {body}
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-/**
- * The bridge to the compose page.
- *
- * Deliberately not a picker. What to write next is a decision about the state of
- * the documentation — which pages are missing, which have gone out of date — and
- * that needs a screen of its own, not a form stapled to the bottom of a status page.
- */
-/**
- * How much of the documentation exists, shown inside its feature card.
- *
- * This used to be a panel of its own titled "Documentation", sitting where the
- * project's one outcome went. It is a detail of one feature among several now, so it
- * lives in that feature's card — and the "Read" link only appears once there is
- * something written to read.
- */
-function DocumentationProgress({ projectId }: { projectId: number }) {
-  const navigate = useNavigate()
-  const { data: site } = useAsync(s => api.site(projectId, null, s), [projectId])
-  const c = coverage(site ?? null)
-  const outstanding = c.planned + c.stale + c.failed
-  const planned = c.total - c.orphaned
-  const written = !!site && site.sections.length > 0
+/* ── where an edit would hurt ────────────────────────────────────────── */
 
+function ReachBar({ value, max }: { value: number; max: number }) {
+  const pct = useFill(max ? (value / max) * 100 : 0)
   return (
-    <span className="block">
-      <span className="block font-sans text-[11.5px] text-ink-mid">
-        {!written
-          ? 'No pages planned yet.'
-          : outstanding
-            ? `${countLabel(outstanding, 'page')} still to write of ${planned} planned.`
-            : 'Every planned page is written and current.'}
-      </span>
-      {written && (
-        <span className="mt-1.5 flex items-center gap-2">
-          <Meter pct={c.pct} segments={18} />
-          <span className="tag text-ink-dim">{c.pct}% written</span>
-          {/* A button, not a Link: this sits inside the app card, which is itself
-              a Link, and an anchor inside an anchor is invalid HTML — React warns
-              and the browser is free to reparent it, which breaks both. */}
-          <button
-            type="button"
-            onClick={e => {
-              e.preventDefault()
-              e.stopPropagation()
-              navigate(`/app/projects/${projectId}/docs`)
-            }}
-            className="tag ml-auto text-ink-dim underline-offset-2 hover:text-hot-ink hover:underline"
-          >
-            read
-          </button>
-        </span>
-      )}
+    <span className="block h-1.5 w-full overflow-hidden rounded-full bg-rule">
+      <span className="block h-full rounded-full bg-hot transition-[width] duration-[420ms]" style={{ width: `${pct}%` }} />
     </span>
   )
 }
 
-/** A labelled row of short facts. Used for layers, patterns and the stack. */
-function Facts({ label, items, hot }: { label: string; items: string[]; hot?: boolean }) {
+function RiskList({ projectId }: { projectId: number }) {
+  const risk = useAsync(sig => api.risk(projectId, 12, sig), [projectId])
+  if (risk.loading) return <SkeletonPanel rows={6} />
+  if (risk.error) return <ErrorState message={risk.error} onRetry={risk.reload} compact />
+  const files = risk.data?.files ?? []
+  if (!files.length) return <p className="text-[13px] text-ink-dim">Nothing imports anything else, so nothing is at risk from an edit.</p>
+  const max = Math.max(...files.map(f => f.reach))
   return (
-    <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 last:mb-0">
-      <span className="tag w-[74px] shrink-0 text-ink-dim">{label}</span>
-      {items.map(item => (
-        <span
-          key={item}
-          className={`border px-1.5 py-[2px] text-[10.5px] ${
-            hot ? 'border-hot-edge bg-hot-wash text-hot-ink' : 'border-rule text-ink-mid'
-          }`}
-        >
-          {item}
-        </span>
-      ))}
-    </div>
+    <ul className="flex flex-col">
+      {files.map(f => {
+        const kind = kindOf(f.kind)
+        return (
+          <li key={f.path}>
+            <Link
+              to={`/app/projects/${projectId}/graph?file=${encodeURIComponent(f.path)}`}
+              className="group grid grid-cols-[auto_minmax(0,1.4fr)_minmax(80px,1fr)_auto] items-center gap-3.5 border-b border-rule px-1 py-2.5 transition-colors hover:bg-hover"
+              title="Open in the knowledge graph"
+            >
+              <IconTile icon={kind.icon} color={kind.color} tint size={30} />
+              <span className="min-w-0">
+                <span className="block truncate font-mono text-[12.5px] text-ink">{f.path}</span>
+                <span className="block truncate text-[12px] text-ink-dim">
+                  {f.component} · {f.direct} import it, {f.reach} reach it
+                  {f.pages ? ` · ${countLabel(f.pages, 'page')} cite it` : ''}
+                </span>
+              </span>
+              <ReachBar value={f.reach} max={max} />
+              {f.tests ? (
+                <Pill tone={f.level === 'high' ? 'warn' : 'good'} icon="flask-conical">
+                  {countLabel(f.tests, 'test')}
+                </Pill>
+              ) : (
+                <Pill tone="bad" icon="triangle-alert">
+                  Untested
+                </Pill>
+              )}
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
-/**
- * What analysis extracted, in one place.
- *
- * A codebase has whichever of these it has: a library declares no routes, a
- * service has no CLI commands, a frontend has neither. Three panels that each
- * vanish when their kind of fact is missing made the page a different shape per
- * project; one panel that lists what was found is the same page every time and
- * says more.
- */
-function FoundFacts({ kb }: { kb: KnowledgeBase }) {
-  const kinds = Object.entries(kb.entity_kinds ?? {})
-    .filter(([, n]) => n > 0)
-    .sort((a, b) => b[1] - a[1])
+/* ── built with, talks to ────────────────────────────────────────────── */
 
-  const entrypoints = kb.entrypoints ?? []
-  const dependencies = kb.key_dependencies ?? []
-  const routes = kb.sample_routes ?? []
-
-  if (!kinds.length && !entrypoints.length && !dependencies.length && !routes.length) {
-    return null
-  }
-
-  const total = kinds.reduce((n, [, count]) => n + count, 0)
-  const detailed = [entrypoints.length > 0, routes.length > 0, dependencies.length > 0]
-  const columns = detailed.filter(Boolean).length
-
+function Chip({ brand, icon, color, title, small }: { brand?: ReturnType<typeof brandFor>; icon?: IconName; color?: string; title: string; small?: string }) {
   return (
-    <Panel
-      title="What analysis found"
-      action={
-        <span className="tag text-ink-dim">
-          {total} across {kinds.length} kind{kinds.length === 1 ? '' : 's'}
-        </span>
-      }
-    >
-      {/* Every kind, including the ones with no sample to show. A codebase with
-          twenty-four env vars and no routes should be able to say so. */}
-      {kinds.length > 0 && (
-        <div className="flex flex-wrap gap-1 border-b border-rule px-3 py-2.5">
-          {kinds.map(([kind, count]) => (
-            <span
-              key={kind}
-              className="inline-flex items-baseline gap-1 border border-rule bg-sunk/50 px-1.5 py-[2px]"
-            >
-              <span className="font-mono text-[11px] font-semibold text-ink">{count}</span>
-              <span className="tag text-ink-dim">{humanize(kind)}</span>
-            </span>
+    <span className="inline-flex h-[34px] items-center gap-2 rounded-lg border border-rule bg-panel pr-3 pl-2 text-[13px] font-medium text-ink">
+      {brand ? <BrandMark name={brand} size={16} decorative /> : <Icon name={icon ?? 'package'} size={16} style={{ color: color ?? 'var(--ink-mid)' }} />}
+      {title}
+      {small && <small className="font-mono text-[11.5px] font-normal text-ink-dim">{small}</small>}
+    </span>
+  )
+}
+
+function BuiltWith({ project, projectId }: { project: Project; projectId: number }) {
+  const arch = useAsync(sig => api.architecture(projectId, sig), [projectId])
+  const shares = languageShares(project.sources?.[0]?.config_json?.probe?.languages)
+  const stack = arch.data?.available ? arch.data.tech_stack : null
+  const named = [...(stack?.frameworks ?? []), ...(stack?.databases ?? []), ...(stack?.infra ?? [])]
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {shares.slice(0, 4).map(l => (
+          <Chip key={l.name} brand={languageBrand(l.name)} title={humanize(l.name)} small={`${Math.round(l.pct)}%`} />
+        ))}
+        {named.map(n => (
+          <Chip key={n} brand={brandFor(n)} icon="package" title={n} />
+        ))}
+      </div>
+      {!!(arch.data?.available && (arch.data.patterns.length || arch.data.layers.length)) && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-dim">
+          {arch.data.layers.length > 0 && <span className="tag mr-1">Layers</span>}
+          {arch.data.layers.map(l => (
+            <Pill key={l.name}>{l.name}</Pill>
+          ))}
+          {arch.data.patterns.length > 0 && <span className="tag mr-1 ml-2">Patterns</span>}
+          {arch.data.patterns.map(p => (
+            <Pill key={p}>{p}</Pill>
           ))}
         </div>
       )}
-
-      {columns > 0 && (
-        <div
-          className={`grid grid-cols-1 gap-px bg-rule ${
-            columns >= 3 ? 'lg:grid-cols-3' : columns === 2 ? 'md:grid-cols-2' : ''
-          }`}
-        >
-          {entrypoints.length > 0 && (
-            <Found title="Entrypoints" count={entrypoints.length}>
-              {entrypoints.slice(0, 10).map(e => (
-                <li key={e} className="truncate py-[3px] text-[11.5px] text-ink-mid">
-                  <span className="text-hot-ink">→</span> {e}
-                </li>
-              ))}
-            </Found>
-          )}
-
-          {routes.length > 0 && (
-            <Found title="Surface" count={routes.length} hint="sample">
-              {routes.slice(0, 10).map((r, i) => (
-                <li key={`${r.name}-${i}`} className="flex gap-2 py-[3px]">
-                  <span className="tag w-[62px] shrink-0 text-ink-dim">
-                    {humanize(r.kind)}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">
-                    {r.name}
-                  </span>
-                </li>
-              ))}
-            </Found>
-          )}
-
-          {dependencies.length > 0 && (
-            <Found title="Key dependencies" count={dependencies.length}>
-              <li className="flex flex-wrap gap-1 py-1">
-                {dependencies.slice(0, 24).map(d => (
-                  <span
-                    key={d}
-                    className="tag border border-rule bg-sunk/60 px-1.5 py-0.5 text-ink-mid"
-                  >
-                    {d}
-                  </span>
-                ))}
-              </li>
-            </Found>
-          )}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-/** One kind of finding, with what was found. */
-function Found({
-  title,
-  count,
-  hint,
-  children,
-}: {
-  title: string
-  count: number
-  hint?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="min-w-0 bg-panel">
-      <div className="flex items-baseline gap-2 bg-sunk/40 px-3 py-1.5">
-        <span className="tag text-ink-dim">{title}</span>
-        <span className="tag tabular-nums text-ink-dim">{count}</span>
-        {hint && <span className="ml-auto tag text-ink-dim">{hint}</span>}
-      </div>
-      <ul className="max-h-[220px] overflow-y-auto px-3 py-1.5">{children}</ul>
     </div>
   )
 }
+
+function atlasAt(projectId: number, path: string | null, line: number | null) {
+  return path
+    ? `/app/projects/${projectId}/graph?file=${encodeURIComponent(path)}${line ? `&line=${line}` : ''}`
+    : null
+}
+
+function TalksTo({ projectId }: { projectId: number }) {
+  const facts = useAsync(sig => api.facts(projectId, ['datastore', 'external_api'], sig), [projectId])
+  if (facts.loading) return <SkeletonPanel rows={2} />
+  const items = facts.data?.items ?? []
+  if (!items.length) return <p className="text-[13px] text-ink-dim">The reading found no datastore and no outside service.</p>
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map(f => {
+        const look = lookOf({ kind: f.kind === 'datastore' ? 'store' : 'external', fact: f.kind, path: f.name })
+        const color = factKindOf(f.kind).color
+        const to = atlasAt(projectId, f.source_path, f.source_line)
+        const chip = (
+          <Chip
+            brand={look.brand}
+            icon={look.icon}
+            color={color}
+            title={f.name}
+            small={typeof f.data.engine === 'string' ? (f.data.engine as string) : f.kind === 'datastore' ? 'datastore' : 'service'}
+          />
+        )
+        return to ? (
+          <Link key={`${f.kind}:${f.name}`} to={to} title={`Used in ${f.source_path}${f.source_line ? `:${f.source_line}` : ''}`} className="rounded-lg transition-opacity hover:opacity-80">
+            {chip}
+          </Link>
+        ) : (
+          <span key={`${f.kind}:${f.name}`}>{chip}</span>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ── what the reading found ──────────────────────────────────────────── */
+
+function Ring({ kinds, selected, onSelect }: { kinds: [string, number][]; selected: string | null; onSelect: (k: string | null) => void }) {
+  const total = kinds.reduce((n, [, v]) => n + v, 0)
+  const R = 104
+  const C = 130
+  const gap = 0.03
+  let a = 0
+  const spans = kinds.map(([k, n]) => {
+    const span = Math.max(0.06, (n / total) * Math.PI * 2)
+    const o = { k, n, a0: a, a1: a + span }
+    a += span
+    return o
+  })
+  const sc = (Math.PI * 2) / a
+  const shown = selected ? kinds.find(([k]) => k === selected) : null
+  return (
+    <svg viewBox="0 0 260 260" className="w-full max-w-[260px]" role="img" aria-label={`${total} facts, by kind`}>
+      {spans.map(o => {
+        const s = -Math.PI / 2 + o.a0 * sc + gap / 2
+        const e = -Math.PI / 2 + o.a1 * sc - gap / 2
+        const big = e - s > Math.PI ? 1 : 0
+        const on = selected === o.k
+        return (
+          <path
+            key={o.k}
+            d={`M${C + R * Math.cos(s)} ${C + R * Math.sin(s)}A${R} ${R} 0 ${big} 1 ${C + R * Math.cos(e)} ${C + R * Math.sin(e)}`}
+            fill="none"
+            stroke={factKindOf(o.k).color}
+            strokeWidth={on ? 28 : 24}
+            opacity={selected === null || on ? 1 : 0.25}
+            className="cursor-pointer transition-[opacity,stroke-width] duration-200"
+            onClick={() => onSelect(on ? null : o.k)}
+          >
+            <title>
+              {o.n} {factKindOf(o.k).plural.toLowerCase()}
+            </title>
+          </path>
+        )
+      })}
+      <text x={C} y={C + 6} textAnchor="middle" className="fill-ink" style={{ font: '600 40px Geist, Inter, sans-serif' }}>
+        {shown ? shown[1] : total}
+      </text>
+      <text x={C} y={C + 30} textAnchor="middle" className="fill-ink-mid" style={{ font: '500 12px Inter, sans-serif' }}>
+        {shown ? factKindOf(shown[0]).plural.toLowerCase() : 'facts'}
+      </text>
+    </svg>
+  )
+}
+
+function FactList({ projectId, kind }: { projectId: number; kind: string }) {
+  const facts = useAsync(sig => api.facts(projectId, [kind], sig), [projectId, kind])
+  if (facts.loading) return <SkeletonPanel rows={4} />
+  if (facts.error) return <ErrorState message={facts.error} compact />
+  const items = facts.data?.items ?? []
+  const detail = (f: Fact) => {
+    for (const k of ['method', 'path', 'version', 'engine', 'client', 'via', 'purpose', 'framework', 'type']) {
+      const v = f.data[k]
+      if (typeof v === 'string' && v && v !== f.name) return v
+    }
+    return null
+  }
+  return (
+    <div className="flex flex-col">
+      <ul className="max-h-[360px] overflow-y-auto">
+        {items.map((f, i) => {
+          const to = atlasAt(projectId, f.source_path, f.source_line)
+          return (
+            <li key={`${f.name}-${i}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-b border-rule py-2 text-[13px]">
+              <span className="min-w-0">
+                <span className="font-mono text-[12.5px] break-all text-ink">{f.name}</span>
+                {detail(f) && <span className="ml-2 text-[12px] text-ink-dim">{detail(f)}</span>}
+              </span>
+              {f.source_path &&
+                (to ? (
+                  <Link to={to} className="truncate font-mono text-[11.5px] text-ink-dim hover:text-hot-ink" title="Open in the knowledge graph">
+                    {f.source_path.split('/').pop()}
+                    {f.source_line ? `:${f.source_line}` : ''}
+                  </Link>
+                ) : null)}
+            </li>
+          )
+        })}
+      </ul>
+      {facts.data?.truncated && <p className="pt-2 text-[12px] text-ink-dim">Showing the first {items.length}.</p>}
+    </div>
+  )
+}
+
+function FactsFound({ projectId }: { projectId: number }) {
+  const facts = useAsync(sig => api.facts(projectId, [], sig), [projectId])
+  const [selected, setSelected] = useState<string | null>(null)
+  const kinds = useMemo(
+    () => Object.entries(facts.data?.kinds ?? {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]),
+    [facts.data],
+  )
+  if (facts.loading) return <SkeletonPanel rows={4} />
+  if (!kinds.length) return <p className="text-[13px] text-ink-dim">No facts were extracted.</p>
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+        <Ring kinds={kinds} selected={selected} onSelect={setSelected} />
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-4 gap-y-0.5">
+          {kinds.map(([k, n]) => {
+            const fk = factKindOf(k)
+            const on = selected === k
+            return (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setSelected(on ? null : k)}
+                className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors ${
+                  on ? 'bg-sunk text-ink shadow-[inset_0_0_0_1px_var(--line-2)]' : 'text-ink-mid hover:bg-hover hover:text-ink'
+                }`}
+              >
+                <IconTile icon={fk.icon} color={fk.color} tint size={26} />
+                {fk.plural}
+                <b className="ml-auto font-mono text-[12.5px] text-ink tabular-nums">{n}</b>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      {selected && <FactList projectId={projectId} kind={selected} />}
+    </div>
+  )
+}
+
+/* ── written by analysis ─────────────────────────────────────────────── */
+
+function NarrativeList({ projectId }: { projectId: number }) {
+  const narratives = useAsync(sig => api.narratives(projectId, sig), [projectId])
+  const [open, setOpen] = useState<Narrative | null>(null)
+  if (narratives.loading) return <SkeletonPanel rows={3} />
+  if (!narratives.data?.available || !narratives.data.narratives.length)
+    return <p className="text-[13px] text-ink-dim">This reading has no narratives.</p>
+  return (
+    <>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-6">
+        {narratives.data.narratives.map(n => (
+          <button
+            key={n.topic}
+            type="button"
+            onClick={() => setOpen(n)}
+            title={n.brief}
+            className="flex items-center gap-2.5 border-b border-rule px-1 py-2.5 text-left transition-colors hover:bg-hover"
+          >
+            <IconTile icon={TOPIC_ICONS[n.topic] ?? 'file-text'} size={28} />
+            <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{n.title || humanize(n.topic)}</span>
+            <small className="font-mono text-[11.5px] text-ink-dim">{n.words.toLocaleString()} words</small>
+          </button>
+        ))}
+      </div>
+      <Dialog open={!!open} onClose={() => setOpen(null)} title={open?.title || humanize(open?.topic ?? '')} width={860}>
+        {open && (
+          <div className="doc max-h-[70vh] overflow-y-auto">
+            <Markdown>{open.content_md}</Markdown>
+            {!!open.provenance?.modules?.length && (
+              <p className="mt-4 border-t border-rule pt-3 text-[12px] text-ink-dim">
+                Written from {countLabel(open.provenance.modules.length, 'module')}
+                {open.provenance.facts?.length ? ` and ${countLabel(open.provenance.facts.length, 'fact')}` : ''}.
+              </p>
+            )}
+          </div>
+        )}
+      </Dialog>
+    </>
+  )
+}
+
+/* ── the page ────────────────────────────────────────────────────────── */
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams()
@@ -292,23 +459,17 @@ export default function ProjectDetailPage() {
   const { track } = useRunningJobs()
 
   const project = useAsync(() => api.project(id), [id])
-  const arch = useAsync(sig => api.architecture(id, sig), [id])
-  const modules = useAsync(sig => api.modules(id, sig), [id])
-  // For the graph's file ring: language, size and symbol counts per file.
-  // Not fatal if it fails - the ring still draws from the module's own list.
-  const fileTree = useAsync(sig => api.files(id, sig), [id])
-  const [kbView, setKbView] = useState<'graph' | 'architecture' | 'list'>('graph')
-  const narratives = useAsync(sig => api.narratives(id, sig), [id])
   const kb = useAsync(s => api.knowledgeBase(id, s), [id])
-  const jobs = useAsync(() => api.projectJobs(id, 10, 0), [id])
-  const features = useAsync(sig => api.projectApps(id, sig), [id])
+  const jobs = useAsync(() => api.projectJobs(id, 6, 0), [id])
+  const apps = useAsync(sig => api.projectApps(id, sig), [id])
+  const modules = useAsync(sig => api.modules(id, sig), [id])
 
   const [analysing, setAnalysing] = useState(false)
   const [analyseError, setAnalyseError] = useState<string | null>(null)
   const [doomed, setDoomed] = useState(false)
-
-  const canRun = can('manager')
   const [confirmingReanalyse, setConfirmingReanalyse] = useState(false)
+  const [showModules, setShowModules] = useState(false)
+  const canRun = can('manager')
 
   const startAnalysis = async (force: boolean) => {
     setAnalysing(true)
@@ -324,69 +485,113 @@ export default function ProjectDetailPage() {
     }
   }
 
-  if (project.loading) {
+  if (project.loading)
     return (
-      <div className="mx-auto max-w-[1180px] p-5">
+      <div className="w-full px-6 py-5">
         <SkeletonPanel rows={6} />
       </div>
     )
-  }
-
-  if (project.error || !project.data) {
+  if (project.error || !project.data)
     return (
-      <div className="mx-auto max-w-[1180px] p-5">
-        <ErrorState message={project.error ?? 'Project not found.'} onRetry={project.reload} />
+      <div className="w-full px-6 py-5">
+        <ErrorState message={project.error ?? 'Codebase not found.'} onRetry={project.reload} />
       </div>
     )
-  }
 
   const p = project.data
   const base = kb.data?.knowledge_base
   const neverAnalysed = !kb.loading && !kb.error && !kb.data
-  const stale = base?.status === 'stale'
+  const source = p.sources?.[0]
+  const probe = source?.config_json?.probe
+  const host = sourceBrand(source?.source_type)
+  const files = probe?.analysable_files ?? probe?.file_count ?? null
+  const factCount = Object.values(kb.data?.entity_kinds ?? {}).reduce((a, b) => a + b, 0) || kb.data?.entity_count || 0
 
   return (
-    <div className="mx-auto max-w-[1180px] p-5">
-      <PageHead
-        index={String(p.id).padStart(2, '0')}
-        title={p.name}
-        sub={p.description || 'No description.'}
-        right={
-          canRun ? (
-            <div className="flex gap-2">
-              {/* Asks what it would achieve first. A re-analysis of a repository
-                  that has not moved costs the same as a real one and stores the same
-                  reading, so it is worth one dialog to find out. */}
-              {!neverAnalysed && (
-                <Button
-                  variant="ghost"
-                  onClick={() => setConfirmingReanalyse(true)}
-                  disabled={analysing}
+    <div className="flex w-full flex-col gap-8 px-6 py-6">
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 items-start gap-4">
+          <span className="grid size-[52px] shrink-0 place-items-center rounded-[14px] bg-sunk shadow-[inset_0_0_0_1px_var(--line-2)]">
+            <CodebaseMark project={p} size={26} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-[26px] leading-tight font-semibold text-ink">{p.name}</h1>
+            {p.description && <p className="mt-1 max-w-[80ch] text-[13.5px] text-ink-mid">{p.description}</p>}
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px] text-ink-mid">
+              {source && (
+                <a
+                  href={source.source_type === 'local' ? undefined : source.url_or_path}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-w-0 items-center gap-1.5 hover:text-ink"
                 >
-                  ↻ Re-analyse
-                </Button>
+                  {host ? <BrandMark name={host} size={14} decorative /> : <Icon name="folder" size={14} />}
+                  <span className="max-w-[420px] truncate font-mono">{source.url_or_path}</span>
+                </a>
               )}
-              {neverAnalysed && (
-                <Button variant="hot" onClick={() => startAnalysis(false)} disabled={analysing}>
-                  {analysing ? 'starting…' : 'Analyse repository →'}
-                </Button>
+              <span className="flex items-center gap-1.5">
+                <Icon name="git-branch" size={14} className="text-ink-dim" />
+                {source?.branch ?? 'default branch'}
+              </span>
+              {base?.commit_sha && (
+                <span className="flex items-center gap-1.5 font-mono">
+                  <Icon name="git-commit-horizontal" size={14} className="text-ink-dim" />
+                  {shortSha(base.commit_sha)}
+                </span>
               )}
-              <Button variant="danger" onClick={() => setDoomed(true)} title="Delete this project">
-                Delete
-              </Button>
+              {base && <Freshness projectId={id} project={p} sha={base.commit_sha} />}
+              {canRun && source?.source_type === 'local' && <AutoReadSwitch projectId={id} source={source} />}
             </div>
-          ) : null
-        }
-      />
+          </div>
+        </div>
+        {canRun && (
+          <div className="flex flex-wrap gap-2">
+            {base && (
+              <Link
+                to={`/app/projects/${id}/review`}
+                className="inline-flex items-center gap-2 rounded-lg border border-line-2 bg-sunk px-3.5 py-[7px] text-[13px] font-medium text-ink transition-colors hover:bg-hover"
+                title="Check a change against what Codelith knows, before it is merged"
+              >
+                <Icon name="list-checks" size={15} /> Review a change
+              </Link>
+            )}
+            {base && (
+              <Link
+                to={`/app/projects/${id}/graph`}
+                className="inline-flex items-center gap-2 rounded-lg border border-line-2 bg-sunk px-3.5 py-[7px] text-[13px] font-medium text-ink transition-colors hover:bg-hover"
+              >
+                <Icon name="waypoints" size={15} /> Open the knowledge graph
+              </Link>
+            )}
+            {!neverAnalysed ? (
+              <Button variant="hot" onClick={() => setConfirmingReanalyse(true)} disabled={analysing}>
+                <Icon name="refresh-cw" size={15} /> Read again
+              </Button>
+            ) : (
+              <Button variant="hot" onClick={() => startAnalysis(false)} disabled={analysing}>
+                <Icon name="play" size={15} /> {analysing ? 'Starting…' : 'Analyse'}
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDoomed(true)}
+              title="Delete this codebase"
+              aria-label="Delete this codebase"
+              className="grid size-[34px] place-items-center rounded-lg border border-line-2 text-ink-dim transition-colors hover:border-bad/50 hover:bg-bad-wash hover:text-bad"
+            >
+              <Icon name="trash" size={15} />
+            </button>
+          </div>
+        )}
+      </header>
 
       <ReanalyseDialog
         open={confirmingReanalyse}
         projectId={id}
         starting={analysing}
         onClose={() => setConfirmingReanalyse(false)}
-        onConfirm={() => void startAnalysis(true)}
+        onConfirm={force => void startAnalysis(force)}
       />
-
       <ConfirmDelete
         open={doomed}
         onClose={() => setDoomed(false)}
@@ -400,9 +605,8 @@ export default function ProjectDetailPage() {
         body={
           <>
             <p>
-              This removes the project and everything derived from it: its knowledge
-              base, every job, every document, and the whole documentation site with
-              its pages and versions.
+              This removes the codebase and everything derived from it: its knowledge base, every
+              job, every document, and the whole documentation site with its pages and versions.
             </p>
             <p className="mt-2">The repository is untouched. Nothing here can be recovered.</p>
           </>
@@ -410,309 +614,166 @@ export default function ProjectDetailPage() {
       />
 
       {analyseError && <ErrorState message={analyseError} compact />}
+      {kb.loading && <SkeletonPanel rows={5} />}
+      {kb.error && <ErrorState message={kb.error} onRetry={kb.reload} />}
 
-      {/* Directly under the title. It is the answer to "which repository is
-          this", which is the first thing anybody arriving on the page wants and
-          the last thing it used to tell them. */}
-      <div className="mb-3">
-        <SourceStrip project={p} />
-      </div>
-
-      {!!features.data?.length && (
-        <div className="mb-3">
-          <AppGrid
-            features={features.data}
-            extras={{ documentation: <DocumentationProgress projectId={id} /> }}
-          />
-        </div>
+      {neverAnalysed && (
+        <EmptyState
+          title="This repository has not been read yet"
+          body="Analysis walks every file once and builds the knowledge base every app reads: modules, routes, dependencies, environment variables, and prose about how it fits together. Nothing is written until you ask for it."
+          action={
+            canRun ? (
+              <Button variant="hot" onClick={() => startAnalysis(false)} disabled={analysing}>
+                <Icon name="play" size={15} /> {analysing ? 'Starting…' : 'Analyse this repository'}
+              </Button>
+            ) : (
+              <span className="text-[12.5px] text-ink-dim">The manager role can start an analysis.</span>
+            )
+          }
+        />
       )}
 
-      {/* One column, not two. The rail used to take 320px off the widest thing
-          on the page, and the widest thing on the page is now a graph that
-          wants every pixel of it. Jobs and documents are reference material:
-          they read fine as a row underneath. */}
-      <div className="flex flex-col gap-3">
-        <div className="flex min-w-0 flex-col gap-3">
-          {kb.loading && <SkeletonPanel rows={5} />}
-
-          {kb.error && <ErrorState message={kb.error} onRetry={kb.reload} />}
-
-          {neverAnalysed && (
-            <EmptyState
-              title="This repository has not been read yet"
-              body="Analysis clones the source, walks every file, extracts modules, routes, dependencies and environment variables, then builds the knowledge base that every document is written from. Nothing is generated until you choose what to write."
-              action={
-                canRun ? (
-                  <Button variant="hot" onClick={() => startAnalysis(false)} disabled={analysing}>
-                    {analysing ? 'starting…' : 'Analyse repository →'}
-                  </Button>
-                ) : (
-                  <span className="tag text-ink-dim">the manager role can start an analysis</span>
-                )
-              }
-            />
-          )}
-
-          {kb.data && base && (
-            <>
-              {stale && (
-                <div className="flex flex-wrap items-center gap-2 border border-warn/40 bg-warn-wash px-3 py-2">
-                  <span className="tag text-warn">knowledge base is stale</span>
-                  <span className="font-sans text-[11.5px] text-ink-mid">
-                    The repository moved on since {shortSha(base.commit_sha)}.
-                  </span>
-                  {canRun && (
-                    <Button variant="ghost" className="ml-auto" onClick={() => startAnalysis(true)}>
-                      ↻ Re-analyse
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {base.error_message && (
-                <div className="border border-bad/35 bg-bad-wash px-3 py-2.5">
-                  <span className="tag text-bad">analysis reported a problem</span>
-                  <p className="mt-1 font-sans text-[12px] text-ink">{base.error_message}</p>
-                </div>
-              )}
-
-              <Panel
-                title="Knowledge base"
-                action={
-                  <span className="flex items-center gap-2">
-                    {/* The counters above say how much was read. This is the only
-                        way to see any of it, and until it existed the product
-                        asked to be taken on faith. */}
-                    <Link
-                      to={`/app/projects/${id}/code`}
-                      className="tag text-hot-ink hover:underline"
-                    >
-                      read the source
-                    </Link>
-                    <StatusBadge status={base.status} />
-                  </span>
-                }
-              >
-                <div className="grid grid-cols-2 gap-px bg-rule sm:grid-cols-4">
-                  <Stat k="modules" v={kb.data.module_count} hot />
-                  <Stat k="entities" v={kb.data.entity_count} />
-                  <Stat k="indexed" v={base.stats?.indexed_chunks?.toLocaleString() ?? '-'} />
-                  <Stat k="commit" v={shortSha(base.commit_sha)} />
-                </div>
-                {/* One canvas, three ways of reading it. The architecture map
-                    used to be a panel of its own directly underneath, which
-                    meant two large drawings competing for the same screen and
-                    neither getting it. Tabs rather than a toggle in the corner:
-                    a second drawing nobody knows exists is a drawing nobody
-                    opens. */}
-                {modules.data?.available && (
-                  <>
-                    <div className="flex items-stretch gap-px border-t border-rule bg-rule">
-                      {(
-                        [
-                          ['graph', 'Graph', 'the whole shape'],
-                          [
-                            'architecture',
-                            'Architecture',
-                            arch.data?.available
-                              ? `${arch.data.services.length} services`
-                              : 'not mapped',
-                          ],
-                          [
-                            'list',
-                            'Modules',
-                            `${modules.data.modules.length}, as a list`,
-                          ],
-                        ] as const
-                      ).map(([key, label, hint]) => {
-                        const on = kbView === key
-                        const off = key === 'architecture' && !arch.data?.available
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            disabled={off}
-                            onClick={() => setKbView(key)}
-                            className={`flex-1 px-3 py-2 text-left transition-colors ${
-                              on
-                                ? 'border-b-2 border-hot bg-panel'
-                                : off
-                                  ? 'cursor-default bg-sunk/60'
-                                  : 'bg-sunk/60 hover:bg-panel'
-                            }`}
-                          >
-                            <span
-                              className={`block text-[12px] font-semibold tracking-tight ${
-                                on ? 'text-hot-ink' : off ? 'text-ink-dim' : 'text-ink'
-                              }`}
-                            >
-                              {label}
-                            </span>
-                            <span className="tag text-ink-dim">{hint}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    <div className="border-t border-rule">
-                      {kbView === 'graph' && (
-                        <KnowledgeGraph
-                          title={p.name}
-                          modules={modules.data}
-                          files={fileTree.data}
-                          projectId={id}
-                        />
-                      )}
-                      {kbView === 'list' && (
-                        <ModuleExplorer data={modules.data} projectId={id} />
-                      )}
-                      {kbView === 'architecture' && arch.data?.available && (
-                        <>
-                          <ArchitectureMap arch={arch.data} />
-                          {(arch.data.tech_stack.frameworks.length > 0 ||
-                            arch.data.patterns.length > 0 ||
-                            arch.data.layers.length > 0) && (
-                            <div className="border-t border-rule px-3 py-2.5">
-                              {/* Single-word facts that each cost a quality-tier
-                                  call to derive and reached nobody until now. */}
-                              {arch.data.layers.length > 0 && (
-                                <Facts
-                                  label="layers"
-                                  items={arch.data.layers.map(l => l.name)}
-                                />
-                              )}
-                              {arch.data.patterns.length > 0 && (
-                                <Facts label="patterns" items={arch.data.patterns} hot />
-                              )}
-                              {arch.data.tech_stack.frameworks.length > 0 && (
-                                <Facts
-                                  label="frameworks"
-                                  items={arch.data.tech_stack.frameworks}
-                                />
-                              )}
-                              {arch.data.tech_stack.infra.length > 0 && (
-                                <Facts label="infra" items={arch.data.tech_stack.infra} />
-                              )}
-                              {arch.data.tech_stack.databases.length > 0 && (
-                                <Facts
-                                  label="data stores"
-                                  items={arch.data.tech_stack.databases}
-                                />
-                              )}
-                            </div>
-                          )}
-                          <p className="border-t border-rule px-3 py-1.5">
-                            <span className="tag text-ink-dim">
-                              as analysed at {shortSha(arch.data.commit_sha)}
-                            </span>
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
-              </Panel>
-
-
-              {/* The chips that used to sit at the bottom of this page named
-                  twelve topics and showed none of the three thousand words
-                  behind them. Composition read this prose from day one; a
-                  person could not. */}
-              {narratives.data?.available && (
-                <Panel
-                  title="What analysis wrote"
-                  action={
-                    <span className="tag text-ink-dim">
-                      {narratives.data.narratives.length} topics ·{' '}
-                      {narratives.data.narratives
-                        .reduce((n, x) => n + x.words, 0)
-                        .toLocaleString()}{' '}
-                      words
-                    </span>
-                  }
-                >
-                  <NarrativeReader data={narratives.data} />
-                </Panel>
-              )}
-
-              {/* Directly under the knowledge base, because it is the one thing
-                  on this page you ask *before* doing something rather than
-                  after. */}
-              <Preflight projectId={id} />
-
-              <FoundFacts kb={kb.data} />
-
-            </>
-          )}
-        </div>
-
-        {/* Was the rail. Context, now side by side below the work rather than
-            beside it. The source moved further still, to the top: it is the one
-            thing here that everything else is about. */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-
-          <Panel
-            title="Recent jobs"
-            action={
-              <span className="flex items-center gap-2">
-                <span className="tag text-ink-dim">{p.stats?.job_count ?? 0} total</span>
-                {/* Ten rows is a summary, not the record. Everything that ever ran —
-                    including the failures worth looking at — lives on the jobs page. */}
-                <Link
-                  to={`/app/jobs?project=${p.id}`}
-                  className="tag text-hot-ink transition-colors hover:underline"
-                >
-                  all →
-                </Link>
-              </span>
-            }
-          >
-            {jobs.loading && <SkeletonPanel rows={3} />}
-            {!jobs.loading && !jobs.data?.length && (
-              <p className="px-3 py-3 text-[11.5px] text-ink-dim">Nothing has run yet.</p>
-            )}
-            <ul className="divide-y divide-rule">
-              {(jobs.data ?? []).map(j => (
-                <li key={j.id}>
-                  <Link
-                    to={`/app/projects/${p.id}/jobs/${j.id}`}
-                    className="flex items-center gap-2 px-3 py-2 transition-colors hover:bg-hot-wash/60"
-                  >
-                    <span className="tag w-8 shrink-0 text-ink-dim">#{j.id}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11.5px] font-semibold text-ink">
-                        {humanize(j.job_type)}
-                      </span>
-                      <span className="tag block truncate text-ink-dim">
-                        {describeJobScope(j) ?? relativeTime(j.created_at)}
-                      </span>
-                    </span>
-                    <StatusBadge status={j.status} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-
-          <Panel
-            title="Documents"
-            action={
-              <Link to="/app/documents" className="tag text-hot-ink hover:underline">
-                all →
-              </Link>
-            }
-          >
-            <div className="px-3 py-3">
-              <span className="block text-[22px] leading-none font-bold text-ink">
-                {p.stats?.doc_count ?? 0}
-              </span>
-              <span className="tag mt-1 block text-ink-dim">
-                single documents, written before the site
-              </span>
+      {kb.data && base && (
+        <>
+          {base.error_message && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-bad/35 bg-bad-wash px-4 py-3 text-[13px]">
+              <Icon name="circle-x" size={16} className="mt-0.5 text-bad" />
+              <div>
+                <p className="font-medium text-bad">Analysis reported a problem</p>
+                <p className="mt-1 text-ink">{base.error_message}</p>
+              </div>
             </div>
-          </Panel>
-        </div>
-      </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-x-6 border-y border-rule sm:grid-cols-3 lg:grid-cols-5">
+            {files != null && <StatBlock value={files} label="files read" icon="file-code" />}
+            <StatBlock value={kb.data.module_count} label="modules" icon="layers" />
+            <StatBlock value={factCount} label="facts" icon="hash" />
+            <StatBlock value={base.stats?.indexed_chunks ?? 0} label="chunks indexed for search" icon="database" />
+            <StatBlock value={p.stats?.page_count ?? 0} label="pages written" icon="book-open" />
+          </div>
+
+          <TourInvite projectId={id} />
+
+          {apps.data && <WaysIn projectId={id} apps={apps.data} files={files} />}
+
+          <Section
+            title="How to run it"
+            sub="What it needs, and how to install, run and test it, each from the file that says so. The environment it reads, against what any file declares."
+          >
+            <Runbook projectId={id} />
+          </Section>
+
+          <div className="grid grid-cols-1 gap-x-10 gap-y-10 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+            <Section
+              title="Where an edit would hurt"
+              sub="Files ranked by how much of the code reaches them within three hops, and whether any test does. Each opens in the knowledge graph."
+            >
+              <RiskList projectId={id} />
+            </Section>
+
+            <div className="flex min-w-0 flex-col gap-10">
+              <Section title="Built with" sub="Languages from the files themselves; frameworks, datastores and infrastructure as the architecture pass named them.">
+                <BuiltWith project={p} projectId={id} />
+              </Section>
+              <Section title="What it talks to" sub="Datastores and outside services the code reaches. Each opens the line that does it.">
+                <TalksTo projectId={id} />
+              </Section>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-x-10 gap-y-10 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+            <Section
+              title="Where danger collects"
+              sub="Files that changed most often, weighted by how much of the code depends on them and whether a test reaches them. Each opens in the knowledge graph."
+            >
+              <Hotspots projectId={id} />
+            </Section>
+            <Section
+              title="Over time"
+              sub="Each kept reading: how big the code is, how many imports run between parts, and how many run against the columns. A point opens what changed at that step."
+              right={
+                <Link to={`/app/projects/${id}/history`} className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-mid transition-colors hover:text-ink">
+                  <Icon name="history" size={14} /> Every reading
+                </Link>
+              }
+            >
+              <Timeline projectId={id} />
+            </Section>
+          </div>
+
+          <Section title="What the reading found" sub="Every fact analysis extracted, by kind. Select one to list them with where each is declared.">
+            <FactsFound projectId={id} />
+          </Section>
+
+          <Section title="Written by analysis" sub="Prose about how the codebase fits together, written once per reading and reused by every app.">
+            <NarrativeList projectId={id} />
+          </Section>
+
+          <Section
+            title="For coding agents"
+            sub="The file an agent reads first, written from this reading: what the codebase is, its parts and which way imports run, how to run it, how things are done here, and the files to edit with care."
+          >
+            <AgentGuide projectId={id} />
+          </Section>
+
+          {modules.data?.available && (
+            <Section
+              title="Modules"
+              sub={`${modules.data.modules.length} modules, each with the summary analysis wrote for it.`}
+              right={
+                <button
+                  type="button"
+                  onClick={() => setShowModules(v => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-line-2 px-3 py-1.5 text-[12.5px] font-medium text-ink-mid transition-colors hover:bg-hover hover:text-ink"
+                >
+                  <Icon name={showModules ? 'chevron-down' : 'chevron-right'} size={14} />
+                  {showModules ? 'Hide' : 'Show'} the list
+                </button>
+              }
+            >
+              {showModules && (
+                <div className="overflow-hidden rounded-xl border border-rule">
+                  <ModuleExplorer data={modules.data} projectId={id} />
+                </div>
+              )}
+            </Section>
+          )}
+        </>
+      )}
+
+      <Section
+        title="Recent runs"
+        right={
+          <Link to={`/app/jobs?project=${p.id}`} className="flex items-center gap-1 text-[12.5px] text-ink-mid hover:text-ink">
+            All {p.stats?.job_count ?? 0} <Icon name="chevron-right" size={14} />
+          </Link>
+        }
+      >
+        {jobs.loading && <SkeletonPanel rows={3} />}
+        {!jobs.loading && !jobs.data?.length && <p className="text-[13px] text-ink-dim">Nothing has run yet.</p>}
+        <ul className="flex flex-col">
+          {(jobs.data ?? []).map(j => (
+            <li key={j.id}>
+              <Link
+                to={`/app/projects/${p.id}/jobs/${j.id}`}
+                className="flex items-center gap-3 border-b border-rule px-1 py-2.5 transition-colors hover:bg-hover"
+              >
+                <IconTile icon={j.job_type === 'analysis' ? 'radar' : 'pencil'} size={30} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-medium text-ink">
+                    {humanize(j.job_type)} <span className="font-mono text-[12px] font-normal text-ink-dim">#{j.id}</span>
+                  </span>
+                  <span className="block truncate text-[12px] text-ink-dim">
+                    {describeJobScope(j) ?? relativeTime(j.created_at)}
+                  </span>
+                </span>
+                <StatusBadge status={j.status} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Section>
     </div>
   )
 }

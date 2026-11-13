@@ -96,15 +96,20 @@ def build_code_graph(
             defined[source.path].setdefault(symbol.name, qname)
 
         for ref in provider.extract_imports(source.content, source.path):
-            target = provider.resolve_import(ref, source.path, known_files)
-            if target and target != source.path:
+            # One statement can bring in several files (`from pkg import a, b` where a
+            # and b are modules); the first is the one the names are looked up in.
+            targets = provider.resolve_import_all(ref, source.path, known_files)
+            if targets:
                 # Deduped: one file importing three names from another is one edge,
                 # and a test file with the same import inside four functions is one
-                # edge too. Neo4j would MERGE them anyway; this saves the write.
-                import_edges.add((source.path, target))
-                for name in ref.names:
-                    imported_names[source.path].append((name, target))
-            elif not target and (package := provider.external_package(ref)):
+                # edge too.
+                for target in targets:
+                    if target != source.path:
+                        import_edges.add((source.path, target))
+                if targets[0] != source.path:
+                    for name in ref.names:
+                        imported_names[source.path].append((name, targets[0]))
+            elif package := provider.external_package(ref):
                 package_edges.add((source.path, package))
 
         calls = provider.extract_calls(source.content, source.path)

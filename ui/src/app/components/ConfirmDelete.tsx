@@ -62,7 +62,7 @@ export default function ConfirmDelete({
       <div>
         {error && <ErrorState message={error} compact />}
 
-        <div className="font-sans text-[12.5px] leading-relaxed text-ink-mid">{body}</div>
+        <div className="text-[12.5px] leading-relaxed text-ink-mid">{body}</div>
 
         {confirmText && (
           <label className="mt-3 block">

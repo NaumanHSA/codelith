@@ -115,7 +115,18 @@ async def ask(
         # send to the code produces no `evidence` event at all, and merging the two
         # at the end is what lets a stored answer still say why it searched nothing.
         scope: dict = {}
+        # The searches the model chose to make beyond the first retrieval, in order.
+        # Stored with the answer so a reopened conversation can still show its work.
+        tools: list[dict] = []
         yield _event({"type": "thread", "thread_id": thread_id, "title": thread.title})
+
+        def kept() -> dict:
+            out = {**evidence}
+            if scope:
+                out["scope"] = scope
+            if tools:
+                out["tools"] = tools
+            return out
 
         try:
             async for item in AskService(db).stream(project, req.question, history):
@@ -125,13 +136,17 @@ async def ask(
                     scope = {k: v for k, v in item.items() if k != "type"}
                 elif item["type"] == "evidence":
                     evidence = {k: v for k, v in item.items() if k != "type"}
+                elif item["type"] == "tool":
+                    tools.append({k: v for k, v in item.items() if k != "type"})
                 elif item["type"] == "done":
                     # The answer is stored *after* citation checking, so what is kept
                     # is what the reader saw — not the model's raw output.
+                    if item.get("suggest_qa"):
+                        evidence = {**evidence, "suggest_qa": item["suggest_qa"]}
                     await chat.add_answer(
                         thread,
                         item["text"],
-                        evidence={**evidence, "scope": scope} if scope else evidence,
+                        evidence=kept(),
                         citations=item.get("citations", []),
                         stripped=item.get("stripped", []),
                     )
@@ -147,7 +162,7 @@ async def ask(
                 await chat.add_answer(
                     thread,
                     "".join(chunks),
-                    evidence={**evidence, "scope": scope} if scope else evidence,
+                    evidence=kept(),
                     citations=[],
                     stripped=[],
                 )

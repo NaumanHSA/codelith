@@ -10,6 +10,7 @@
  * ------------------------------------------------------------------ */
 
 import { countLabel } from './format'
+import type { IconName } from './icons'
 import type { JobStep, JobType } from './types'
 
 /** Expected stages in order, so queued work is visible before it starts. */
@@ -27,6 +28,8 @@ export const EXPECTED_STAGES: Record<string, string[]> = {
   ],
   // A revision is three nodes: it neither plans nor chooses what to write, because
   // the subject is already decided and the existing prose is an input.
+  // A QA run reports the checks its areas need; this is all of them, in order.
+  qa: ['qa_prepare', 'qa_code', 'qa_flows', 'qa_secrets', 'qa_deploy', 'qa_environment', 'qa_dependencies', 'qa_online', 'qa_untested', 'qa_review', 'qa_sandbox', 'qa_report'],
   revision: [
     'reviser_agent',
     'linker_agent',
@@ -90,6 +93,18 @@ const PURPOSE: Record<string, string> = {
   gate: 'Waiting for both branches to finish',
   formatter: 'Rendering the requested output formats',
   publisher: 'Saving documents',
+  qa_prepare: "Opening the reading's files and deciding what is in scope",
+  qa_code: "Running each language's rules over every source file",
+  qa_flows: 'Following each route through its calls: who can reach it, and where its data goes',
+  qa_secrets: 'Looking for keys, tokens and passwords in every file',
+  qa_deploy: 'Checking Dockerfiles, compose files and CI workflows',
+  qa_environment: 'Comparing the environment the code reads with what files declare',
+  qa_dependencies: 'Reading manifests, lockfiles and imports: what is declared, locked and used',
+  qa_online: 'Asking OSV.dev and the package registries about the versions in use',
+  qa_untested: 'Finding the routes and commands no test reaches',
+  qa_review: 'The model reading the riskiest functions, each claim checked twice',
+  qa_sandbox: 'Installing it in a clean container, then running its tests and tools with no network',
+  qa_report: 'Saying what each finding touches, and what is new or fixed',
 }
 
 const num = (v: unknown): number | undefined =>
@@ -252,4 +267,44 @@ export function describeStep(
   step: Pick<JobStep, 'name' | 'output_json' | 'status'>,
 ): string | null {
   return narrateStep(step) ?? stagePurpose(step.name)
+}
+
+/** The icon of each stage, by what it does. */
+const STAGE_ICONS: Record<string, IconName> = {
+  repo_analyzer: 'folder-git-2',
+  structured_extractor: 'hash',
+  semantic_indexer: 'database',
+  module_summarizer: 'layers',
+  architecture_synthesizer: 'boxes',
+  narrative_writer: 'book-open-text',
+  site_planner: 'list-tree',
+  question_seeder: 'message-square',
+  kb_persister: 'hard-drive',
+  kb_loader: 'download',
+  composition_strategy: 'lightbulb',
+  composition_planner: 'list-tree',
+  composition_writer: 'pencil',
+  reviser: 'pencil',
+  linker: 'link',
+  diagram: 'workflow',
+  qa: 'shield-check',
+  gate: 'git-fork',
+  formatter: 'file-text',
+  publisher: 'upload',
+  qa_prepare: 'folder-git-2',
+  qa_code: 'file-code',
+  qa_flows: 'route',
+  qa_secrets: 'key-round',
+  qa_deploy: 'container',
+  qa_environment: 'settings',
+  qa_dependencies: 'package',
+  qa_online: 'globe',
+  qa_untested: 'flask-conical',
+  qa_review: 'sparkles',
+  qa_sandbox: 'box',
+  qa_report: 'shield-check',
+}
+
+export function stageIcon(agent: string): IconName {
+  return STAGE_ICONS[stem(agent)] ?? 'circle-dot'
 }

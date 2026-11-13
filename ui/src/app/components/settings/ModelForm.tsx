@@ -138,24 +138,25 @@ export default function ModelForm({
       </Field>
 
       <div>
-        <span className="tag mb-1.5 block text-ink-dim">Provider</span>
-        <div className="flex flex-wrap gap-1.5">
+        <span className="mb-1.5 block text-[12.5px] font-medium text-ink-mid">Provider</span>
+        <div className="inline-flex flex-wrap gap-0.5 rounded-lg border border-rule bg-paper p-[3px]">
           {PROVIDERS.map(p => (
             <button
               key={p.id}
               type="button"
               onClick={() => set('provider', p.id)}
-              className={`tag border px-2 py-1 transition-colors ${
+              aria-pressed={draft.provider === p.id}
+              className={`rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${
                 draft.provider === p.id
-                  ? 'border-hot bg-hot text-on-hot'
-                  : 'border-rule bg-panel text-ink-mid hover:border-ink hover:text-ink'
+                  ? 'bg-sunk text-ink shadow-[inset_0_0_0_1px_var(--line-2)]'
+                  : 'text-ink-mid hover:text-ink'
               }`}
             >
               {p.label}
             </button>
           ))}
         </div>
-        <span className="mt-1.5 block text-[10.5px] leading-snug text-ink-dim">
+        <span className="mt-1.5 block text-[11.5px] leading-snug text-ink-dim">
           {PROVIDERS.find(p => p.id === draft.provider)?.blurb}
         </span>
       </div>
@@ -215,7 +216,7 @@ export default function ModelForm({
               else - and the failure is a connection error that names neither the
               cause nor the fix. */}
           {containerised && /(^|\/\/)(localhost|127\.0\.0\.1)/.test(draft.base_url ?? '') && (
-            <p className="border border-warn/40 bg-warn-wash px-2.5 py-2 font-sans text-[11.5px] leading-relaxed text-warn">
+            <p className="rounded-lg border border-warn/40 bg-warn-wash px-2.5 py-2 text-[12.5px] leading-relaxed text-warn">
               Codelith is running in a container, where <code>localhost</code> means the
               container itself. A model server on your machine is reachable at{' '}
               <code>host.docker.internal</code> instead.
@@ -256,16 +257,16 @@ export default function ModelForm({
 
       {test && (
         <div
-          className={`border px-3 py-2 ${
+          className={`rounded-lg border px-3 py-2 ${
             test.ok ? 'border-ok/40 bg-ok-wash' : 'border-bad/40 bg-bad-wash'
           }`}
         >
           <span className={`tag ${test.ok ? 'text-ok' : 'text-bad'}`}>
             {test.ok ? 'connected' : 'failed'}
           </span>
-          <p className="mt-1 font-sans text-[11.5px] leading-relaxed text-ink">{test.detail}</p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-ink">{test.detail}</p>
           {test.dimensions && (
-            <p className="mt-1 font-sans text-[11px] text-ink-mid">
+            <p className="mt-1 text-[12px] text-ink-mid">
               Vector width measured at {test.dimensions}. Nothing to configure: it is a
               property of the model.
             </p>
@@ -274,7 +275,7 @@ export default function ModelForm({
       )}
 
       {error && (
-        <div className="border border-bad/40 bg-bad-wash px-3 py-2 font-sans text-[11.5px] text-bad">
+        <div className="rounded-lg border border-bad/40 bg-bad-wash px-3 py-2 text-[12.5px] text-bad">
           {error}
         </div>
       )}

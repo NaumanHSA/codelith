@@ -1,4 +1,10 @@
 import hljs from 'highlight.js/lib/common'
+import dockerfile from 'highlight.js/lib/languages/dockerfile'
+
+hljs.registerLanguage('dockerfile', dockerfile)
+
+/** Names a reading gives project files that highlight.js knows by another. */
+const ALIASES: Record<string, string> = { env: 'ini', toml: 'ini', gradle: 'kotlin' }
 
 /* ------------------------------------------------------------------ *
  * Syntax highlighting, one line at a time.
@@ -125,7 +131,8 @@ export function highlightLines(code: string, language: string): string[] {
 
   if (code.length > HIGHLIGHT_LIMIT) return plain()
 
-  const name = language.trim().toLowerCase()
+  const asked = language.trim().toLowerCase()
+  const name = ALIASES[asked] ?? asked
   if (!name || !hljs.getLanguage(name)) return plain()
 
   try {

@@ -86,6 +86,8 @@ class TestOut(BaseModel):
     detail: str
     dimensions: int | None = None
     served_model: str | None = None
+    capabilities: dict[str, bool | None] | None = None
+    capability_detail: dict[str, str] | None = None
 
 
 def _out(row, serving: list[str]) -> ModelOut:
@@ -192,6 +194,8 @@ async def test_model(
         detail=result.detail,
         dimensions=result.dimensions,
         served_model=result.served_model,
+        capabilities=result.capabilities,
+        capability_detail=result.capability_detail,
     )
 
 
@@ -230,4 +234,6 @@ async def test_unsaved(req: UnsavedTestIn, _: AdminUser) -> TestOut:
         detail=result.detail,
         dimensions=result.dimensions,
         served_model=result.served_model,
+        capabilities=result.capabilities,
+        capability_detail=result.capability_detail,
     )

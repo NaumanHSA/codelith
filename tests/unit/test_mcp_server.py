@@ -137,8 +137,10 @@ class TestThePreflightTool:
 
         text = await _dispatch("before_edit", {"codebase_id": 7, "target": "app/auth.py"})
 
-        assert text == "the pre-flight answer"
+        assert text.startswith("the pre-flight answer")
         assert seen == {"kb": (7, 1), "target": "app/auth.py"}
+        # Every answer says which reading it describes.
+        assert text.rstrip().endswith(")") and "Read at" in text
 
 
 class TestNothingRaises:
@@ -228,3 +230,52 @@ def _fake_run(*, boom: bool = False):
     from mcp.server import Server
 
     return Server, "run", _run
+
+
+class TestEveryAnswerIsDated:
+    """An answer about the code as it was is accurate, and misleading unless it says so."""
+
+    async def test_the_line_names_the_commit_and_how_far_the_code_moved(self, monkeypatch) -> None:
+        from codelith.mcp import server
+
+        kb = SimpleNamespace(id=41, project_id=1, status=KBStatus.READY.value, commit_sha="c176f29d0000")
+
+        async def three(_db, _kb):
+            return 3
+
+        monkeypatch.setattr(server, "_commits_behind", three)
+        line = await server._provenance(None, kb)
+        assert "c176f29d" in line
+        assert "3 newer commits" in line
+
+    async def test_a_current_reading_says_so(self, monkeypatch) -> None:
+        from codelith.mcp import server
+
+        kb = SimpleNamespace(id=42, project_id=1, status=KBStatus.READY.value, commit_sha="abc12345")
+
+        async def none(_db, _kb):
+            return None
+
+        monkeypatch.setattr(server, "_commits_behind", none)
+        assert "latest reading" in await server._provenance(None, kb)
+
+    async def test_a_failing_check_does_not_lose_the_answer(self, monkeypatch) -> None:
+        from codelith.mcp import server
+
+        kb = SimpleNamespace(id=43, project_id=1, status=KBStatus.STALE.value, commit_sha="abc12345")
+
+        async def broken(_db, _kb):
+            raise RuntimeError("git exploded")
+
+        monkeypatch.setattr(server, "_commits_behind", broken)
+        assert "newer reading" in await server._provenance(None, kb)
+
+
+def test_review_changes_is_offered_and_needs_a_codebase() -> None:
+    from codelith.mcp.server import _REVIEW, build_server
+
+    tool = _with_codebase(_REVIEW)
+    assert tool.name == "review_changes"
+    assert tool.inputSchema["required"] == ["codebase_id"]
+    assert "AFTER editing" in _REVIEW["function"]["description"]
+    assert build_server() is not None
